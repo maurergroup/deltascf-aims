@@ -49,12 +49,12 @@ def sim_xps_spectrum(targ_at):
     molecule = lines[4].split()[-1]
 
     # Plot the spectrum
-    plt.plot(plot_x, plot_y, label="FHI-aims calculated XPS spectrum")
+    plt.plot(plot_x, plot_y, label="Simulated XPS spectrum")
     plt.ylim((0, y_max + 1))
     plt.xlim(x_max, x_min)  # Reverse to match experimental XPS conventions
     plt.xticks(np.arange(x_min, x_max, 1))
     plt.legend(loc="upper right")
     plt.title(f"XPS spectrum of {molecule}")
 
-    plt.savefig(f"test_dirs/xps_spectrum.png", dpi=300)
+    plt.savefig(f"test_dirs/xps_spectrum.pdf")
     plt.show()

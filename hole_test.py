@@ -10,10 +10,9 @@ from ase.build import molecule
 from ase.calculators.aims import Aims
 from ase.data.pubchem import pubchem_atoms_search
 from ase.io import read
-from numpy import require
 
 from calc_dscf import *
-from fop import *
+from force_occupation import *
 from peak_broaden import *
 from plot import *
 
@@ -64,26 +63,29 @@ def create_ground_control(procs, binary, species):
     return aims_calc
 
 
-def run_aims(
+def projector_run_aims(
     run_type,
     atoms,
-    calculator,
+    aims_calc,
     constr_atom,
     ks_states,
     n_holes,  # Not used for now but will be useful when aims works for multiple core holes
     procs,
     binary,
     species,
+    occ_type,
     n_atoms,
     spec_mol,
 ):
-    atoms.calc = calculator
 
     spec_run_info = None
 
     if run_type == "ground":
         # Create the ground directory if it doesn't already exist
         os.system("mkdir -p test_dirs/ground")
+
+        # Attach the calculator to the atoms object
+        atoms.calc = aims_calc
 
         if os.path.isfile(f"test_dirs/ground/aims.out") == False:
             # Run the ground state calculation
@@ -99,7 +101,7 @@ def run_aims(
             print("aims.out file found in ground calculation directory")
             print("skipping calculation...")
 
-    elif run_type == "init_1":
+    if run_type == "init_1":
         basis_set = "tight"
         element_symbols, read_atoms = read_ground_inp(
             constr_atom, "test_dirs/ground/geometry.in"
@@ -123,6 +125,7 @@ def run_aims(
             valence,
             n_index,
             valence_index,
+            occ_type,
         )
         setup_hole(
             "./test_dirs/",
@@ -137,7 +140,7 @@ def run_aims(
 
         spec_run_info = ""
 
-    elif run_type == "init_2":
+    if run_type == "init_2":
         # Catch for if init_1 hasn't been run
         for i in range(1, n_atoms + 1):
             if (
@@ -159,7 +162,7 @@ def run_aims(
         # Prevent SCF not converged errors from printing
         spec_run_info = " 2>/dev/null"
 
-    elif run_type == "hole":
+    if run_type == "hole":
         # Add molecule identifier to hole geometry.in
         with open(f"test_dirs/{constr_atom}1/hole/geometry.in", "r") as hole_geom:
             lines = hole_geom.readlines()
@@ -206,6 +209,55 @@ def run_aims(
 
     elif run_type != "ground":
         print(f"{run_type} calculations already completed, skipping calculation...")
+
+
+def basis_run_aims(
+    run_type, atoms, aims_calc, constr_atom, n_atoms, occ_type, nprocs, binary, spec_mol
+):
+
+    atoms.calc = aims_calc
+
+    if run_type == "ground":
+        # Create the ground directory if it doesn't already exist
+        os.system("mkdir -p test_dirs/ground")
+
+        if os.path.isfile(f"test_dirs/ground/aims.out") == False:
+            # Run the ground state calculation
+            print("running calculation...")
+            atoms.get_potential_energy()
+            print("ground calculation completed successfully")
+
+            # Move files to ground directory
+            os.system(
+                "mv geometry.in control.in aims.out parameters.ase test_dirs/ground/"
+            )
+        else:
+            print("aims.out file found in ground calculation directory")
+            print("skipping calculation...")
+
+    if (
+        run_type == "hole"
+        and os.path.isfile(f"test_dirs/{constr_atom}1/hole/aims.out") == False
+    ):
+        setup_fob(constr_atom, n_atoms, occ_type)
+
+        # Add molecule identifier to hole geometry.in
+        with open(f"test_dirs/{constr_atom}1/hole/geometry.in", "r") as hole_geom:
+            lines = hole_geom.readlines()
+
+        lines.insert(4, f"# {spec_mol}\n")
+
+        with open(f"test_dirs/{constr_atom}1/hole/geometry.in", "w") as hole_geom:
+            hole_geom.writelines(lines)
+
+        # Run the hole calculation
+        with click.progressbar(
+            range(1, n_atoms + 1), label="calculating basis hole:"
+        ) as bar:
+            for i in bar:
+                os.system(
+                    f"cd test_dirs/{constr_atom}{i}/hole/ && mpirun -n {nprocs} {binary} > aims.out"
+                )
 
 
 def check_args(run_type, spec_mol, constr_atom, ks_start, ks_stop, n_atoms):
@@ -300,9 +352,17 @@ def check_args(run_type, spec_mol, constr_atom, ks_start, ks_stop, n_atoms):
     type=click.IntRange(1),
     help="last Kohn-Sham state to constrain",
 )
+@click.option(
+    "-t",
+    "--occ_type",
+    required=True,
+    type=click.Choice(["old_projector", "new_projector", "old_basis", "new_basis"]),
+)
 @click.option("-a", "--n_atoms", type=int, help="the number of atoms to constrain")
 @click.option("-p", "--plot", is_flag=True, help="print out the simulated XPS spectra")
-def main(spec_mol, run_type, nprocs, constr_atom, ks_start, ks_stop, n_atoms, plot):
+def main(
+    spec_mol, run_type, nprocs, constr_atom, ks_start, ks_stop, occ_type, n_atoms, plot
+):
 
     # Check the parsed arguments
     check_args(run_type, spec_mol, constr_atom, ks_start, ks_stop, n_atoms)
@@ -310,11 +370,21 @@ def main(spec_mol, run_type, nprocs, constr_atom, ks_start, ks_stop, n_atoms, pl
     # Create a length 2 list of the Kohn-Sham states to constrain
     ks_states = [ks_start, ks_stop]
 
+    # Check if calculation is projector or basis
+    projector = False
+    basis = False
+    if "projector" in occ_type:
+        projector = True
+    if "basis" in occ_type:
+        basis = True
+
+    # Set other parameters
     home_dir = str(Path.home())
     hostname = socket.gethostname()
     species = f"{home_dir}/Programming/mac_projects/FHIaims/species_defaults/"
     binary = None
 
+    # Set different binaries for different machines
     if hostname == "apollo":
         binary = (
             f"{home_dir}/Programming/projects/FHIaims/build/aims.220915.scalapack.mpi.x"
@@ -324,35 +394,50 @@ def main(spec_mol, run_type, nprocs, constr_atom, ks_start, ks_stop, n_atoms, pl
 
     n_holes = 1
 
+    # Find the structure if not given
     if spec_mol is None:
         atoms = read("./test_dirs/ground/geometry.in")
         print("molecule argument not provided, defaulting to using geometry.in file")
     else:
         atoms = build_geometry(spec_mol)
 
-    print(spec_mol)
-
     aims_calc = create_ground_control(nprocs, binary, species)
-    run_aims(
-        run_type,
-        atoms,
-        aims_calc,
-        constr_atom,
-        ks_states,
-        n_holes,
-        nprocs,
-        binary,
-        species,
-        n_atoms,
-        spec_mol,
-    )
+
+    if projector:
+        projector_run_aims(
+            run_type,
+            atoms,
+            aims_calc,
+            constr_atom,
+            ks_states,
+            n_holes,
+            nprocs,
+            binary,
+            species,
+            occ_type,
+            n_atoms,
+            spec_mol,
+        )
+
+    if basis:
+        basis_run_aims(
+            run_type,
+            atoms,
+            aims_calc,
+            constr_atom,
+            n_atoms,
+            occ_type,
+            nprocs,
+            binary,
+            spec_mol,
+        )
 
     # Calculate the delta scf energy and plot
     if run_type == "hole":
         grenrgys = read_ground("test_dirs/")
         element, excienrgys = read_atoms("test_dirs/", constr_atom, contains_number)
         xps = calc_delta_scf(element, grenrgys, excienrgys)
-        os.system(f"mv {element}_xps_peaks.txt ./test_dirs/")
+        os.system(f"mv {element}_xps_peaks.txt test_dirs/")
 
         # Define parameters for broadening
         xstart = 1

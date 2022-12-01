@@ -111,17 +111,6 @@ python-dateutil = ">=2.7"
 setuptools_scm = ">=7"
 
 [[package]]
-name = "matplotlib-backend-kitty"
-version = "2.1.1"
-description = "show matplotlib plots directly in your kitty terminal"
-category = "main"
-optional = false
-python-versions = "*"
-
-[package.dependencies]
-matplotlib = "*"
-
-[[package]]
 name = "numpy"
 version = "1.23.5"
 description = "NumPy is the fundamental package for array computing with Python."
@@ -273,7 +262,7 @@ python-versions = ">=3.7"
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.9"
-content-hash = "a1e1314ee2fcaefc64fceb0c931565a246b18b039d7bf279cd9eceac3ef87588"
+content-hash = "2c6b1959c57331d2e10ee6969972366be0860813f929a218a972b1879d275ed3"
 
 [metadata.files]
 ase = [
@@ -479,10 +468,6 @@ matplotlib = [
     {file = "matplotlib-3.6.2-pp39-pypy39_pp73-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:b0ca2c60d3966dfd6608f5f8c49b8a0fcf76de6654f2eda55fc6ef038d5a6f27"},
     {file = "matplotlib-3.6.2-pp39-pypy39_pp73-win_amd64.whl", hash = "sha256:4426c74761790bff46e3d906c14c7aab727543293eed5a924300a952e1a3a3c1"},
     {file = "matplotlib-3.6.2.tar.gz", hash = "sha256:b03fd10a1709d0101c054883b550f7c4c5e974f751e2680318759af005964990"},
-]
-matplotlib-backend-kitty = [
-    {file = "matplotlib-backend-kitty-2.1.1.tar.gz", hash = "sha256:04dc1f8a49a528b1fdb9132099541aa53d27bb8514dad2951d417a35476b2acf"},
-    {file = "matplotlib_backend_kitty-2.1.1-py3-none-any.whl", hash = "sha256:2b7f92366c0a4d5081c7275e3ce472c9fbc3ad3e1a9a7271bb1afc54052bd304"},
 ]
 numpy = [
     {file = "numpy-1.23.5-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:9c88793f78fca17da0145455f0d7826bcb9f37da4764af27ac945488116efe63"},
