@@ -66,6 +66,7 @@ def create_ground_control(procs, binary, species):
 def projector_run_aims(
     run_type,
     atoms,
+    pbc,
     aims_calc,
     constr_atom,
     ks_states,
@@ -79,6 +80,9 @@ def projector_run_aims(
 ):
 
     spec_run_info = None
+
+    if pbc == True:
+        atoms.set_pbc(True)
 
     if run_type == "ground":
         # Create the ground directory if it doesn't already exist
@@ -212,7 +216,15 @@ def projector_run_aims(
 
 
 def basis_run_aims(
-    run_type, atoms, aims_calc, constr_atom, n_atoms, occ_type, nprocs, binary, spec_mol
+    run_type,
+    atoms,
+    aims_calc,
+    constr_atom,
+    n_atoms,
+    occ_type,
+    nprocs,
+    binary,
+    spec_mol,
 ):
 
     atoms.calc = aims_calc
@@ -256,7 +268,7 @@ def basis_run_aims(
         ) as bar:
             for i in bar:
                 os.system(
-                    f"cd test_dirs/{constr_atom}{i}/hole/ && mpirun -n {nprocs} {binary} > aims.out"
+                    f"cd ./test_dirs/{constr_atom}{i}/hole/ && mpirun -n {nprocs} {binary} > aims.out"
                 )
 
 
@@ -323,6 +335,9 @@ def check_args(run_type, spec_mol, constr_atom, ks_start, ks_stop, n_atoms):
     help="molecule to be used in the calculation",
 )
 @click.option(
+    "-p", "--pbc", is_flag=True, help="create a cell with periodic boundary conditions"
+)
+@click.option(
     "-r",
     "--run_type",
     type=click.Choice(["ground", "init_1", "init_2", "hole"]),
@@ -359,9 +374,22 @@ def check_args(run_type, spec_mol, constr_atom, ks_start, ks_stop, n_atoms):
     type=click.Choice(["old_projector", "new_projector", "old_basis", "new_basis"]),
 )
 @click.option("-a", "--n_atoms", type=int, help="the number of atoms to constrain")
-@click.option("-p", "--plot", is_flag=True, help="print out the simulated XPS spectra")
+@click.option("-g", "--graph", is_flag=True, help="print out the simulated XPS spectra")
+@click.option(
+    "-d", "--debug", is_flag=True, help="for developer use: print debug information"
+)
 def main(
-    spec_mol, run_type, nprocs, constr_atom, ks_start, ks_stop, occ_type, n_atoms, plot
+    spec_mol,
+    pbc,
+    run_type,
+    nprocs,
+    constr_atom,
+    ks_start,
+    ks_stop,
+    occ_type,
+    n_atoms,
+    graph,
+    debug,
 ):
 
     # Check the parsed arguments
@@ -386,11 +414,19 @@ def main(
 
     # Set different binaries for different machines
     if hostname == "apollo":
-        binary = (
-            f"{home_dir}/Programming/projects/FHIaims/build/aims.220915.scalapack.mpi.x"
-        )
+        # Change the binary to use if debugging
+        if debug:
+            binary = f"{home_dir}/Programming/projects/FHIaims/build/aims_debug.x"
+        else:
+            binary = f"{home_dir}/Programming/projects/FHIaims/build/aims.220915.scalapack.mpi.x"
+
     elif hostname == "maccie":
-        binary = f"{home_dir}/Programming/mac_projects/FHIaims/build/aims.220915.mpi.x"
+        if debug:
+            binary = f"{home_dir}/Programming/mac_projects/FHIaims/build/aims_debug.x"
+        else:
+            binary = (
+                f"{home_dir}/Programming/mac_projects/FHIaims/build/aims.220915.mpi.x"
+            )
 
     n_holes = 1
 
@@ -407,6 +443,7 @@ def main(
         projector_run_aims(
             run_type,
             atoms,
+            pbc,
             aims_calc,
             constr_atom,
             ks_states,
@@ -474,7 +511,7 @@ def main(
 
         os.system(f"mv {element}_xps_spectrum.txt ./test_dirs/")
 
-    if plot:
+    if graph:
         print("\nplotting spectrum and calculating MABE...")
         sim_xps_spectrum(constr_atom)
 
