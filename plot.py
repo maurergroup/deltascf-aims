@@ -57,4 +57,5 @@ def sim_xps_spectrum(targ_at):
     plt.title(f"XPS spectrum of {molecule}")
 
     plt.savefig(f"test_dirs/xps_spectrum.pdf")
+    plt.savefig(f"test_dirs/xps_spectrum.png")
     plt.show()
