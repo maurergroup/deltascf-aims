@@ -129,4 +129,4 @@ dmypy.json
 .pyre/
 
 # Others 
-test_dirs
+test_dirs/*

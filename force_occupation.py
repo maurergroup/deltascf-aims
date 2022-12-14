@@ -727,7 +727,7 @@ def setup_fob(target_atom, num_atom, occ_type):
         if occ_type == "old_basis":
             fob = f"force_occupation_basis  {i} 1 atomic 2 1 1 0.0 {num_atom}\n"
         elif occ_type == "new_basis":
-            fob = f"deltascf_basis          1 {i} 1 atomic 2 1 1 0.0 {num_atom}\n"
+            fob = f"deltascf_basis          {i} 1 atomic 2 1 1 0.0 {num_atom}\n"
 
         # Find and replace stuff to be changed
         with open(control, "r") as read_control:

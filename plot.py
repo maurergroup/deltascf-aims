@@ -11,7 +11,7 @@ def sim_xps_spectrum(targ_at):
     # Find the k-edge MABE
     aims_y_max = y_axis_aims.max()
     aims_y_max_arg = y_axis_aims.argmax()
-    aims_be = x_axis_aims[aims_y_max_arg]
+    aims_be = round(x_axis_aims[aims_y_max_arg], 4)
     aims_be_line = [i for i in np.linspace(-0.6, aims_y_max, num=len(y_axis_aims))]
 
     print("\nFHI-aims mean average binding energy (MABE):", aims_be, "eV")
