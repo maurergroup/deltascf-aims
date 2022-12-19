@@ -696,14 +696,14 @@ def setup_hole(
     print("hole files written successfully")
 
 
-def setup_fob(target_atom, num_atom, occ_type):
+def setup_fob(target_atom, num_atom, ks_max, occ_type):
     """Write new directories and control files to calculate FOB."""
 
     # The new basis method should utilise ks method parallel
     ks_method = ""
-    if occ_type == "old_basis":
+    if occ_type == "force_occupation_basis":
         ks_method = "KS_method               serial\n"
-    if occ_type == "new_basis":
+    if occ_type == "deltascf_basis":
         ks_method = "KS_method               parallel\n"
 
     charge = "charge                  1.0\n"
@@ -724,10 +724,10 @@ def setup_fob(target_atom, num_atom, occ_type):
         control = f"test_dirs/{target_atom}{i}/hole/control.in"
 
         fob = ""
-        if occ_type == "old_basis":
-            fob = f"force_occupation_basis  {i} 1 atomic 2 1 1 0.0 {num_atom}\n"
-        elif occ_type == "new_basis":
-            fob = f"deltascf_basis          {i} 1 atomic 2 1 1 0.0 {num_atom}\n"
+        if occ_type == "force_occupation_basis":
+            fob = f"{occ_type}  {i} 1 atomic 2 1 1 0.0 {ks_max}\n"
+        elif occ_type == "deltascf_basis":
+            fob = f"{occ_type}          {i} 1 atomic 2 1 1 0.0 {ks_max}\n"
 
         # Find and replace stuff to be changed
         with open(control, "r") as read_control:

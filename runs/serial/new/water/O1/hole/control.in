@@ -1,7 +1,7 @@
 #===============================================================================
 # FHI-aims file: ./control.in
 # Created using the Atomic Simulation Environment (ASE)
-# Wed Dec 14 18:38:01 2022
+# Fri Dec 16 11:30:10 2022
 #===============================================================================
 xc                                 pbe
 spin                               collinear
