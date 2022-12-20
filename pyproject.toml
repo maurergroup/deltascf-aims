@@ -1,13 +1,13 @@
 [tool.poetry]
-name = "aims-hole-test"
+name = "deltascf-aims"
 version = "0.1.0"
 description = "Application to test calculation of core holes in FHI-aims"
 authors = ["Dylan Morgan <dylan.morgan@warwick.ac.uk>"]
 readme = "README.md"
-packages = [{include = "aims_hole_test"}]
+packages = [{include = "deltascf-aims"}]
 
 [tool.poetry.dependencies]
-python = "^3.9"
+python = "^3.8"
 ase = "^3.22.1"
 numpy = "^1.23.5"
 click = "^8.1.3"
