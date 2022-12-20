@@ -1,4 +1,0 @@
-dict(default_initial_moment=0,
-     species_dir='/Users/dylanmorgan/Programming/mac_projects/FHIaims/species_defaults/defaults_2020/tight/',
-     spin='collinear',
-     xc='pbe')

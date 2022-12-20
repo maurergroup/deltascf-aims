@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-def sim_xps_spectrum(targ_at):
+def sim_xps_spectrum(targ_at, gmp):
     x_axis_aims = np.loadtxt(f"test_dirs/{targ_at}_xps_spectrum.txt", usecols=(0))
     y_axis_aims = np.loadtxt(f"test_dirs/{targ_at}_xps_spectrum.txt", usecols=(1))
 
@@ -32,8 +32,11 @@ def sim_xps_spectrum(targ_at):
     plot_x = []
     plot_y = []
 
+    glob_max_y = max(y_axis_aims)
+    glob_min_y = glob_max_y * gmp
+
     for c, y in enumerate(y_axis_aims):
-        if y > 0.01:
+        if y > glob_min_y:
             plot_x.append(x_axis_aims[c])
             plot_y.append(y)
 

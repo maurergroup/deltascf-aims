@@ -696,8 +696,11 @@ def setup_hole(
     print("hole files written successfully")
 
 
-def setup_fob(target_atom, num_atom, ks_max, occ_type):
+def setup_fob(target_atom, num_atom, ks_max, occ_type, ad_cont_opts):
     """Write new directories and control files to calculate FOB."""
+
+    # TODO allow greater control over which atoms to constrain
+    # eg. see isopropanol
 
     # The new basis method should utilise ks method parallel
     ks_method = ""
@@ -792,5 +795,9 @@ def setup_fob(target_atom, num_atom, ks_max, occ_type):
                 write_control.write(charge)
             if no_cube is True:
                 write_control.write(cube)
+
+            # Append additional parameters specified by the user to control.in
+            for opt in ad_cont_opts:
+                write_control.write(opt)
 
     print("Files and directories written successfully")
