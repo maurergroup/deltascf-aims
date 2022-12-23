@@ -1,10 +1,10 @@
 [tool.poetry]
-name = "deltascf-aims"
+name = "deltaSCF-aims"
 version = "0.1.0"
 description = "Application to test calculation of core holes in FHI-aims"
 authors = ["Dylan Morgan <dylan.morgan@warwick.ac.uk>"]
 readme = "README.md"
-packages = [{include = "deltascf-aims"}]
+packages = [{ include = "deltascf-aims" }]
 
 [tool.poetry.dependencies]
 python = "^3.8"

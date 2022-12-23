@@ -20,9 +20,10 @@ from plot import sim_xps_spectrum
     "-h",
     "--hpc",
     cls=meo,
-    mutually_exclusive=["binary"],
+    mutually_exclusive=["--binary"],
     is_flag=True,
-    help="setup a calculation primarily for use on a HPC cluster WITHOUT running the calculation",
+    help="setup a calculation primarily for use on a HPC cluster WITHOUT "
+    "running the calculation",
 )
 @click.option(
     "-m",
@@ -73,7 +74,8 @@ from plot import sim_xps_spectrum
     default=0.003,
     show_default=True,
     type=float,
-    help="specify a value to customize the minimum plotting intensity of the simulated XPS spectra as a percentage of the maximum intensity",
+    help="specify a value to customize the minimum plotting intensity of the simulated"
+    " XPS spectra as a percentage of the maximum intensity",
 )
 @click.option(
     "-n",
@@ -137,12 +139,14 @@ def main(
     # It is not currently supported to use a custom geometry or control with ASE
     if geometry_input and not control_input:
         raise click.MissingParameter(
-            param_hint="'--control_input' must also be specified when using '--geometry_input'",
+            param_hint="'--control_input' must also be specified when using "
+            "'--geometry_input'",
             param_type="option",
         )
     elif geometry_input and not control_input:
         raise click.MissingParameter(
-            param_hint="'--geometry_input' must also be specified when using '--control_input'",
+            param_hint="'--geometry_input' must also be specified when using "
+            "'--control_input'",
             param_type="option",
         )
     elif geometry_input and control_input:
@@ -151,30 +155,34 @@ def main(
             raise click.UsageError(
                 "geometry.in and control.in must be in the same directory"
             )
-        # Set a parameter to easily determine later if ASE will be used for the calculation or not
-        ase = True
+        # Set a parameter to easily determine later if ASE will be used for the
+        # calculation or not
+        ase = False
         # Also create geometry and control objects to pass to basis/projector
         ctx.obj["GEOM"] = geometry_input
         ctx.obj["CONTROL"] = control_input
 
     else:
-        ase = False
+        ase = True
+        ctx.obj["GEOM"] = None
+        ctx.obj["CONTROL"] = None
 
     # Find the structure if not given
     if spec_mol is None and geometry_input is None:
         if "--help" not in sys.argv:
             try:
-                atoms = read("./run_dir/ground/geometry.in")
+                atoms = read(f"./{run_location}/ground/geometry.in")
                 print(
-                    "molecule argument not provided, defaulting to using geometry.in file"
+                    "molecule argument not provided, defaulting to using geometry.in"
+                    " file"
                 )
             except FileNotFoundError:
                 raise click.MissingParameter(
                     param_hint="'--molecule' or '--geometry_input'", param_type="option"
                 )
 
-        elif spec_mol is not None and "--help" not in sys.argv and ase:
-            atoms = build_geometry(spec_mol)
+    elif spec_mol is not None and "--help" not in sys.argv and ase:
+        atoms = build_geometry(spec_mol)
 
     if "--help" not in sys.argv:
         # Check if a binary has been specified
@@ -184,10 +192,7 @@ def main(
             except IndexError:
                 bin_path = ""
 
-        if Path(bin_path).exists():
-            print(f"specified binary path: {bin_path}")
-            binary = bin_path
-        elif not Path(bin_path).is_file() or binary or bin_path == "":
+        if not Path(bin_path).is_file() or binary or bin_path == "":
             # Ensure the user has entered the path to the binary
             # If not open the user's $EDITOR to allow them to enter the path
             marker = "\n# Enter the path to the FHI-aims binary above this line"
@@ -201,8 +206,21 @@ def main(
                 raise FileNotFoundError(
                     "path to the FHI-aims binary could not be found"
                 )
+        elif Path(bin_path).exists():
+            print(f"specified binary path: {bin_path}")
+            binary = bin_path
 
         species = f"{Path(binary).parent.parent}/species_defaults/"
+
+        # Check if the species_defaults directory exists in the correct location
+        if not Path(species).exists():
+            print(
+                "ensure the FHI-aims binary is in the 'build' directory of the FHI-aims"
+                " source code directory, and that the 'species_defaults' directory exists"
+            )
+            raise NotADirectoryError(
+                f"species_defaults directory not found in {Path(binary).parent.parent}"
+            )
 
         # Create the ASE calculator
         if ase:
@@ -232,9 +250,9 @@ def process(ctx):
 
     # Calculate the delta scf energy and plot
     if ctx.obj["RUN_TYPE"] == "hole":
-        grenrgys = read_ground("run_dir/")
+        grenrgys = read_ground(ctx.obj["RUN_LOC"])
         element, excienrgys = read_atoms(
-            "run_dir/", ctx.obj["CONSTR_ATOM"], contains_number
+            ctx.obj["RUN_LOC"], ctx.obj["CONSTR_ATOM"], contains_number
         )
         xps = calc_delta_scf(element, grenrgys, excienrgys)
         os.system(f"mv {element}_xps_peaks.txt run_dir/")
@@ -276,7 +294,7 @@ def process(ctx):
             os.system(f"mv {element}_xps_spectrum.txt ./run_dir/")
 
             print("\nplotting spectrum and calculating MABE...")
-            sim_xps_spectrum(ctx.obj["CONSTR_ATOM"], ctx.obj["GMP"])
+            sim_xps_spectrum(ctx.obj["RUN_LOC"], ctx.obj["CONSTR_ATOM"], ctx.obj["GMP"])
 
 
 @main.command()
@@ -314,7 +332,8 @@ def projector(ctx, run_type, occ_type, pbc, ks_start, ks_stop):
 
     # TODO Update this function with the latest options added to main
     print(
-        "The projector command is currently still under development and not ready for use"
+        "The projector command is currently still under development and not ready for "
+        "use"
     )
     sys.exit()
 
@@ -532,19 +551,23 @@ def basis(ctx, run_type, occ_type, ks_max, control_opt):
             print("running calculation...")
 
             if ctx.obj["ASE"]:
-                if control_opt is not None:
+                if len(control_opt) > 0:
                     print(
-                        "WARNING: it is required to use '--control_input' and '--geometry_input' instead of supplying additional control options for ground calculations"
+                        "WARNING: it is required to use '--control_input' and "
+                        "'--geometry_input' instead of supplying additional control "
+                        "options for the ground calculations"
                     )
 
                 ctx.obj["ATOMS"].get_potential_energy()
                 # Move files to ground directory
                 os.system(
-                    f"mv geometry.in control.in aims.out parameters.ase {run_loc}/ground/"
+                    "mv geometry.in control.in aims.out parameters.ase "
+                    f"{run_loc}/ground/"
                 )
             else:
                 os.system(
-                    f'cd {run_loc}/ground && mpirun -n {ctx.obj["PROCS"]} {ctx.obj["BINARY"]} > aims.out'
+                    f'cd {run_loc}/ground && mpirun -n {ctx.obj["NPROCS"]} '
+                    f'{ctx.obj["BINARY"]} > aims.out'
                 )
 
             print("ground calculation completed successfully")
@@ -575,12 +598,18 @@ def basis(ctx, run_type, occ_type, ks_max, control_opt):
 
         if ctx.obj["GEOM"] or ctx.obj["CONTROL"]:
             print(
-                "WARNING: custom geometry.in and control.in files will be ignored for hole runs"
+                "WARNING: custom geometry.in and control.in files will be ignored for hole "
+                "runs"
             )
 
         # Create the directories required for the hole calculation
         setup_fob(
-            ctx.obj["CONSTR_ATOM"], ctx.obj["N_ATOMS"], ks_max, occ_type, control_opt
+            ctx.obj["CONSTR_ATOM"],
+            ctx.obj["N_ATOMS"],
+            ks_max,
+            occ_type,
+            run_loc,
+            control_opt,
         )
 
         # Add molecule identifier to hole geometry.in
@@ -602,7 +631,8 @@ def basis(ctx, run_type, occ_type, ks_max, control_opt):
         ) as bar:
             for i in bar:
                 os.system(
-                    f"cd {run_loc}/{ctx.obj['CONSTR_ATOM']}{i}/hole/ && mpirun -n {ctx.obj['NPROCS']} {ctx.obj['BINARY']} > aims.out"
+                    f"cd {run_loc}/{ctx.obj['CONSTR_ATOM']}{i}/hole/ && mpirun -n "
+                    f"{ctx.obj['NPROCS']} {ctx.obj['BINARY']} > aims.out"
                 )
 
     elif os.path.isfile(f"{run_loc}/{ctx.obj['CONSTR_ATOM']}1/hole/aims.out") == True:

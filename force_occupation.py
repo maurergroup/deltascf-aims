@@ -696,7 +696,7 @@ def setup_hole(
     print("hole files written successfully")
 
 
-def setup_fob(target_atom, num_atom, ks_max, occ_type, ad_cont_opts):
+def setup_fob(target_atom, num_atom, ks_max, occ_type, run_loc, ad_cont_opts):
     """Write new directories and control files to calculate FOB."""
 
     # TODO allow greater control over which atoms to constrain
@@ -714,17 +714,17 @@ def setup_fob(target_atom, num_atom, ks_max, occ_type, ad_cont_opts):
 
     for i in range(num_atom):
         i += 1
-        os.makedirs(f"test_dirs/{target_atom}{i}/hole/", exist_ok=True)
+        os.makedirs(f"{run_loc}/{target_atom}{i}/hole/", exist_ok=True)
         shutil.copyfile(
-            "test_dirs/ground/control.in",
-            f"test_dirs/{target_atom}{i}/hole/control.in",
+            f"{run_loc}/ground/control.in",
+            f"{run_loc}/{target_atom}{i}/hole/control.in",
         )
         shutil.copyfile(
-            "test_dirs/ground/geometry.in",
-            f"test_dirs/{target_atom}{i}/hole/geometry.in",
+            f"{run_loc}/ground/geometry.in",
+            f"{run_loc}/{target_atom}{i}/hole/geometry.in",
         )
 
-        control = f"test_dirs/{target_atom}{i}/hole/control.in"
+        control = f"{run_loc}/{target_atom}{i}/hole/control.in"
 
         fob = ""
         if occ_type == "force_occupation_basis":

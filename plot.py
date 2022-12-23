@@ -4,9 +4,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-def sim_xps_spectrum(targ_at, gmp):
-    x_axis_aims = np.loadtxt(f"test_dirs/{targ_at}_xps_spectrum.txt", usecols=(0))
-    y_axis_aims = np.loadtxt(f"test_dirs/{targ_at}_xps_spectrum.txt", usecols=(1))
+def sim_xps_spectrum(run_loc, targ_at, gmp):
+    x_axis_aims = np.loadtxt(f"{run_loc}/{targ_at}_xps_spectrum.txt", usecols=(0))
+    y_axis_aims = np.loadtxt(f"{run_loc}/{targ_at}_xps_spectrum.txt", usecols=(1))
 
     # Find the k-edge MABE
     aims_y_max = y_axis_aims.max()

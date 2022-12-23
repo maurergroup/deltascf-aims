@@ -129,6 +129,6 @@ dmypy.json
 .pyre/
 
 # Others 
-run/
+runs/
 run_dir/*
 aims_bin_loc.txt
