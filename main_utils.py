@@ -61,4 +61,10 @@ def check_args(*args):
 
     for arg in def_args["args"]:
         if arg[1] is None:
+            if arg[0] == "spec_mol":
+                # Convert to list and back to assign to tuple
+                arg = list(arg)
+                arg[0] = "molecule"
+                arg = tuple(arg)
+
             raise MissingParameter(param_hint=f"'--{arg[0]}'", param_type="option")

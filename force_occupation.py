@@ -696,24 +696,54 @@ def setup_hole(
     print("hole files written successfully")
 
 
-def setup_fob(target_atom, num_atom, ks_max, occ_type, run_loc, ad_cont_opts):
+def setup_fob(target_atom, num_atom, occ_no, ks_max, occ_type, run_loc, ad_cont_opts):
     """Write new directories and control files to calculate FOB."""
-
-    # TODO allow greater control over which atoms to constrain
-    # eg. see isopropanol
 
     # The new basis method should utilise ks method parallel
     ks_method = ""
     if occ_type == "force_occupation_basis":
-        ks_method = "KS_method               serial\n"
+        ks_method = "serial"
     if occ_type == "deltascf_basis":
-        ks_method = "KS_method               parallel\n"
+        ks_method = "parallel"
 
-    charge = "charge                  1.0\n"
-    cube = "output                  cube spin_density\n"
+    # Default control file options
+    opts = {
+        "xc": "pbe",
+        "spin": "collinear",
+        "default_initial_moment": 0,
+        "charge": 1.0,
+        occ_type: f"1 1 atomic 2 1 1 {occ_no} {ks_max}",
+        "KS_method": ks_method,
+        # "output": "cube spin_density",
+    }
 
+    # Allow users to modify and add keywords
+    for ad_opt in list(ad_cont_opts):
+        spl_key = ad_opt.split(" ", 1)[0]
+
+        try:
+            spl_val = ad_opt.split(" ", 1)[1]
+        except IndexError:
+            spl_val = None
+
+        for j, opt in enumerate(list(opts)):
+            if spl_key == opt:
+                if spl_val is not None:
+                    opts[opt] = spl_val
+                else:
+                    del opts[opt]
+
+        if spl_key not in list(opts):
+            if spl_val is not None:
+                opts.update({spl_key: spl_val})
+            else:
+                opts.update({spl_key: ""})
+
+    # Iterate over each constrained atom
     for i in range(num_atom):
         i += 1
+
+        # Create new directories and .in files for each constrained atom
         os.makedirs(f"{run_loc}/{target_atom}{i}/hole/", exist_ok=True)
         shutil.copyfile(
             f"{run_loc}/ground/control.in",
@@ -726,78 +756,36 @@ def setup_fob(target_atom, num_atom, ks_max, occ_type, run_loc, ad_cont_opts):
 
         control = f"{run_loc}/{target_atom}{i}/hole/control.in"
 
-        fob = ""
-        if occ_type == "force_occupation_basis":
-            fob = f"{occ_type}  {i} 1 atomic 2 1 1 0.0 {ks_max}\n"
-        elif occ_type == "deltascf_basis":
-            fob = f"{occ_type}          {i} 1 atomic 2 1 1 0.0 {ks_max}\n"
-
-        # Find and replace stuff to be changed
+        # Find and replace keywords in control file
         with open(control, "r") as read_control:
             content = read_control.readlines()
 
-        # Replace specific lines
-        for j, line in enumerate(content):
-            spl = line.split()
+        divider = "#==============================================================================="
 
-            # Some error checking
-            if len(spl) > 1:
-                if "force_occupation_basis" == spl[0]:
-                    print("force_occupation_basis keyword already found in control.in")
-                    exit(1)
-                if "charge" == spl[0]:
-                    print("charge keyword already found in control.in")
-                    exit(1)
-                if "output" == spl[0] and "cube" == spl[1] and "spin_density" == spl[2]:
-                    print("spin_density cube output already specified in control.in")
+        # Change keyword lines
+        for opt in opts:
+            ident = 0
 
-                # Change keyword lines
-                if "KS_method" in spl:
-                    content[j] = ks_method
-                if "#force_occupation_basis" in spl:
-                    content[j] = fob
-                if "#" == spl[0] and "force_occupation_basis" == spl[1]:
-                    content[j] = fob
-                if "#charge" in spl:
-                    content[j] = charge
-                if "#" == spl[0] and "charge" == spl[1]:
-                    content[j] = charge
-                if line.strip() == "#output                  cube spin_density":
-                    content[j] = cube
-                if "#" == spl[0] and "output" == spl[1]:
-                    content[j] = cube
+            for j, line in enumerate(content):
+                spl = line.split()
 
-        # Check if parameters not found
-        no_ks = False
-        no_fob = False
-        no_charge = False
-        no_cube = False
+                if opt in spl:
+                    content[j] = f"{opt:<35} {opts[opt]}\n"
+                    break
 
-        if ks_method not in content:
-            no_ks = True
-        if fob not in content:
-            no_fob = True
-        if charge not in content:
-            no_charge = True
-        if cube not in content:
-            no_cube = True
+                # Marker if ASE was used so keywords will be added in the same place as the others
+                elif divider in line:
+                    ident += 1
+                    if ident == 3:
+                        content.insert(j, f"{opt:<35} {opts[opt]}\n")
+                        break
+
+            # For when a non-ASE input file is used
+            if ident == 0:
+                content.append(f"{opt:<35} {opts[opt]}\n")
 
         # Write the data to the file
-        with open(control, "w+") as write_control:
+        with open(control, "w") as write_control:
             write_control.writelines(content)
-
-            # Append parameters to end of file if not found
-            if no_ks is True:
-                write_control.write(ks_method)
-            if no_fob is True:
-                write_control.write(fob)
-            if no_charge is True:
-                write_control.write(charge)
-            if no_cube is True:
-                write_control.write(cube)
-
-            # Append additional parameters specified by the user to control.in
-            for opt in ad_cont_opts:
-                write_control.write(opt)
 
     print("Files and directories written successfully")

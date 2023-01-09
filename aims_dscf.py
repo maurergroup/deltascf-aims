@@ -35,18 +35,18 @@ from plot import sim_xps_spectrum
     help="molecule to be used in the calculation",
 )
 @click.option(
-    "-gi",
+    "-g",
     "--geometry_input",
     cls=meo,
     mutually_exclusive=["--molecule"],
     type=click.Path(exists=True, file_okay=True, dir_okay=False),
-    help="specify a custom geometry.in instead of using a strcuture from PubChem or ASE",
+    help="specify a custom geometry.in instead of using a structure from PubChem or ASE",
 )
 @click.option(
-    "-ci",
+    "-i",
     "--control_input",
     type=click.Path(exists=True, file_okay=True, dir_okay=False),
-    help="specify a custom constrol.in instead of automatically generating one",
+    help="specify a custom control.in instead of automatically generating one",
 )
 @click.option(
     "-b",
@@ -59,13 +59,21 @@ from plot import sim_xps_spectrum
 @click.option(
     "-r",
     "--run_location",
-    default="run_dir",
+    default="run_dir/",
     show_default=True,
     type=click.Path(file_okay=False, dir_okay=True),
     help="Optionally specify a custom location to run the calculation",
 )
 @click.option(
     "-c", "--constrained_atom", "constr_atom", type=str, help="atom to constrain"
+)
+@click.option(
+    "-o",
+    "--occupation",
+    type=float,
+    default=0.0,
+    show_default=True,
+    help="occupation value of the core ",
 )
 @click.option("-a", "--n_atoms", type=int, help="the number of atoms to constrain")
 @click.option("-g", "--graph", is_flag=True, help="print out the simulated XPS spectra")
@@ -74,7 +82,7 @@ from plot import sim_xps_spectrum
     default=0.003,
     show_default=True,
     type=float,
-    help="specify a value to customize the minimum plotting intensity of the simulated"
+    help="specify a value to customise the minimum plotting intensity of the simulated"
     " XPS spectra as a percentage of the maximum intensity",
 )
 @click.option(
@@ -98,6 +106,7 @@ def main(
     run_location,
     spec_mol,
     constr_atom,
+    occupation,
     n_atoms,
     graph,
     graph_min_percent,
@@ -201,7 +210,9 @@ def main(
                 with open("aims_bin_loc.txt", "w") as f:
                     f.write(bin_line)
 
-                binary = bin_path
+                with open("aims_bin_loc.txt", "r") as f:
+                    binary = f.readlines()[0]
+
             else:
                 raise FileNotFoundError(
                     "path to the FHI-aims binary could not be found"
@@ -234,6 +245,7 @@ def main(
         ctx.obj["BINARY"] = binary
         ctx.obj["RUN_LOC"] = run_location
         ctx.obj["CONSTR_ATOM"] = constr_atom
+        ctx.obj["OCC"] = occupation
         ctx.obj["N_ATOMS"] = n_atoms
         ctx.obj["GRAPH"] = graph
         ctx.obj["GMP"] = graph_min_percent
@@ -306,7 +318,7 @@ def process(ctx):
     help="the type of calculation to perform",
 )
 @click.option(
-    "-o",
+    "-t",
     "--occ_type",
     type=click.Choice(["deltascf_projector", "force_occupation_projector"]),
     help="select whether the old or new occupation routine is used",
@@ -511,7 +523,7 @@ def projector(ctx, run_type, occ_type, pbc, ks_start, ks_stop):
     help="select the type of calculation to perform",
 )
 @click.option(
-    "-o",
+    "-t",
     "--occ_type",
     type=click.Choice(["deltascf_basis", "force_occupation_basis"]),
     help="select whether the old or new occupation routine is used",
@@ -606,6 +618,7 @@ def basis(ctx, run_type, occ_type, ks_max, control_opt):
         setup_fob(
             ctx.obj["CONSTR_ATOM"],
             ctx.obj["N_ATOMS"],
+            ctx.obj["OCC"],
             ks_max,
             occ_type,
             run_loc,
