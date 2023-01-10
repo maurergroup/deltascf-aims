@@ -20,7 +20,7 @@ def lorentzian(x, x_mean, broadening):
     return lorentzian_val
 
 
-def PseudoVoigt(x, x_mean, broadening, mixing):
+def pseudo_voigt(x, x_mean, broadening, mixing):
     """
     Combines gaussian and lorentzian schemes together
     """
@@ -88,7 +88,7 @@ def dos_binning(
         for i in bar:
             pseudovoigt_vec = np.zeros((len(eigenvalues)))
             pseudovoigt_vec = (
-                PseudoVoigt(x_axis[i], eigenvalues, sigma, mixing) * coeffs
+                pseudo_voigt(x_axis[i], eigenvalues, sigma, mixing) * coeffs
             )
             data[i] = np.sum(pseudovoigt_vec)
 

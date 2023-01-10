@@ -1,2 +1,0 @@
-/home/dylanmorgan/Programming/projects/FHIaims/build/aims.221103.scalapack.mpi.x
-# Enter the path to the FHI-aims binary above this line

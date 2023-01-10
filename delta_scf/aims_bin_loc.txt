@@ -1,0 +1,2 @@
+
+# Enter the path to the FHI-aims binary above this line

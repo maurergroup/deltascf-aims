@@ -6,13 +6,13 @@ from pathlib import Path
 
 import click
 from ase.io import read
+from utils.click_meo import MutuallyExclusiveOption as meo
+from utils.main_utils import build_geometry, check_args, create_calc
 
-from calc_dscf import *
-from click_meo import MutuallyExclusiveOption as meo
-from force_occupation import *
-from main_utils import *
-from peak_broaden import *
-from plot import sim_xps_spectrum
+from delta_scf.calc_dscf import *
+from delta_scf.force_occupation import *
+from delta_scf.peak_broaden import dos_binning
+from delta_scf.plot import sim_xps_spectrum
 
 
 @click.group()
@@ -59,7 +59,7 @@ from plot import sim_xps_spectrum
 @click.option(
     "-r",
     "--run_location",
-    default="run_dir/",
+    default="./",
     show_default=True,
     type=click.Path(file_okay=False, dir_okay=True),
     help="Optionally specify a custom location to run the calculation",
@@ -195,7 +195,8 @@ def main(
 
     if "--help" not in sys.argv:
         # Check if a binary has been specified
-        with open("aims_bin_loc.txt", "r") as f:
+        current_path = os.path.dirname(os.path.realpath(__file__))
+        with open(f"{current_path}/aims_bin_loc.txt", "r") as f:
             try:
                 bin_path = f.readlines()[0][:-1]
             except IndexError:
@@ -207,10 +208,10 @@ def main(
             marker = "\n# Enter the path to the FHI-aims binary above this line"
             bin_line = click.edit(marker)
             if bin_line is not None:
-                with open("aims_bin_loc.txt", "w") as f:
+                with open(f"{current_path}/aims_bin_loc.txt", "w") as f:
                     f.write(bin_line)
 
-                with open("aims_bin_loc.txt", "r") as f:
+                with open(f"{current_path}/aims_bin_loc.txt", "r") as f:
                     binary = f.readlines()[0]
 
             else:
@@ -267,7 +268,9 @@ def process(ctx):
             ctx.obj["RUN_LOC"], ctx.obj["CONSTR_ATOM"], contains_number
         )
         xps = calc_delta_scf(element, grenrgys, excienrgys)
-        os.system(f"mv {element}_xps_peaks.txt run_dir/")
+
+        if ctx.obj["RUN_LOC"] != "./":
+            os.system(f"mv {element}_xps_peaks.txt {ctx.obj['RUN_LOC']}")
 
         if ctx.obj["GRAPH"]:
             # Define parameters for broadening
@@ -303,7 +306,7 @@ def process(ctx):
             with open(f"{element}_xps_spectrum.txt", "w") as spec:
                 spec.writelines(dat)
 
-            os.system(f"mv {element}_xps_spectrum.txt ./run_dir/")
+            os.system(f'mv {element}_xps_spectrum.txt ./{ctx.obj["RUN_LOC"]}/')
 
             print("\nplotting spectrum and calculating MABE...")
             sim_xps_spectrum(ctx.obj["RUN_LOC"], ctx.obj["CONSTR_ATOM"], ctx.obj["GMP"])
@@ -360,12 +363,12 @@ def projector(ctx, run_type, occ_type, pbc, ks_start, ks_stop):
         check_args(ctx.obj["SPEC_MOL"])
 
         # Create the ground directory if it doesn't already exist
-        os.system("mkdir -p run_dir/ground")
+        os.system(f"mkdir -p {ctx.obj['RUN_LOC']}/ground")
 
         # Attach the calculator to the atoms object
         ctx.obj["ATOMS"].calc = ctx.obj["CALC"]
 
-        if os.path.isfile(f"run_dir/ground/aims.out") == False:
+        if os.path.isfile(f"{ctx.obj['RUN_LOC']}/ground/aims.out") == False:
             # Run the ground state calculation
             print("running calculation...")
             ctx.obj["ATOMS"].get_potential_energy()
@@ -591,7 +594,7 @@ def basis(ctx, run_type, occ_type, ks_max, control_opt):
     if (
         run_type == "hole"
         and os.path.isfile(f"{run_loc}/{ctx.obj['CONSTR_ATOM']}1/hole/aims.out")
-        == False
+        is False
     ):
         # Check required arguments are given for main()
         check_args(
@@ -634,21 +637,21 @@ def basis(ctx, run_type, occ_type, ks_max, control_opt):
         lines.insert(4, f"# {ctx.obj['SPEC_MOL']}\n")
 
         with open(
-            f"run_dir/{ctx.obj['CONSTR_ATOM']}1/hole/geometry.in", "w"
+            f"{ctx.obj['RUN_LOC']}/{ctx.obj['CONSTR_ATOM']}1/hole/geometry.in", "w"
         ) as hole_geom:
             hole_geom.writelines(lines)
 
         # Run the hole calculation
         with click.progressbar(
             range(1, ctx.obj["N_ATOMS"] + 1), label="calculating basis hole:"
-        ) as bar:
-            for i in bar:
+        ) as prog_bar:
+            for i in prog_bar:
                 os.system(
                     f"cd {run_loc}/{ctx.obj['CONSTR_ATOM']}{i}/hole/ && mpirun -n "
                     f"{ctx.obj['NPROCS']} {ctx.obj['BINARY']} > aims.out"
                 )
 
-    elif os.path.isfile(f"{run_loc}/{ctx.obj['CONSTR_ATOM']}1/hole/aims.out") == True:
+    elif os.path.isfile(f"{run_loc}/{ctx.obj['CONSTR_ATOM']}1/hole/aims.out") is True:
         print("hole calculations already completed, skipping calculation...")
 
     # This needs to be passed to process()

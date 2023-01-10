@@ -46,7 +46,7 @@ def sim_xps_spectrum(run_loc, targ_at, gmp):
     y_max = max(plot_y)
 
     # Get the type of molecule
-    with open(f"run_dir/{targ_at}1/hole/geometry.in", "r") as hole_geom:
+    with open(f"{run_loc}/{targ_at}1/hole/geometry.in", "r") as hole_geom:
         lines = hole_geom.readlines()
 
     molecule = lines[4].split()[-1]
@@ -59,6 +59,6 @@ def sim_xps_spectrum(run_loc, targ_at, gmp):
     plt.legend(loc="upper right")
     plt.title(f"XPS spectrum of {molecule}")
 
-    plt.savefig(f"run_dir/xps_spectrum.pdf")
-    plt.savefig(f"run_dir/xps_spectrum.png")
+    plt.savefig(f"{run_loc}/xps_spectrum.pdf")
+    plt.savefig(f"{run_loc}/xps_spectrum.png")
     plt.show()
