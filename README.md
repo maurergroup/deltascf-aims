@@ -8,19 +8,30 @@ Setup of a virtual environment is automated using poetry. Ensure poetry is insta
 pip install poetry
 ```
 
+It is recommended to use [pyenv](https://github.com/pyenv/pyenv) to manage the local python version, however this is not essential. If this is desired, then simply install and set the local python version. You should also tell poetry the environment you wish to use to create a virtual environment:
+
+```shell
+pyenv install 3.11.1
+pyenv local 3.11.1
+poetry env use 3.11
+```
+
 Then install the virtual environment:
 
 ```shell
-poetry install --no-root
+poetry install
 ```
 
-It is also necessary to have a compiled FHI-aims binary and to specify the location of this in `hole_test.py` for now.
+It is also necessary to have a compiled FHI-aims binary. The location needs to be specified and is then saved by the application. If you wish to change the binary name/location, simply invoke the app with the `-b` option.
 
 ## Usage
-The click library has been used to parse command line arguments. To view all the options, simply type 
+The click library has been used to parse command line arguments. To view all the options, firstly enter the poetry shell and run deltascf with the help flag:
 
 ```shell
-./hole_test.py --help
+poetry shell
+deltascf --help
 ```
 
-into the command line
+If you do not wish to enter the shell, deltascf can also be run in a single command
+
+`poetry run deltascf --help`
