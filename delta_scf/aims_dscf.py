@@ -7,7 +7,8 @@ from pathlib import Path
 import click
 from ase.io import read
 from utils.click_meo import MutuallyExclusiveOption as meo
-from utils.main_utils import build_geometry, check_args, create_calc
+from utils.main_utils import (build_geometry, check_args,
+                              check_geom_constraints, create_calc)
 
 from delta_scf.calc_dscf import *
 from delta_scf.force_occupation import *
@@ -146,43 +147,57 @@ def main(
             )
 
     # It is not currently supported to use a custom geometry or control with ASE
-    if geometry_input and not control_input:
-        raise click.MissingParameter(
-            param_hint="'--control_input' must also be specified when using "
-            "'--geometry_input'",
-            param_type="option",
-        )
-    elif geometry_input and not control_input:
-        raise click.MissingParameter(
-            param_hint="'--geometry_input' must also be specified when using "
-            "'--control_input'",
-            param_type="option",
-        )
-    elif geometry_input and control_input:
-        # Check if the geometry.in and control.in are in the same directory
-        if Path(geometry_input).parent != Path(control_input).parent:
-            raise click.UsageError(
-                "geometry.in and control.in must be in the same directory"
-            )
-        # Set a parameter to easily determine later if ASE will be used for the
-        # calculation or not
-        ase = False
-        # Also create geometry and control objects to pass to basis/projector
-        ctx.obj["GEOM"] = geometry_input
-        ctx.obj["CONTROL"] = control_input
+    # TODO Implement it though
+    # if geometry_input and not control_input:
+    #     raise click.MissingParameter(
+    #         param_hint="'--control_input' must also be specified when using "
+    #         "'--geometry_input'",
+    #         param_type="option",
+    #     )
+    # elif geometry_input and not control_input:
+    #     raise click.MissingParameter(
+    #         param_hint="'--geometry_input' must also be specified when using "
+    #         "'--control_input'",
+    #         param_type="option",
+    #     )
+    # elif geometry_input and control_input:
+    #     # Check if the geometry.in and control.in are in the same directory
+    #     if Path(geometry_input).parent != Path(control_input).parent:
+    #         raise click.UsageError(
+    #             "geometry.in and control.in must be in the same directory"
+    #         )
+    #     # Set a parameter to easily determine later if ASE will be used for the
+    #     # calculation or not
+    #     ase = False
+    #     # Also create geometry and control objects to pass to basis/projector
+    #     ctx.obj["GEOM"] = geometry_input
+    #     ctx.obj["CONTROL"] = control_input
 
+    # Use ASE unless both a custom geometry.in and control.in are specified
+    ase = True
+    if geometry_input is not None:
+        ctx.obj["GEOM"] = geometry_input
     else:
+        ctx.obj["GEOM"] = None
+    if control_input is not None:
+        ctx.obj["CONTROL"] = control_input
+    else:
+        ctx.obj["CONTROL"] = None
+    if control_input is not None and geometry_input is not None:
+        ase = False
+    if control_input is None and geometry_input is None:
         ase = True
         ctx.obj["GEOM"] = None
         ctx.obj["CONTROL"] = None
 
     # Find the structure if not given
+    # Build the structure if given
     if spec_mol is None and geometry_input is None:
         if "--help" not in sys.argv:
             try:
                 atoms = read(f"./{run_location}/ground/geometry.in")
                 print(
-                    "molecule argument not provided, defaulting to using geometry.in"
+                    "molecule argument not provided, defaulting to using existing geometry.in"
                     " file"
                 )
             except FileNotFoundError:
@@ -190,11 +205,14 @@ def main(
                     param_hint="'--molecule' or '--geometry_input'", param_type="option"
                 )
 
-    elif spec_mol is not None and "--help" not in sys.argv and ase:
-        atoms = build_geometry(spec_mol)
+    elif "--help" not in sys.argv and ase:
+        if spec_mol is not None:
+            atoms = build_geometry(spec_mol)
+        if geometry_input is not None:
+            atoms = read(geometry_input)
 
+    # Check if a binary has been specified
     if "--help" not in sys.argv:
-        # Check if a binary has been specified
         current_path = os.path.dirname(os.path.realpath(__file__))
         with open(f"{current_path}/aims_bin_loc.txt", "r") as f:
             try:
@@ -202,9 +220,9 @@ def main(
             except IndexError:
                 bin_path = ""
 
+        # Ensure the user has entered the path to the binary
+        # If not open the user's $EDITOR to allow them to enter the path
         if not Path(bin_path).is_file() or binary or bin_path == "":
-            # Ensure the user has entered the path to the binary
-            # If not open the user's $EDITOR to allow them to enter the path
             marker = "\n# Enter the path to the FHI-aims binary above this line"
             bin_line = click.edit(marker)
             if bin_line is not None:
@@ -218,6 +236,7 @@ def main(
                 raise FileNotFoundError(
                     "path to the FHI-aims binary could not be found"
                 )
+
         elif Path(bin_path).exists():
             print(f"specified binary path: {bin_path}")
             binary = bin_path
@@ -236,6 +255,13 @@ def main(
 
         # Create the ASE calculator
         if ase:
+            # We have to check for constrained atoms in the geometry.in as there is a
+            # bug in ASE currently that causes a TypeError if there are any
+            # I have included a link to the reference here:
+            # https://gitlab.com/ase/ase/-/issues/1158#note_1156014539
+            if geometry_input is not None:
+                check_geom_constraints()
+
             aims_calc = create_calc(nprocs, binary, species)
             atoms.calc = aims_calc
             ctx.obj["ATOMS"] = atoms
