@@ -43,6 +43,21 @@ def build_geometry(geometry):
         sys.exit(1)
 
 
+def check_args(*args):
+    """Check if required arguments are specified"""
+    def_args = locals()
+
+    for arg in def_args["args"]:
+        if arg[1] is None:
+            if arg[0] == "spec_mol":
+                # Convert to list and back to assign to tuple
+                arg = list(arg)
+                arg[0] = "molecule"
+                arg = tuple(arg)
+
+            raise MissingParameter(param_hint=f"'--{arg[0]}'", param_type="option")
+
+
 def check_geom_constraints(geom_file):
     """Check if there are any constrain_relaxation keywords in geometry.in"""
 
@@ -74,16 +89,44 @@ def create_calc(procs, binary, species):
     return aims_calc
 
 
-def check_args(*args):
-    """Check if required arguments are specified"""
-    def_args = locals()
+def print_ks_states():
+    """Print the KS states for the different spin states"""
 
-    for arg in def_args["args"]:
-        if arg[1] is None:
-            if arg[0] == "spec_mol":
-                # Convert to list and back to assign to tuple
-                arg = list(arg)
-                arg[0] = "molecule"
-                arg = tuple(arg)
+    with open("aims.out", "r") as aims:
+        lines = aims.readlines()
 
-            raise MissingParameter(param_hint=f"'--{arg[0]}'", param_type="option")
+    su_eigs_start_line = None
+    sd_eigs_start_line = None
+
+    for num, content in enumerate(lines):
+        if "Spin-up eigenvalues" in content:
+            su_eigs_start_line = num
+        if "Spin-down eigenvalues" in content:
+            sd_eigs_start_line = num
+
+    if su_eigs_start_line is None:
+        print("No spin-up KS states found")
+        print("Did you run a spin polarised calculation?")
+        sys.exit(1)
+
+    if sd_eigs_start_line is None:
+        print("No spin-down KS states found")
+        print("Did you run a spin polarised calculation?")
+        sys.exit(1)
+
+    su_eigs = []
+    sd_eigs = []
+
+    for num, content in enumerate(lines[su_eigs_start_line + 2 :]):
+        if content != "":
+            su_eigs[num] = content
+
+    for num, content in enumerate(lines[su_eigs_start_line + 2 :]):
+        if content != "":
+            sd_eigs[num] = content
+
+    print("Spin-up KS eigenvalues:")
+    print(*su_eigs, sep=" ")
+
+    print("Spin-down KS eigenvalues:")
+    print(*sd_eigs, sep=" ")

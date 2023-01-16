@@ -12,6 +12,7 @@ from utils.main_utils import (
     check_args,
     check_geom_constraints,
     create_calc,
+    print_ks_states,
 )
 
 from delta_scf.calc_dscf import *
@@ -246,6 +247,7 @@ def main(
         ctx.obj["GMP"] = graph_min_percent
         ctx.obj["NPROCS"] = nprocs
         ctx.obj["DEBUG"] = debug
+        ctx.obj["HPC"] = hpc
 
         # Context objects created in main()
         ctx.obj["SPECIES"] = species
@@ -554,6 +556,7 @@ def basis(ctx, run_type, occ_type, ks_max, control_opt):
     constr_atom = ctx.obj["CONSTR_ATOM"]
     n_atoms = ctx.obj["N_ATOMS"]
     occ = ctx.obj["OCC"]
+    hpc = ctx.obj["HPC"]
 
     check_args(run_loc)
 
@@ -595,7 +598,12 @@ def basis(ctx, run_type, occ_type, ks_max, control_opt):
                     f"cd {run_loc}/ground && mpirun -n {nprocs} {binary} > aims.out"
                 )
 
-            print("ground calculation completed successfully")
+            print("ground calculation completed successfully\n")
+
+            # Print the KS states from aims.out so it is easier to specify the
+            # KS states for the hole calculation
+            if not hpc:
+                print_ks_states()
 
         else:
             print("aims.out file found in ground calculation directory")
