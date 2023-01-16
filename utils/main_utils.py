@@ -89,10 +89,10 @@ def create_calc(procs, binary, species):
     return aims_calc
 
 
-def print_ks_states():
+def print_ks_states(run_loc):
     """Print the KS states for the different spin states"""
 
-    with open("aims.out", "r") as aims:
+    with open(f"{run_loc}/ground/aims.out", "r") as aims:
         lines = aims.readlines()
 
     su_eigs_start_line = None
@@ -118,15 +118,23 @@ def print_ks_states():
     sd_eigs = []
 
     for num, content in enumerate(lines[su_eigs_start_line + 2 :]):
-        if content != "":
-            su_eigs[num] = content
+        spl = content.split()
 
-    for num, content in enumerate(lines[su_eigs_start_line + 2 :]):
-        if content != "":
-            sd_eigs[num] = content
+        if len(spl) != 0:
+            su_eigs.append(content)
+        else:
+            break
 
-    print("Spin-up KS eigenvalues:")
-    print(*su_eigs, sep=" ")
+    for num, content in enumerate(lines[sd_eigs_start_line + 2 :]):
+        spl = content.split()
 
-    print("Spin-down KS eigenvalues:")
-    print(*sd_eigs, sep=" ")
+        if len(spl) != 0:
+            sd_eigs.append(content)
+        else:
+            break
+
+    print("Spin-up KS eigenvalues:\n")
+    print(*su_eigs, sep="")
+
+    print("Spin-down KS eigenvalues:\n")
+    print(*sd_eigs, sep="")

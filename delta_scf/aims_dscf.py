@@ -603,7 +603,7 @@ def basis(ctx, run_type, occ_type, ks_max, control_opt):
             # Print the KS states from aims.out so it is easier to specify the
             # KS states for the hole calculation
             if not hpc:
-                print_ks_states()
+                print_ks_states(run_loc)
 
         else:
             print("aims.out file found in ground calculation directory")
