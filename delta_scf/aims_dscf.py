@@ -5,10 +5,14 @@ import sys
 from pathlib import Path
 
 import click
-from ase.io import read
+from ase.io import read, write
 from utils.click_meo import MutuallyExclusiveOption as meo
-from utils.main_utils import (build_geometry, check_args,
-                              check_geom_constraints, create_calc)
+from utils.main_utils import (
+    build_geometry,
+    check_args,
+    check_geom_constraints,
+    create_calc,
+)
 
 from delta_scf.calc_dscf import *
 from delta_scf.force_occupation import *
@@ -146,48 +150,19 @@ def main(
                 param_hint="'--control_input'", param_type="option"
             )
 
-    # It is not currently supported to use a custom geometry or control with ASE
-    # TODO Implement it though
-    # if geometry_input and not control_input:
-    #     raise click.MissingParameter(
-    #         param_hint="'--control_input' must also be specified when using "
-    #         "'--geometry_input'",
-    #         param_type="option",
-    #     )
-    # elif geometry_input and not control_input:
-    #     raise click.MissingParameter(
-    #         param_hint="'--geometry_input' must also be specified when using "
-    #         "'--control_input'",
-    #         param_type="option",
-    #     )
-    # elif geometry_input and control_input:
-    #     # Check if the geometry.in and control.in are in the same directory
-    #     if Path(geometry_input).parent != Path(control_input).parent:
-    #         raise click.UsageError(
-    #             "geometry.in and control.in must be in the same directory"
-    #         )
-    #     # Set a parameter to easily determine later if ASE will be used for the
-    #     # calculation or not
-    #     ase = False
-    #     # Also create geometry and control objects to pass to basis/projector
-    #     ctx.obj["GEOM"] = geometry_input
-    #     ctx.obj["CONTROL"] = control_input
-
     # Use ASE unless both a custom geometry.in and control.in are specified
+    # Also don't use ASE if a control.in is specified
     ase = True
     if geometry_input is not None:
+        check_geom_constraints(geometry_input)
         ctx.obj["GEOM"] = geometry_input
     else:
         ctx.obj["GEOM"] = None
+
     if control_input is not None:
+        ase = False
         ctx.obj["CONTROL"] = control_input
     else:
-        ctx.obj["CONTROL"] = None
-    if control_input is not None and geometry_input is not None:
-        ase = False
-    if control_input is None and geometry_input is None:
-        ase = True
-        ctx.obj["GEOM"] = None
         ctx.obj["CONTROL"] = None
 
     # Find the structure if not given
@@ -255,13 +230,6 @@ def main(
 
         # Create the ASE calculator
         if ase:
-            # We have to check for constrained atoms in the geometry.in as there is a
-            # bug in ASE currently that causes a TypeError if there are any
-            # I have included a link to the reference here:
-            # https://gitlab.com/ase/ase/-/issues/1158#note_1156014539
-            if geometry_input is not None:
-                check_geom_constraints()
-
             aims_calc = create_calc(nprocs, binary, species)
             atoms.calc = aims_calc
             ctx.obj["ATOMS"] = atoms
@@ -574,24 +542,41 @@ def projector(ctx, run_type, occ_type, pbc, ks_start, ks_stop):
 def basis(ctx, run_type, occ_type, ks_max, control_opt):
     """Force occupation of the basis states."""
 
+    # It gets annoying to type the full context object out every time
     run_loc = ctx.obj["RUN_LOC"]
-    check_args(ctx.obj["RUN_LOC"])
+    geom = ctx.obj["GEOM"]
+    control = ctx.obj["CONTROL"]
+    spec_mol = ctx.obj["SPEC_MOL"]
+    atoms = ctx.obj["ATOMS"]
+    ase = ctx.obj["ASE"]
+    nprocs = ctx.obj["NPROCS"]
+    binary = ctx.obj["BINARY"]
+    constr_atom = ctx.obj["CONSTR_ATOM"]
+    n_atoms = ctx.obj["N_ATOMS"]
+    occ = ctx.obj["OCC"]
+
+    check_args(run_loc)
 
     if run_type == "ground":
+        # Create the ground directory if it doesn't already exist
         os.system(f"mkdir -p {run_loc}/ground")
 
-        # Create the ground directory if it doesn't already exist
-        if ctx.obj["GEOM"] is not None and ctx.obj["CONTROL"] is not None:
-            os.system(f"mv {ctx.obj['GEOM']} {ctx.obj['RUN_LOC']} {run_loc}/ground")
-        else:
-            # Check required arguments are given for main()
-            check_args(("spec_mol", ctx.obj["SPEC_MOL"]))
+        # Write the geometry file if the system is specified through CLI
+        if geom is None and control is not None:
+            write(f"{run_loc}/geometry.in", atoms, format="aims")
+
+        # Copy the geometry.in and control.in files to the ground directory
+        if control is not None:
+            os.system(f"mv {control} {run_loc}/ground")
+
+        if geom is not None:
+            os.system(f"mv {geom} {run_loc}/ground")
 
         if os.path.isfile(f"{run_loc}/ground/aims.out") == False:
             # Run the ground state calculation
             print("running calculation...")
 
-            if ctx.obj["ASE"]:
+            if ase:
                 if len(control_opt) > 0:
                     print(
                         "WARNING: it is required to use '--control_input' and "
@@ -599,16 +584,15 @@ def basis(ctx, run_type, occ_type, ks_max, control_opt):
                         "options for the ground calculations"
                     )
 
-                ctx.obj["ATOMS"].get_potential_energy()
+                atoms.get_potential_energy()
                 # Move files to ground directory
                 os.system(
-                    "mv geometry.in control.in aims.out parameters.ase "
-                    f"{run_loc}/ground/"
+                    f"mv geometry.in control.in aims.out parameters.ase {run_loc}/ground/"
                 )
-            else:
+
+            else:  # Don't use ASE
                 os.system(
-                    f'cd {run_loc}/ground && mpirun -n {ctx.obj["NPROCS"]} '
-                    f'{ctx.obj["BINARY"]} > aims.out'
+                    f"cd {run_loc}/ground && mpirun -n {nprocs} {binary} > aims.out"
                 )
 
             print("ground calculation completed successfully")
@@ -619,14 +603,13 @@ def basis(ctx, run_type, occ_type, ks_max, control_opt):
 
     if (
         run_type == "hole"
-        and os.path.isfile(f"{run_loc}/{ctx.obj['CONSTR_ATOM']}1/hole/aims.out")
-        is False
+        and os.path.isfile(f"{run_loc}/{constr_atom}1/hole/aims.out") is False
     ):
         # Check required arguments are given for main()
         check_args(
-            ("spec_mol", ctx.obj["SPEC_MOL"]),
-            ("constr_atom", ctx.obj["CONSTR_ATOM"]),
-            ("n_atoms", ctx.obj["N_ATOMS"]),
+            ("spec_mol", spec_mol),
+            ("constr_atom", constr_atom),
+            ("n_atoms", n_atoms),
             ("occ_type", occ_type),
             ("ks_max", ks_max),
         )
@@ -637,7 +620,7 @@ def basis(ctx, run_type, occ_type, ks_max, control_opt):
             )
             raise FileNotFoundError
 
-        if ctx.obj["GEOM"] or ctx.obj["CONTROL"]:
+        if geom or control:
             print(
                 "WARNING: custom geometry.in and control.in files will be ignored for hole "
                 "runs"
@@ -645,9 +628,9 @@ def basis(ctx, run_type, occ_type, ks_max, control_opt):
 
         # Create the directories required for the hole calculation
         setup_fob(
-            ctx.obj["CONSTR_ATOM"],
-            ctx.obj["N_ATOMS"],
-            ctx.obj["OCC"],
+            constr_atom,
+            n_atoms,
+            occ,
             ks_max,
             occ_type,
             run_loc,
@@ -655,29 +638,25 @@ def basis(ctx, run_type, occ_type, ks_max, control_opt):
         )
 
         # Add molecule identifier to hole geometry.in
-        with open(
-            f"{run_loc}/{ctx.obj['CONSTR_ATOM']}1/hole/geometry.in", "r"
-        ) as hole_geom:
+        with open(f"{run_loc}/{constr_atom}1/hole/geometry.in", "r") as hole_geom:
             lines = hole_geom.readlines()
 
-        lines.insert(4, f"# {ctx.obj['SPEC_MOL']}\n")
+        lines.insert(4, f"# {spec_mol}\n")
 
-        with open(
-            f"{ctx.obj['RUN_LOC']}/{ctx.obj['CONSTR_ATOM']}1/hole/geometry.in", "w"
-        ) as hole_geom:
+        with open(f"{run_loc}/{constr_atom}1/hole/geometry.in", "w") as hole_geom:
             hole_geom.writelines(lines)
 
         # Run the hole calculation
         with click.progressbar(
-            range(1, ctx.obj["N_ATOMS"] + 1), label="calculating basis hole:"
+            range(1, n_atoms + 1), label="calculating basis hole:"
         ) as prog_bar:
             for i in prog_bar:
                 os.system(
-                    f"cd {run_loc}/{ctx.obj['CONSTR_ATOM']}{i}/hole/ && mpirun -n "
-                    f"{ctx.obj['NPROCS']} {ctx.obj['BINARY']} > aims.out"
+                    f"cd {run_loc}/{constr_atom}{i}/hole/ && mpirun -n "
+                    f"{nprocs} {binary} > aims.out"
                 )
 
-    elif os.path.isfile(f"{run_loc}/{ctx.obj['CONSTR_ATOM']}1/hole/aims.out") is True:
+    elif os.path.isfile(f"{run_loc}/{constr_atom}1/hole/aims.out") is True:
         print("hole calculations already completed, skipping calculation...")
 
     # This needs to be passed to process()

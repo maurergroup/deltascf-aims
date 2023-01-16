@@ -4,11 +4,8 @@ import sys
 
 from ase.build import molecule
 from ase.calculators.aims import Aims
-from ase.constraints import FixAtoms
 from ase.data.pubchem import pubchem_atoms_search
 from click import MissingParameter
-
-from directional_constraint import DirectionalConstraint as dc
 
 
 def build_geometry(geometry):
@@ -53,10 +50,14 @@ def check_geom_constraints(geom_file):
         lines = geom.readlines()
 
     for line in lines:
-        for coor in ["x", "y", "z"]:
-            if f"constrain_relaxation {coor}" in line:
-                # TODO
-                pass
+        if "constrain_relaxation" in line:
+            print("'constrain_relaxation' keyword found in geometry.in")
+            print("Ensure that no atoms are fixed in the geometry.in file")
+            print(
+                "The geometry of the structure should have already been relaxed before any SP calculations"
+            )
+            print("Aborting...")
+            sys.exit(1)
 
 
 def create_calc(procs, binary, species):
