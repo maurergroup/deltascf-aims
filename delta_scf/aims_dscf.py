@@ -5,20 +5,15 @@ import sys
 from pathlib import Path
 
 import click
+from ase import Atoms
 from ase.io import read, write
 from utils.click_meo import MutuallyExclusiveOption as meo
-from utils.main_utils import (
-    build_geometry,
-    check_args,
-    check_geom_constraints,
-    create_calc,
-    print_ks_states,
-)
+from utils.main_utils import MainUtils as mu
 
-from delta_scf.calc_dscf import *
-from delta_scf.force_occupation import *
+from delta_scf.calc_dscf import CalcDeltaSCF as cds
+from delta_scf.force_occupation import Basis, Projector
 from delta_scf.peak_broaden import dos_binning
-from delta_scf.plot import sim_xps_spectrum
+from delta_scf.plot import Plot
 
 
 @click.group()
@@ -155,7 +150,7 @@ def main(
     # Also don't use ASE if a control.in is specified
     ase = True
     if geometry_input is not None:
-        check_geom_constraints(geometry_input)
+        mu.check_geom_constraints(geometry_input)
         ctx.obj["GEOM"] = geometry_input
     else:
         ctx.obj["GEOM"] = None
@@ -168,6 +163,8 @@ def main(
 
     # Find the structure if not given
     # Build the structure if given
+    atoms = Atoms()
+
     if spec_mol is None and geometry_input is None:
         if "--help" not in sys.argv:
             try:
@@ -183,7 +180,7 @@ def main(
 
     elif "--help" not in sys.argv and ase:
         if spec_mol is not None:
-            atoms = build_geometry(spec_mol)
+            atoms = mu.build_geometry(spec_mol)
         if geometry_input is not None:
             atoms = read(geometry_input)
 
@@ -231,7 +228,7 @@ def main(
 
         # Create the ASE calculator
         if ase:
-            aims_calc = create_calc(nprocs, binary, species)
+            aims_calc = mu.create_calc(nprocs, binary, species)
             atoms.calc = aims_calc
             ctx.obj["ATOMS"] = atoms
             ctx.obj["CALC"] = aims_calc
@@ -259,11 +256,11 @@ def process(ctx):
 
     # Calculate the delta scf energy and plot
     if ctx.obj["RUN_TYPE"] == "hole":
-        grenrgys = read_ground(ctx.obj["RUN_LOC"])
-        element, excienrgys = read_atoms(
-            ctx.obj["RUN_LOC"], ctx.obj["CONSTR_ATOM"], contains_number
+        grenrgys = cds.read_ground(ctx.obj["RUN_LOC"])
+        element, excienrgys = cds.read_atoms(
+            ctx.obj["RUN_LOC"], ctx.obj["CONSTR_ATOM"], cds.contains_number
         )
-        xps = calc_delta_scf(element, grenrgys, excienrgys)
+        xps = cds.calc_delta_scf(element, grenrgys, excienrgys)
 
         if ctx.obj["RUN_LOC"] != "./":
             os.system(f"mv {element}_xps_peaks.txt {ctx.obj['RUN_LOC']}")
@@ -296,7 +293,7 @@ def process(ctx):
 
             # Write out the spectrum to a text file
             dat = []
-            for (xi, yi) in zip(x, y):
+            for xi, yi in zip(x, y):
                 dat.append(str(xi) + " " + str(yi) + "\n")
 
             with open(f"{element}_xps_spectrum.txt", "w") as spec:
@@ -305,7 +302,9 @@ def process(ctx):
             os.system(f'mv {element}_xps_spectrum.txt ./{ctx.obj["RUN_LOC"]}/')
 
             print("\nplotting spectrum and calculating MABE...")
-            sim_xps_spectrum(ctx.obj["RUN_LOC"], ctx.obj["CONSTR_ATOM"], ctx.obj["GMP"])
+            Plot.sim_xps_spectrum(
+                ctx.obj["RUN_LOC"], ctx.obj["CONSTR_ATOM"], ctx.obj["GMP"]
+            )
 
 
 @main.command()
@@ -558,7 +557,7 @@ def basis(ctx, run_type, occ_type, ks_max, control_opt):
     occ = ctx.obj["OCC"]
     hpc = ctx.obj["HPC"]
 
-    check_args(run_loc)
+    mu.check_args(run_loc)
 
     if run_type == "ground":
         # Create the ground directory if it doesn't already exist
@@ -603,7 +602,7 @@ def basis(ctx, run_type, occ_type, ks_max, control_opt):
             # Print the KS states from aims.out so it is easier to specify the
             # KS states for the hole calculation
             if not hpc:
-                print_ks_states(run_loc)
+                mu.print_ks_states(run_loc)
 
         else:
             print("aims.out file found in ground calculation directory")
@@ -614,7 +613,7 @@ def basis(ctx, run_type, occ_type, ks_max, control_opt):
         and os.path.isfile(f"{run_loc}/{constr_atom}1/hole/aims.out") is False
     ):
         # Check required arguments are given for main()
-        check_args(
+        mu.check_args(
             ("spec_mol", spec_mol),
             ("constr_atom", constr_atom),
             ("n_atoms", n_atoms),
@@ -635,7 +634,7 @@ def basis(ctx, run_type, occ_type, ks_max, control_opt):
             )
 
         # Create the directories required for the hole calculation
-        setup_fob(
+        Basis.setup_basis(
             constr_atom,
             n_atoms,
             occ,

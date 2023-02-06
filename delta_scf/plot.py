@@ -4,61 +4,65 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-def sim_xps_spectrum(run_loc, targ_at, gmp):
-    x_axis_aims = np.loadtxt(f"{run_loc}/{targ_at}_xps_spectrum.txt", usecols=(0))
-    y_axis_aims = np.loadtxt(f"{run_loc}/{targ_at}_xps_spectrum.txt", usecols=(1))
+class Plot:
+    """Plot the XPS spectrum"""
 
-    # Find the k-edge MABE
-    aims_y_max = y_axis_aims.max()
-    aims_y_max_arg = y_axis_aims.argmax()
-    aims_be = round(x_axis_aims[aims_y_max_arg], 4)
-    aims_be_line = [i for i in np.linspace(-0.6, aims_y_max, num=len(y_axis_aims))]
+    @staticmethod
+    def sim_xps_spectrum(run_loc, targ_at, gmp):
+        x_axis_aims = np.loadtxt(f"{run_loc}/{targ_at}_xps_spectrum.txt", usecols=(0))
+        y_axis_aims = np.loadtxt(f"{run_loc}/{targ_at}_xps_spectrum.txt", usecols=(1))
 
-    print("\nFHI-aims mean average binding energy (MABE):", aims_be, "eV")
+        # Find the k-edge MABE
+        aims_y_max = y_axis_aims.max()
+        aims_y_max_arg = y_axis_aims.argmax()
+        aims_be = round(x_axis_aims[aims_y_max_arg], 4)
+        aims_be_line = [i for i in np.linspace(-0.6, aims_y_max, num=len(y_axis_aims))]
 
-    # Plot everything
-    plt.xlabel("Energy / eV")
-    plt.ylabel("Intensity")
+        print("\nFHI-aims mean average binding energy (MABE):", aims_be, "eV")
 
-    plt.plot(
-        np.full((len(aims_be_line)), aims_be),
-        aims_be_line,
-        c="grey",
-        linestyle="--",
-        label=f"MABE = {aims_be} eV",
-    )
+        # Plot everything
+        plt.xlabel("Energy / eV")
+        plt.ylabel("Intensity")
 
-    # Find the range of the spectrum to plot
-    plot_x = []
-    plot_y = []
+        plt.plot(
+            np.full((len(aims_be_line)), aims_be),
+            aims_be_line,
+            c="grey",
+            linestyle="--",
+            label=f"MABE = {aims_be} eV",
+        )
 
-    glob_max_y = max(y_axis_aims)
-    glob_min_y = glob_max_y * gmp
+        # Find the range of the spectrum to plot
+        plot_x = []
+        plot_y = []
 
-    for c, y in enumerate(y_axis_aims):
-        if y > glob_min_y:
-            plot_x.append(x_axis_aims[c])
-            plot_y.append(y)
+        glob_max_y = max(y_axis_aims)
+        glob_min_y = glob_max_y * gmp
 
-    # Calculate the min and max ranges
-    x_max = math.floor(max(plot_x))
-    x_min = math.ceil(min(plot_x))
-    y_max = max(plot_y)
+        for c, y in enumerate(y_axis_aims):
+            if y > glob_min_y:
+                plot_x.append(x_axis_aims[c])
+                plot_y.append(y)
 
-    # Get the type of molecule
-    with open(f"{run_loc}/{targ_at}1/hole/geometry.in", "r") as hole_geom:
-        lines = hole_geom.readlines()
+        # Calculate the min and max ranges
+        x_max = math.floor(max(plot_x))
+        x_min = math.ceil(min(plot_x))
+        y_max = max(plot_y)
 
-    molecule = lines[4].split()[-1]
+        # Get the type of molecule
+        with open(f"{run_loc}/{targ_at}1/hole/geometry.in", "r") as hole_geom:
+            lines = hole_geom.readlines()
 
-    # Plot the spectrum
-    plt.plot(plot_x, plot_y, label="Simulated XPS spectrum")
-    plt.ylim((0, y_max + 1))
-    plt.xlim(x_max, x_min)  # Reverse to match experimental XPS conventions
-    plt.xticks(np.arange(x_min, x_max, 1))
-    plt.legend(loc="upper right")
-    plt.title(f"XPS spectrum of {molecule}")
+        molecule = lines[4].split()[-1]
 
-    plt.savefig(f"{run_loc}/xps_spectrum.pdf")
-    plt.savefig(f"{run_loc}/xps_spectrum.png")
-    plt.show()
+        # Plot the spectrum
+        plt.plot(plot_x, plot_y, label="Simulated XPS spectrum")
+        plt.ylim((0, y_max + 1))
+        plt.xlim(x_max, x_min)  # Reverse to match experimental XPS conventions
+        plt.xticks(np.arange(x_min, x_max, 1))
+        plt.legend(loc="upper right")
+        plt.title(f"XPS spectrum of {molecule}")
+
+        plt.savefig(f"{run_loc}/xps_spectrum.pdf")
+        plt.savefig(f"{run_loc}/xps_spectrum.png")
+        plt.show()

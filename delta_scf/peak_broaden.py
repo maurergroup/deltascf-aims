@@ -3,7 +3,6 @@ import numpy as np
 
 
 def gaussian(x, x_mean, broadening):
-
     gaussian_val = np.sqrt((4 * np.log(2)) / (np.pi * (broadening**2))) * np.exp(
         -((4 * np.log(2)) / (broadening**2)) * (x - x_mean) ** 2
     )
@@ -12,7 +11,6 @@ def gaussian(x, x_mean, broadening):
 
 
 def lorentzian(x, x_mean, broadening):
-
     lorentzian_val = (
         (1 / (2 * np.pi)) * (broadening) / (((broadening / 2) ** 2) + (x - x_mean) ** 2)
     )
@@ -84,7 +82,6 @@ def dos_binning(
     with click.progressbar(
         range(num_bins), label="applying pseudo-Voigt broadening..."
     ) as bar:
-
         for i in bar:
             pseudovoigt_vec = np.zeros((len(eigenvalues)))
             pseudovoigt_vec = (

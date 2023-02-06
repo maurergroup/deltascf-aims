@@ -8,133 +8,138 @@ from ase.data.pubchem import pubchem_atoms_search
 from click import MissingParameter
 
 
-def build_geometry(geometry):
-    """Check different databases to create a geometry.in"""
+class MainUtils:
+    """Various static methods used in aims_dscf"""
 
-    try:
-        atoms = molecule(geometry)
-        print("molecule found in ASE database")
-        return atoms
-    except KeyError:
-        print("molecule not found in ASE database, searching PubChem...")
+    @staticmethod
+    def build_geometry(geometry):
+        """Check different databases to create a geometry.in"""
 
-    try:
-        atoms = pubchem_atoms_search(name=geometry)
-        print("molecule found as a PubChem name")
-        return atoms
-    except ValueError:
-        print(f"{geometry} not found in PubChem name")
+        try:
+            atoms = molecule(geometry)
+            print("molecule found in ASE database")
+            return atoms
+        except KeyError:
+            print("molecule not found in ASE database, searching PubChem...")
 
-    try:
-        atoms = pubchem_atoms_search(cid=geometry)
-        print("molecule found in PubChem CID")
-        return atoms
-    except ValueError:
-        print(f"{geometry} not found in PubChem CID")
+        try:
+            atoms = pubchem_atoms_search(name=geometry)
+            print("molecule found as a PubChem name")
+            return atoms
+        except ValueError:
+            print(f"{geometry} not found in PubChem name")
 
-    try:
-        atoms = pubchem_atoms_search(smiles=geometry)
-        print("molecule found in PubChem SMILES")
-        return atoms
-    except ValueError:
-        print(f"{geometry} not found in PubChem smiles")
-        print(f"{geometry} not found in PubChem or ASE database")
-        print("aborting...")
-        sys.exit(1)
+        try:
+            atoms = pubchem_atoms_search(cid=geometry)
+            print("molecule found in PubChem CID")
+            return atoms
+        except ValueError:
+            print(f"{geometry} not found in PubChem CID")
 
-
-def check_args(*args):
-    """Check if required arguments are specified"""
-    def_args = locals()
-
-    for arg in def_args["args"]:
-        if arg[1] is None:
-            if arg[0] == "spec_mol":
-                # Convert to list and back to assign to tuple
-                arg = list(arg)
-                arg[0] = "molecule"
-                arg = tuple(arg)
-
-            raise MissingParameter(param_hint=f"'--{arg[0]}'", param_type="option")
-
-
-def check_geom_constraints(geom_file):
-    """Check if there are any constrain_relaxation keywords in geometry.in"""
-
-    with open(geom_file, "r") as geom:
-        lines = geom.readlines()
-
-    for line in lines:
-        if "constrain_relaxation" in line:
-            print("'constrain_relaxation' keyword found in geometry.in")
-            print("Ensure that no atoms are fixed in the geometry.in file")
-            print(
-                "The geometry of the structure should have already been relaxed before any SP calculations"
-            )
-            print("Aborting...")
+        try:
+            atoms = pubchem_atoms_search(smiles=geometry)
+            print("molecule found in PubChem SMILES")
+            return atoms
+        except ValueError:
+            print(f"{geometry} not found in PubChem smiles")
+            print(f"{geometry} not found in PubChem or ASE database")
+            print("aborting...")
             sys.exit(1)
 
+    @staticmethod
+    def check_args(*args):
+        """Check if required arguments are specified"""
 
-def create_calc(procs, binary, species):
-    """Create an ASE calculator object"""
+        def_args = locals()
 
-    aims_calc = Aims(
-        xc="pbe",
-        spin="collinear",
-        default_initial_moment=0,
-        aims_command=f"mpirun -n {procs} {binary}",
-        species_dir=f"{species}defaults_2020/tight/",
-    )
+        for arg in def_args["args"]:
+            if arg[1] is None:
+                if arg[0] == "spec_mol":
+                    # Convert to list and back to assign to tuple
+                    arg = list(arg)
+                    arg[0] = "molecule"
+                    arg = tuple(arg)
 
-    return aims_calc
+                raise MissingParameter(param_hint=f"'--{arg[0]}'", param_type="option")
 
+    @staticmethod
+    def check_geom_constraints(geom_file):
+        """Check if there are any constrain_relaxation keywords in geometry.in"""
 
-def print_ks_states(run_loc):
-    """Print the KS states for the different spin states"""
+        with open(geom_file, "r") as geom:
+            lines = geom.readlines()
 
-    with open(f"{run_loc}/ground/aims.out", "r") as aims:
-        lines = aims.readlines()
+        for line in lines:
+            if "constrain_relaxation" in line:
+                print("'constrain_relaxation' keyword found in geometry.in")
+                print("Ensure that no atoms are fixed in the geometry.in file")
+                print(
+                    "The geometry of the structure should have already been relaxed before any SP calculations"
+                )
+                print("Aborting...")
+                sys.exit(1)
 
-    su_eigs_start_line = None
-    sd_eigs_start_line = None
+    @staticmethod
+    def create_calc(procs, binary, species):
+        """Create an ASE calculator object"""
 
-    for num, content in enumerate(lines):
-        if "Spin-up eigenvalues" in content:
-            su_eigs_start_line = num
-        if "Spin-down eigenvalues" in content:
-            sd_eigs_start_line = num
+        aims_calc = Aims(
+            xc="pbe",
+            spin="collinear",
+            default_initial_moment=0,
+            aims_command=f"mpirun -n {procs} {binary}",
+            species_dir=f"{species}defaults_2020/tight/",
+        )
 
-    if su_eigs_start_line is None:
-        print("No spin-up KS states found")
-        print("Did you run a spin polarised calculation?")
-        sys.exit(1)
+        return aims_calc
 
-    if sd_eigs_start_line is None:
-        print("No spin-down KS states found")
-        print("Did you run a spin polarised calculation?")
-        sys.exit(1)
+    @staticmethod
+    def print_ks_states(run_loc):
+        """Print the KS states for the different spin states"""
 
-    su_eigs = []
-    sd_eigs = []
+        with open(f"{run_loc}/ground/aims.out", "r") as aims:
+            lines = aims.readlines()
 
-    for num, content in enumerate(lines[su_eigs_start_line + 2 :]):
-        spl = content.split()
+        su_eigs_start_line = None
+        sd_eigs_start_line = None
 
-        if len(spl) != 0:
-            su_eigs.append(content)
-        else:
-            break
+        for num, content in enumerate(lines):
+            if "Spin-up eigenvalues" in content:
+                su_eigs_start_line = num
+            if "Spin-down eigenvalues" in content:
+                sd_eigs_start_line = num
 
-    for num, content in enumerate(lines[sd_eigs_start_line + 2 :]):
-        spl = content.split()
+        if su_eigs_start_line is None:
+            print("No spin-up KS states found")
+            print("Did you run a spin polarised calculation?")
+            sys.exit(1)
 
-        if len(spl) != 0:
-            sd_eigs.append(content)
-        else:
-            break
+        if sd_eigs_start_line is None:
+            print("No spin-down KS states found")
+            print("Did you run a spin polarised calculation?")
+            sys.exit(1)
 
-    print("Spin-up KS eigenvalues:\n")
-    print(*su_eigs, sep="")
+        su_eigs = []
+        sd_eigs = []
 
-    print("Spin-down KS eigenvalues:\n")
-    print(*sd_eigs, sep="")
+        for num, content in enumerate(lines[su_eigs_start_line + 2 :]):
+            spl = content.split()
+
+            if len(spl) != 0:
+                su_eigs.append(content)
+            else:
+                break
+
+        for num, content in enumerate(lines[sd_eigs_start_line + 2 :]):
+            spl = content.split()
+
+            if len(spl) != 0:
+                sd_eigs.append(content)
+            else:
+                break
+
+        print("Spin-up KS eigenvalues:\n")
+        print(*su_eigs, sep="")
+
+        print("Spin-down KS eigenvalues:\n")
+        print(*sd_eigs, sep="")
