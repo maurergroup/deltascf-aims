@@ -6,12 +6,13 @@ from pathlib import Path
 
 import click
 from ase import Atoms
+from ase.atoms import default
 from ase.io import read, write
 from utils.click_meo import MutuallyExclusiveOption as meo
 from utils.main_utils import MainUtils as mu
 
 from delta_scf.calc_dscf import CalcDeltaSCF as cds
-from delta_scf.force_occupation import Basis, Projector
+from delta_scf.force_occupation import Basis, ForceOccupation, Projector
 from delta_scf.peak_broaden import dos_binning
 from delta_scf.plot import Plot
 
@@ -196,7 +197,10 @@ def main(
         # Ensure the user has entered the path to the binary
         # If not open the user's $EDITOR to allow them to enter the path
         if not Path(bin_path).is_file() or binary or bin_path == "":
-            marker = "\n# Enter the path to the FHI-aims binary above this line"
+            marker = (
+                "\n# Enter the path to the FHI-aims binary above this line\n"
+                "# Ensure that the binary is located in the build directory of FHIaims"
+            )
             bin_line = click.edit(marker)
             if bin_line is not None:
                 with open(f"{current_path}/aims_bin_loc.txt", "w") as f:
@@ -322,6 +326,14 @@ def process(ctx):
     help="select whether the old or new occupation routine is used",
 )
 @click.option(
+    "-s",
+    "--basis-set",
+    default="tight",
+    show_default=True,
+    type=click.Choice(["light", "intermediate", "tight", "really_tight"]),
+    help="the basis set to use for the calculation",
+)
+@click.option(
     "-p", "--pbc", is_flag=True, help="create a cell with periodic boundary conditions"
 )
 @click.option(
@@ -347,26 +359,34 @@ def projector(ctx, run_type, occ_type, pbc, ks_start, ks_stop):
     )
     sys.exit()
 
+    spec_mol = ctx.obj["SPEC_MOL"]
+    run_loc = ctx.obj["RUN_LOC"]
+    atoms = ctx.obj["ATOMS"]
+    calc = ctx.obj["CALC"]
+    constr_atom = ctx.obj["CONSTR_ATOM"]
+    n_atoms = ctx.obj["N_ATOMS"]
+    defaults = ctx.obj["SPECIES"]
+
     # Used later to redirect STDERR to /dev/null to prevent printing not converged errors
     spec_run_info = None
 
     if pbc == True:
-        ctx.obj["ATOMS"].set_pbc(True)
+        atoms.set_pbc(True)
 
     if run_type == "ground":
         # Check required arguments are given in main()
-        check_args(ctx.obj["SPEC_MOL"])
+        mu.check_args(spec_mol)
 
         # Create the ground directory if it doesn't already exist
-        os.system(f"mkdir -p {ctx.obj['RUN_LOC']}/ground")
+        os.system(f"mkdir -p {run_loc}/ground")
 
         # Attach the calculator to the atoms object
-        ctx.obj["ATOMS"].calc = ctx.obj["CALC"]
+        atoms.calc = calc
 
-        if os.path.isfile(f"{ctx.obj['RUN_LOC']}/ground/aims.out") == False:
+        if os.path.isfile(f"{run_loc}/ground/aims.out") == False:
             # Run the ground state calculation
             print("running calculation...")
-            ctx.obj["ATOMS"].get_potential_energy()
+            atoms.get_potential_energy()
             print("ground calculation completed successfully")
 
             # Move files to ground directory
@@ -379,18 +399,16 @@ def projector(ctx, run_type, occ_type, pbc, ks_start, ks_stop):
 
     if run_type == "init_1":
         # Check required arguments are given in main()
-        check_args(
-            ctx.obj["CONSTR_ATOM"], ctx.obj["N_ATOMS"], occ_type, ks_start, ks_stop
-        )
+        mu.check_args(constr_atom, n_atoms, occ_type, ks_start, ks_stop)
 
         basis_set = "tight"
-        element_symbols, read_atoms = read_ground_inp(
-            ctx.obj["CONSTR_ATOM"], "run_dir/ground/geometry.in"
+        element_symbols, read_atoms = ForceOccupation.read_ground_inp(
+            constr_atom, "run_dir/ground/geometry.in"
         )
-        at_num, valence = get_electronic_structure(
-            element_symbols, ctx.obj["CONSTR_ATOM"]
+        at_num, valence = ForceOccupation.get_electronic_structure(
+            element_symbols, constr_atom
         )
-        nucleus, n_index, valence_index = setup_init_1(
+        nucleus, n_index, valence_index = Projector.setup_init_1(
             basis_set,
             ctx.obj["SPECIES"],
             ctx.obj["CONSTR_ATOM"],
@@ -399,7 +417,7 @@ def projector(ctx, run_type, occ_type, pbc, ks_start, ks_stop):
             at_num,
             valence,
         )
-        setup_init_2(
+        Projector.setup_init_2(
             [i for i in range(ks_start + 1, ks_stop + 1)],
             "./run_dir/",
             ctx.obj["CONSTR_ATOM"],
@@ -410,7 +428,7 @@ def projector(ctx, run_type, occ_type, pbc, ks_start, ks_stop):
             valence_index,
             occ_type,
         )
-        setup_hole(
+        Projector.setup_hole(
             "./run_dir/",
             [i for i in range(ks_start + 1, ks_stop + 1)],
             ctx.obj["CONSTR_ATOM"],
@@ -642,6 +660,7 @@ def basis(ctx, run_type, occ_type, ks_max, control_opt):
             occ_type,
             run_loc,
             control_opt,
+            ad_cont_opts,
         )
 
         # Add molecule identifier to hole geometry.in

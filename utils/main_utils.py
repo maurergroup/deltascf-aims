@@ -97,6 +97,7 @@ class MainUtils:
     def print_ks_states(run_loc):
         """Print the KS states for the different spin states"""
 
+        # Parse the output file
         with open(f"{run_loc}/ground/aims.out", "r") as aims:
             lines = aims.readlines()
 
@@ -109,6 +110,7 @@ class MainUtils:
             if "Spin-down eigenvalues" in content:
                 sd_eigs_start_line = num
 
+        # Check that KS states were found
         if su_eigs_start_line is None:
             print("No spin-up KS states found")
             print("Did you run a spin polarised calculation?")
@@ -122,6 +124,7 @@ class MainUtils:
         su_eigs = []
         sd_eigs = []
 
+        # Save the KS states into lists
         for num, content in enumerate(lines[su_eigs_start_line + 2 :]):
             spl = content.split()
 
@@ -138,6 +141,7 @@ class MainUtils:
             else:
                 break
 
+        # Print the KS states
         print("Spin-up KS eigenvalues:\n")
         print(*su_eigs, sep="")
 

@@ -140,50 +140,70 @@ class ForceOccupation:
 
         return atom_index, valence
 
+    def mod_keywords(self, ad_cont_opts, opts):
+        """Allow users to modify and add keywords"""
+
+        for ad_opt in list(ad_cont_opts):
+            spl_key = ad_opt.split(" ", 1)[0]
+
+            try:
+                spl_val = ad_opt.split(" ", 1)[1]
+            except IndexError:
+                spl_val = None
+
+            for j, opt in enumerate(list(opts)):
+                if spl_key == opt:
+                    if spl_val is not None:
+                        opts[opt] = spl_val
+                    else:
+                        del opts[opt]
+
+            if spl_key not in list(opts):
+                if spl_val is not None:
+                    opts.update({spl_key: spl_val})
+                else:
+                    opts.update({spl_key: ""})
+
 
 class Projector(ForceOccupation):
     """Create input files for projector calculations."""
 
-    @staticmethod
     def setup_init_1(
+        self,
         basis_set,
-        defaults,
+        species,
         target_atom,
         num_atom,
         calc_path,
         at_num,
         atom_valence,
+        ad_cond_opts,
     ):
-        """Write new init directories and control files to calculate FOP."""
+        """Write new init directories and control files."""
 
-        iter_limit = "# sc_iter_limit           1\n"
-        init_iter = "# sc_init_iter          75\n"
-        ks_method = "KS_method                 serial\n"
-        restart_file = "restart_write_only        restart_file\n"
-        restart_save = "restart_save_iterations   20\n"
-        restart_force = "# force_single_restartfile  .true.\n"
-        charge = "charge                    0.1\n"
-        output_cube = "#output                  cube spin_density\n"
-        output_mull = "# output                  mulliken\n"
-        output_hirsh = "# output                  hirshfeld\n"
+        # Default control file options
+        opts = {
+            "xc": "pbe",
+            "spin": "collinear",
+            "default_initial_moment": 0,
+            "charge": 0.1,
+            "restart_write_only": "restart_file",
+            "restart_save_iterations": 20,
+        }
+
+        self.mod_keywords(ad_cond_opts, opts)
 
         # Ensure returned variables are bound
         nucleus = "0"
         n_index = 0
         valence_index = 0
 
-        # Check that specified basis_set is valid
-        basis_set_opts = ["light", "intermediate", "tight", "really_tight"]
-
-        if basis_set not in basis_set_opts:
-            raise ValueError(
-                f"defined basis set is not a valid option, available options are: \n{basis_set_opts}"
-            )
-
+        # Create a new intermediate file and write basis sets to it
         shutil.copyfile(
             f"{calc_path}ground/control.in", f"{calc_path}ground/control.in.new"
         )
 
+        # Find species defaults location from location of binary
         basis_set = glob.glob(
             f"{defaults}/defaults_2020/{basis_set}/*{target_atom}_default"
         )
@@ -191,21 +211,8 @@ class Projector(ForceOccupation):
         new_control = open(f"{calc_path}ground/control.in.new", "a")
         subprocess.run(bash_add_basis.split(), check=True, stdout=new_control)
 
-        if type(num_atom) == list:
-            for atom in num_atom:
-                if type(atom) is not int:
-                    raise ValueError("num_atom must be an integer or list of integers")
-
-            loop_iterator = num_atom
-
-        elif type(num_atom) == int:
-            loop_iterator = range(num_atom)
-        else:
-            raise ValueError("num_atom must be an integer or list of integers")
-
-        for i in loop_iterator:
-            if type(num_atom) != list:
-                i += 1
+        for i in range(num_atom):
+            i += 1
 
             os.makedirs(f"{calc_path}{target_atom}{i}/init_1", exist_ok=True)
             shutil.copyfile(
@@ -718,9 +725,8 @@ class Projector(ForceOccupation):
 class Basis(ForceOccupation):
     """Create input files for basis calculations."""
 
-    @staticmethod
     def setup_basis(
-        target_atom, num_atom, occ_no, ks_max, occ_type, run_loc, ad_cont_opts
+        self, target_atom, num_atom, occ_no, ks_max, occ_type, run_loc, ad_cont_opts
     ):
         """Write new directories and control files to calculate FOB."""
 
@@ -743,26 +749,7 @@ class Basis(ForceOccupation):
         }
 
         # Allow users to modify and add keywords
-        for ad_opt in list(ad_cont_opts):
-            spl_key = ad_opt.split(" ", 1)[0]
-
-            try:
-                spl_val = ad_opt.split(" ", 1)[1]
-            except IndexError:
-                spl_val = None
-
-            for j, opt in enumerate(list(opts)):
-                if spl_key == opt:
-                    if spl_val is not None:
-                        opts[opt] = spl_val
-                    else:
-                        del opts[opt]
-
-            if spl_key not in list(opts):
-                if spl_val is not None:
-                    opts.update({spl_key: spl_val})
-                else:
-                    opts.update({spl_key: ""})
+        self.mod_keywords(ad_cont_opts, opts)
 
         # Iterate over each constrained atom
         for i in range(num_atom):
