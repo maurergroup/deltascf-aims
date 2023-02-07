@@ -12,43 +12,45 @@ import yaml
 class ForceOccupation:
     """Manipulate FHIaims input files to setup basis and projector calculations."""
 
-    @staticmethod
-    def read_ground_inp(target_atom, geometry_path, **kwargs):
-        """Find number of atoms in geometry."""
+    def __init__(self, target_atom):
+        self.target_atom = target_atom
+        self.atom_specifier = []
 
         # All supported elements
         with open("elements.yml", "r") as elements:
-            element_symbols = yaml.load(elements, Loader=yaml.SafeLoader)
+            self.element_symbols = yaml.load(elements, Loader=yaml.SafeLoader)
+
+    def read_ground_inp(self, geometry_path, *args):
+        """Find number of atoms in geometry."""
 
         # Check arguments and add atoms to list
-        if target_atom not in element_symbols:
+        if self.target_atom not in self.element_symbols:
             raise ValueError("invalid element symbol")
 
-        atoms = kwargs.get("atoms", None)
-
-        atom_specifier = []
+        # Do something like this
+        for arg in args:
+            atoms.append(arg)
 
         if atoms is not None:
             if type(atoms) == list:
                 for atom in atoms:
                     if type(atom) is int:
-                        atom_specifier.append(atom)
+                        self.atom_specifier.append(atom)
                     else:
                         raise ValueError(
                             "atoms list should only contain integer values"
                         )
 
             elif type(atoms) == int:
-                atom_specifier.append(atoms)
+                self.atom_specifier.append(atoms)
 
             else:
                 raise ValueError("atoms list must be a list of ints or an int")
 
-            print("specified atoms:", atom_specifier)
-            return element_symbols, atom_specifier
+            print("specified atoms:", self.atom_specifier)
 
         # Default to all atoms if specific atoms aren't specified
-        elif len(atom_specifier) == 0:
+        elif len(self.atom_specifier) == 0:
             print(
                 "atoms argument not specified, defaulting to all target atoms in geometry.in"
             )
@@ -59,27 +61,24 @@ class ForceOccupation:
                 for line in geom_in:
                     spl = line.split()
 
-                    if len(spl) > 0 and "atom" == spl[0] and target_atom in line:
+                    if len(spl) > 0 and "atom" == spl[0] and self.target_atom in line:
                         atom_counter += 1
                         element = spl[-1]  # Identify atom
                         identifier = spl[0]  # Extra check that line is an atom
 
-                        if identifier == "atom" and element == target_atom:
-                            atom_specifier.append(atom_counter)
+                        if identifier == "atom" and element == self.target_atom:
+                            self.atom_specifier.append(atom_counter)
 
-            print("specified atoms:", atom_specifier)
-
-            return element_symbols, atom_specifier
+            print("specified atoms:", self.atom_specifier)
 
         else:
             raise ValueError("invalid atoms argument")
 
-    @staticmethod
-    def get_electronic_structure(element_symbols, target_atom):
+    def get_electronic_structure(self):
         """Get valence electronic structure of target atom."""
         # Adapted from scipython.com question P2.5.12
 
-        atom_index = element_symbols.index(str(target_atom)) + 1
+        atom_index = self.element_symbols.index(str(self.target_atom)) + 1
 
         # Letters identifying subshells
         l_letter = ["s", "p", "d", "f", "g"]
@@ -107,9 +106,9 @@ class ForceOccupation:
         # corresponding element symbol
         noble_gas_config = ("", "")
 
-        s_config = "please.work"
+        s_config = ""
 
-        for i, _ in enumerate(element_symbols[:atom_index]):
+        for i, _ in enumerate(self.element_symbols[:atom_index]):
             nelec += 1
 
             if nelec > 2 * (2 * l + 1):
@@ -118,7 +117,7 @@ class ForceOccupation:
                     # The most recent configuration was for a Noble gas: store it
                     noble_gas_config = (
                         get_config_str(config),
-                        "[{}]".format(element_symbols[i - 1]),
+                        "[{}]".format(self.element_symbols[i - 1]),
                     )
                 # Start a new subshell
                 inl += 1
@@ -164,6 +163,113 @@ class ForceOccupation:
                 else:
                     opts.update({spl_key: ""})
 
+    def change_control_keywords(self, control, opts):
+        """Modify the keywords in a control.in file from a dictionary of options."""
+
+        # Find and replace keywords in control file
+        with open(control, "r") as read_control:
+            content = read_control.readlines()
+
+        divider = "#==============================================================================="
+
+        # Change keyword lines
+        for opt in opts:
+            ident = 0
+
+            for j, line in enumerate(content):
+                spl = line.split()
+
+                if opt in spl:
+                    content[j] = f"{opt:<35} {opts[opt]}\n"
+                    break
+
+                # Marker if ASE was used so keywords will be added in the same place as the others
+                elif divider in line:
+                    ident += 1
+                    if ident == 3:
+                        content.insert(j, f"{opt:<35} {opts[opt]}\n")
+                        break
+
+            # For when a non-ASE input file is used
+            if ident == 0:
+                content.append(f"{opt:<35} {opts[opt]}\n")
+
+        return content
+
+    def add_partial_charge(self, content, target_atom, at_num, atom_valence, charge):
+        """Add a partial charge to a basis set in a control.in file."""
+
+        # Ensure returned variables are bound
+        n_index = 0
+        valence_index = 0
+        nucleus = None
+
+        for j, line in enumerate(content):
+            spl = line.split()
+
+            if target_atom + "1" in spl:
+                # Add to nucleus
+                if f"    nucleus             {at_num}\n" in content[j:]:
+                    n_index = (
+                        content[j:].index(f"    nucleus             {at_num}\n") + j
+                    )
+                    nucleus = content[n_index]  # save for hole
+                    content[n_index] = f"    nucleus             {at_num + charge}\n"
+                elif f"    nucleus      {at_num}\n" in content[j:]:
+                    n_index = content[j:].index(f"    nucleus      {at_num}\n") + j
+                    nucleus = content[n_index]  # save for hole
+                    content[n_index] = f"    nucleus      {at_num + charge}\n"
+
+                # Add to valence orbital
+                if "#     ion occupancy\n" in content[j:]:
+                    vbs_index = content[j:].index("#     valence basis states\n") + j
+                    io_index = content[j:].index("#     ion occupancy\n") + j
+
+                    # Check which orbital to add 0.1 to
+                    principle_qns = np.array([])
+                    azimuthal_orbs = np.array([])
+                    azimuthal_qns = np.zeros(io_index - vbs_index - 1)
+                    azimuthal_refs = {"s": 1, "p": 2, "d": 3, "f": 4}
+
+                    # Get azimuthal and principle quantum numbers
+                    for count, valence_orbital in enumerate(
+                        content[vbs_index + 1 : io_index]
+                    ):
+                        principle_qns = np.append(
+                            principle_qns,
+                            np.array(valence_orbital.split()[1]),
+                        ).astype(int)
+                        azimuthal_orbs = np.append(
+                            azimuthal_orbs,
+                            np.array(valence_orbital.split()[2]),
+                        )
+                        azimuthal_qns[count] = azimuthal_refs[azimuthal_orbs[count]]
+                        azimuthal_qns = azimuthal_qns.astype(int)
+
+                    # Find the orbital with highest principle and azimuthal qn
+                    highest_n = np.amax(principle_qns)
+                    highest_n_index = np.where(principle_qns == highest_n)
+
+                    # Check for highest l if 2 orbitals have the same n
+                    if len(highest_n_index[0]) > 1:
+                        highest_l = np.amax(azimuthal_qns)
+                        highest_l_index = np.where(azimuthal_qns == highest_l)
+                        addition_state = np.intersect1d(
+                            highest_n_index, highest_l_index
+                        )[0]
+                    else:
+                        addition_state = highest_n_index[0][0]
+
+                    # Add the 0.1 electron
+                    # valence = content[
+                    #     vbs_index + addition_state + 1
+                    # ]  # save for write hole file
+                    valence_index = vbs_index + addition_state + 1
+                    content[valence_index] = atom_valence
+                    break
+
+        return n_index, valence_index, nucleus, content
+
 
 class Projector(ForceOccupation):
     """Create input files for projector calculations."""
@@ -171,15 +277,14 @@ class Projector(ForceOccupation):
     def setup_init_1(
         self,
         basis_set,
-        species,
+        defaults,
         target_atom,
-        num_atom,
         calc_path,
         at_num,
         atom_valence,
         ad_cond_opts,
     ):
-        """Write new init directories and control files."""
+        """Write new directories and control files for the first initialisation calculation."""
 
         # Default control file options
         opts = {
@@ -191,12 +296,12 @@ class Projector(ForceOccupation):
             "restart_save_iterations": 20,
         }
 
-        self.mod_keywords(ad_cond_opts, opts)
-
         # Ensure returned variables are bound
-        nucleus = "0"
         n_index = 0
         valence_index = 0
+        nucleus = None
+
+        self.mod_keywords(ad_cond_opts, opts)
 
         # Create a new intermediate file and write basis sets to it
         shutil.copyfile(
@@ -211,7 +316,7 @@ class Projector(ForceOccupation):
         new_control = open(f"{calc_path}ground/control.in.new", "a")
         subprocess.run(bash_add_basis.split(), check=True, stdout=new_control)
 
-        for i in range(num_atom):
+        for i in range(len(self.atom_specifier)):
             i += 1
 
             os.makedirs(f"{calc_path}{target_atom}{i}/init_1", exist_ok=True)
@@ -244,173 +349,24 @@ class Projector(ForceOccupation):
 
                     atom_counter += 1
 
-            with open(geometry, "w+") as write_geom:
+            with open(geometry, "w") as write_geom:
                 write_geom.writelines(geom_content)
 
             # Change control file
-            with open(control, "r") as read_control:
-                control_content = read_control.readlines()
+            control_content = self.change_control_keywords(control, opts)
+            n_index, valence_index, nucleus, control_content = self.add_partial_charge(
+                control_content, target_atom, at_num, atom_valence, opts["charge"]
+            )
 
-            # Replace specific lines
-            for j, line in enumerate(control_content):
-                spl = line.split()
-
-                if len(spl) > 1:
-                    # Fix basis sets
-                    if "species" == spl[0] and target_atom == spl[1]:
-                        if found_target_atom is False:
-                            control_content[j] = f"  species        {target_atom}1\n"
-                            found_target_atom = True
-
-                    # Change keyword lines
-                    if "sc_iter_limit" in spl:
-                        control_content[j] = iter_limit
-                    if "sc_init_iter" in spl:
-                        control_content[j] = init_iter
-                    if "KS_method" in spl:
-                        control_content[j] = ks_method
-                    if "restart_write_only" in spl:
-                        control_content[j] = restart_file
-                    if "restart_save_iterations" in spl:
-                        control_content[j] = restart_save
-                    if "force_single_restartfile" in spl:
-                        control_content[j] = restart_force
-                    if "charge" in spl:
-                        control_content[j] = charge
-                    if "#" == spl[0] and "charge" == spl[1]:
-                        control_content[j] = charge
-                    if "cube spin_density" in spl:
-                        control_content[j] = output_cube
-                    if "output" == spl[0] and "mulliken" == spl[1]:
-                        control_content[j] = output_mull
-                    if "output" == spl[0] and "hirshfeld" == spl[1]:
-                        control_content[j] = output_hirsh
-
-            # Check if parameters not found
-            no_iter_limit = False
-            no_ks = False
-            no_restart = False
-            no_charge = False
-            no_cube = False
-
-            if iter_limit not in control_content:
-                no_iter_limit = True
-            if ks_method not in control_content:
-                no_ks = True
-            if restart_file not in control_content:
-                no_restart = True
-            if charge not in control_content:
-                no_charge = True
-            if output_cube not in control_content:
-                no_cube = True
-
-            # Write the data to the file
-            with open(control, "w+") as write_control:
-                write_control.writelines(control_content)
-
-                # Append parameters to end of file if not found
-                if no_iter_limit is True:
-                    write_control.write(iter_limit)
-                if no_ks is True:
-                    write_control.write(ks_method)
-                if no_restart is True:
-                    write_control.write(restart_file)
-                if no_charge is True:
-                    write_control.write(charge)
-                if no_cube is True:
-                    write_control.write(output_cube)
-
-            # Add 0.1 charge
-            with open(control, "r") as read_control:
-                control_content = read_control.readlines()
-
-            # Replace specific lines
-            for j, line in enumerate(control_content):
-                spl = line.split()
-
-                if target_atom + "1" in spl:
-                    # Add to nucleus
-                    if f"    nucleus             {at_num}\n" in control_content[j:]:
-                        n_index = (
-                            control_content[j:].index(
-                                f"    nucleus             {at_num}\n"
-                            )
-                            + j
-                        )
-                        nucleus = control_content[n_index]  # save for hole
-                        control_content[
-                            n_index
-                        ] = f"    nucleus             {at_num}.1\n"
-                    elif f"    nucleus      {at_num}\n" in control_content[j:]:
-                        n_index = (
-                            control_content[j:].index(f"    nucleus      {at_num}\n")
-                            + j
-                        )
-                        nucleus = control_content[n_index]  # save for hole
-                        control_content[n_index] = f"    nucleus      {at_num}.1\n"
-
-                    # Add to valence orbital
-                    if "#     ion occupancy\n" in control_content[j:]:
-                        vbs_index = (
-                            control_content[j:].index("#     valence basis states\n")
-                            + j
-                        )
-                        io_index = (
-                            control_content[j:].index("#     ion occupancy\n") + j
-                        )
-
-                        # Check which orbital to add 0.1 to
-                        principle_qns = np.array([])
-                        azimuthal_orbs = np.array([])
-                        azimuthal_qns = np.zeros(io_index - vbs_index - 1)
-                        azimuthal_refs = {"s": 1, "p": 2, "d": 3, "f": 4}
-
-                        # Get azimuthal and principle quantum numbers
-                        for count, valence_orbital in enumerate(
-                            control_content[vbs_index + 1 : io_index]
-                        ):
-                            principle_qns = np.append(
-                                principle_qns,
-                                np.array(valence_orbital.split()[1]),
-                            ).astype(int)
-                            azimuthal_orbs = np.append(
-                                azimuthal_orbs,
-                                np.array(valence_orbital.split()[2]),
-                            )
-                            azimuthal_qns[count] = azimuthal_refs[azimuthal_orbs[count]]
-                            azimuthal_qns = azimuthal_qns.astype(int)
-
-                        # Find the orbital with highest principle and azimuthal qn
-                        highest_n = np.amax(principle_qns)
-                        highest_n_index = np.where(principle_qns == highest_n)
-
-                        # Check for highest l if 2 orbitals have the same n
-                        if len(highest_n_index[0]) > 1:
-                            highest_l = np.amax(azimuthal_qns)
-                            highest_l_index = np.where(azimuthal_qns == highest_l)
-                            addition_state = np.intersect1d(
-                                highest_n_index, highest_l_index
-                            )[0]
-                        else:
-                            addition_state = highest_n_index[0][0]
-
-                        # Add the 0.1 electron
-                        # valence = control_content[
-                        #     vbs_index + addition_state + 1
-                        # ]  # save for write hole file
-                        valence_index = vbs_index + addition_state + 1
-                        control_content[valence_index] = atom_valence
-                        break
-
-            with open(control, "w+") as write_control:
+            with open(control, "w") as write_control:
                 write_control.writelines(control_content)
 
         print("init_1 files written successfully")
 
         return nucleus, n_index, valence_index
 
-    @staticmethod
     def setup_init_2(
+        self,
         ks_states,
         calc_path,
         target_atom,
@@ -421,7 +377,7 @@ class Projector(ForceOccupation):
         valence_index,
         occ_type,
     ):
-        """Write new init directories and control files to calculate FOP."""
+        """Write new directories and control files for the second initialisation calculation."""
 
         if (
             type(ks_states) is not list
@@ -768,33 +724,8 @@ class Basis(ForceOccupation):
 
             control = f"{run_loc}/{target_atom}{i}/hole/control.in"
 
-            # Find and replace keywords in control file
-            with open(control, "r") as read_control:
-                content = read_control.readlines()
-
-            divider = "#==============================================================================="
-
-            # Change keyword lines
-            for opt in opts:
-                ident = 0
-
-                for j, line in enumerate(content):
-                    spl = line.split()
-
-                    if opt in spl:
-                        content[j] = f"{opt:<35} {opts[opt]}\n"
-                        break
-
-                    # Marker if ASE was used so keywords will be added in the same place as the others
-                    elif divider in line:
-                        ident += 1
-                        if ident == 3:
-                            content.insert(j, f"{opt:<35} {opts[opt]}\n")
-                            break
-
-                # For when a non-ASE input file is used
-                if ident == 0:
-                    content.append(f"{opt:<35} {opts[opt]}\n")
+            # Change control file
+            content = self.change_control_keywords(control, opts)
 
             # Write the data to the file
             with open(control, "w") as write_control:

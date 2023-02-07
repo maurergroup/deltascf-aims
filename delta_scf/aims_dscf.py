@@ -327,7 +327,7 @@ def process(ctx):
 )
 @click.option(
     "-s",
-    "--basis-set",
+    "--basis_set",
     default="tight",
     show_default=True,
     type=click.Choice(["light", "intermediate", "tight", "really_tight"]),
@@ -349,15 +349,15 @@ def process(ctx):
     help="last Kohn-Sham state to constrain",
 )
 @click.pass_context
-def projector(ctx, run_type, occ_type, pbc, ks_start, ks_stop):
+def projector(ctx, run_type, occ_type, basis_set, pbc, ks_start, ks_stop):
     """Force occupation of the Kohn-Sham states."""
 
     # TODO Update this function with the latest options added to main
-    print(
-        "The projector command is currently still under development and not ready for "
-        "use"
-    )
-    sys.exit()
+    # print(
+    #     "The projector command is currently still under development and not ready for "
+    #     "use"
+    # )
+    # sys.exit()
 
     spec_mol = ctx.obj["SPEC_MOL"]
     run_loc = ctx.obj["RUN_LOC"]
@@ -365,7 +365,7 @@ def projector(ctx, run_type, occ_type, pbc, ks_start, ks_stop):
     calc = ctx.obj["CALC"]
     constr_atom = ctx.obj["CONSTR_ATOM"]
     n_atoms = ctx.obj["N_ATOMS"]
-    defaults = ctx.obj["SPECIES"]
+    species = ctx.obj["SPECIES"]
 
     # Used later to redirect STDERR to /dev/null to prevent printing not converged errors
     spec_run_info = None
@@ -401,7 +401,6 @@ def projector(ctx, run_type, occ_type, pbc, ks_start, ks_stop):
         # Check required arguments are given in main()
         mu.check_args(constr_atom, n_atoms, occ_type, ks_start, ks_stop)
 
-        basis_set = "tight"
         element_symbols, read_atoms = ForceOccupation.read_ground_inp(
             constr_atom, "run_dir/ground/geometry.in"
         )
@@ -410,8 +409,8 @@ def projector(ctx, run_type, occ_type, pbc, ks_start, ks_stop):
         )
         nucleus, n_index, valence_index = Projector.setup_init_1(
             basis_set,
-            ctx.obj["SPECIES"],
-            ctx.obj["CONSTR_ATOM"],
+            species,
+            constr_atom,
             read_atoms,
             "./run_dir/",
             at_num,
