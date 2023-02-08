@@ -2,7 +2,7 @@ import click
 import numpy as np
 
 
-def gaussian(x, x_mean, broadening):
+def _gaussian(x, x_mean, broadening):
     gaussian_val = np.sqrt((4 * np.log(2)) / (np.pi * (broadening**2))) * np.exp(
         -((4 * np.log(2)) / (broadening**2)) * (x - x_mean) ** 2
     )
@@ -10,7 +10,7 @@ def gaussian(x, x_mean, broadening):
     return gaussian_val
 
 
-def lorentzian(x, x_mean, broadening):
+def _lorentzian(x, x_mean, broadening):
     lorentzian_val = (
         (1 / (2 * np.pi)) * (broadening) / (((broadening / 2) ** 2) + (x - x_mean) ** 2)
     )
@@ -18,12 +18,12 @@ def lorentzian(x, x_mean, broadening):
     return lorentzian_val
 
 
-def pseudo_voigt(x, x_mean, broadening, mixing):
+def _pseudo_voigt(x, x_mean, broadening, mixing):
     """
     Combines gaussian and lorentzian schemes together
     """
 
-    return (1 - mixing) * gaussian(x, x_mean, broadening) + mixing * lorentzian(
+    return (1 - mixing) * _gaussian(x, x_mean, broadening) + mixing * _lorentzian(
         x, x_mean, broadening
     )
 
@@ -33,7 +33,7 @@ def dos_binning(
     broadening=0.75,
     bin_width=0.01,
     mix1=0.0,
-    mix2=None,
+    mix2=0.0,
     coeffs=None,
     start=0.0,
     stop=10.0,
@@ -85,7 +85,7 @@ def dos_binning(
         for i in bar:
             pseudovoigt_vec = np.zeros((len(eigenvalues)))
             pseudovoigt_vec = (
-                pseudo_voigt(x_axis[i], eigenvalues, sigma, mixing) * coeffs
+                _pseudo_voigt(x_axis[i], eigenvalues, sigma, mixing) * coeffs
             )
             data[i] = np.sum(pseudovoigt_vec)
 

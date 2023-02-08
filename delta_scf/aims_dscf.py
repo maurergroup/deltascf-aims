@@ -8,7 +8,7 @@ import click
 from ase import Atoms
 from ase.atoms import default
 from ase.io import read, write
-from utils.click_meo import MutuallyExclusiveOption as meo
+from utils.custom_click import MutuallyExclusive as me
 from utils.main_utils import MainUtils as mu
 
 from delta_scf.calc_dscf import CalcDeltaSCF as cds
@@ -21,7 +21,7 @@ from delta_scf.plot import Plot
 @click.option(
     "-h",
     "--hpc",
-    cls=meo,
+    cls=me,
     mutually_exclusive=["--binary"],
     is_flag=True,
     help="setup a calculation primarily for use on a HPC cluster WITHOUT "
@@ -31,7 +31,7 @@ from delta_scf.plot import Plot
     "-m",
     "--molecule",
     "spec_mol",
-    cls=meo,
+    cls=me,
     mutually_exclusive=["--geometry_input"],
     type=str,
     help="molecule to be used in the calculation",
@@ -39,7 +39,7 @@ from delta_scf.plot import Plot
 @click.option(
     "-g",
     "--geometry_input",
-    cls=meo,
+    cls=me,
     mutually_exclusive=["--molecule"],
     type=click.Path(exists=True, file_okay=True, dir_okay=False),
     help="specify a custom geometry.in instead of using a structure from PubChem or ASE",
@@ -53,7 +53,7 @@ from delta_scf.plot import Plot
 @click.option(
     "-b",
     "--binary",
-    cls=meo,
+    cls=me,
     mutually_exclusive=["hpc"],
     is_flag=True,
     help="modify the path to the FHI-aims binary",
@@ -67,7 +67,23 @@ from delta_scf.plot import Plot
     help="Optionally specify a custom location to run the calculation",
 )
 @click.option(
-    "-c", "--constrained_atom", "constr_atom", type=str, help="atom to constrain"
+    "-c",
+    "--constrained_atom",
+    "constr_atom",
+    cls=me,
+    mutually_exclusive=["spec_at_constr"],
+    type=str,
+    help="atom to constrain; constrain all atoms of this element",
+)
+@click.option(
+    "-s",
+    "--specific_atom_constraint",
+    "spec_at_constr",
+    cls=me,
+    mutually_exclusive=["constr_atom"],
+    multiple=True,
+    type=click.IntRange(min=1, max_open=True),
+    help="specify specific atoms to constrain by their index in a geometry file",
 )
 @click.option(
     "-o",
@@ -77,7 +93,6 @@ from delta_scf.plot import Plot
     show_default=True,
     help="occupation value of the core ",
 )
-@click.option("-a", "--n_atoms", type=int, help="the number of atoms to constrain")
 @click.option("-g", "--graph", is_flag=True, help="print out the simulated XPS spectra")
 @click.option(
     "--graph_min_percent",
@@ -108,6 +123,7 @@ def main(
     run_location,
     spec_mol,
     constr_atom,
+    spec_at_constr,
     occupation,
     n_atoms,
     graph,
@@ -145,6 +161,13 @@ def main(
         if not control_input:
             raise click.MissingParameter(
                 param_hint="'--control_input'", param_type="option"
+            )
+
+    # A geometry file must be given specific atom indices are to be constrained
+    if spec_at_constr is not None:
+        if not geometry_input:
+            raise click.MissingParameter(
+                param_hint="'--geometry_input'", param_type="option"
             )
 
     # Use ASE unless both a custom geometry.in and control.in are specified
@@ -242,6 +265,7 @@ def main(
         ctx.obj["BINARY"] = binary
         ctx.obj["RUN_LOC"] = run_location
         ctx.obj["CONSTR_ATOM"] = constr_atom
+        ctx.obj["SPEC_AT_CONSTR"] = spec_at_constr
         ctx.obj["OCC"] = occupation
         ctx.obj["N_ATOMS"] = n_atoms
         ctx.obj["GRAPH"] = graph
@@ -352,18 +376,17 @@ def process(ctx):
 def projector(ctx, run_type, occ_type, basis_set, pbc, ks_start, ks_stop):
     """Force occupation of the Kohn-Sham states."""
 
-    # TODO Update this function with the latest options added to main
-    # print(
-    #     "The projector command is currently still under development and not ready for "
-    #     "use"
-    # )
-    # sys.exit()
-
-    spec_mol = ctx.obj["SPEC_MOL"]
     run_loc = ctx.obj["RUN_LOC"]
+    geom = ctx.obj["GEOM"]
+    control = ctx.obj["CONTROL"]
     atoms = ctx.obj["ATOMS"]
-    calc = ctx.obj["CALC"]
+    ase = ctx.obj["ASE"]
+    control_opts = ctx.obj["CONTROL_OPTIONS"]
+    nprocs = ctx.obj["NPROCS"]
+    binary = ctx.obj["BINARY"]
+    hpc = ctx.obj["HPC"]
     constr_atom = ctx.obj["CONSTR_ATOM"]
+    spec_at_constr = ctx.obj["SPEC_AT_CONSTR"]
     n_atoms = ctx.obj["N_ATOMS"]
     species = ctx.obj["SPECIES"]
 
@@ -374,39 +397,24 @@ def projector(ctx, run_type, occ_type, basis_set, pbc, ks_start, ks_stop):
         atoms.set_pbc(True)
 
     if run_type == "ground":
-        # Check required arguments are given in main()
-        mu.check_args(spec_mol)
+        mu.ground_calc(
+            run_loc, geom, control, atoms, ase, control_opts, nprocs, binary, hpc
+        )
 
-        # Create the ground directory if it doesn't already exist
-        os.system(f"mkdir -p {run_loc}/ground")
+    if spec_at_constr is not None:
+        element_symbols = mu.get_element_symbols(geom, spec_at_constr)
+    else:
+        element_symbols = None
 
-        # Attach the calculator to the atoms object
-        atoms.calc = calc
-
-        if os.path.isfile(f"{run_loc}/ground/aims.out") == False:
-            # Run the ground state calculation
-            print("running calculation...")
-            atoms.get_potential_energy()
-            print("ground calculation completed successfully")
-
-            # Move files to ground directory
-            os.system(
-                "mv geometry.in control.in aims.out parameters.ase run_dir/ground/"
-            )
-        else:
-            print("aims.out file found in ground calculation directory")
-            print("skipping calculation...")
+    fo = ForceOccupation(constr_atom, spec_atom_constr)
 
     if run_type == "init_1":
         # Check required arguments are given in main()
         mu.check_args(constr_atom, n_atoms, occ_type, ks_start, ks_stop)
 
-        element_symbols, read_atoms = ForceOccupation.read_ground_inp(
-            constr_atom, "run_dir/ground/geometry.in"
-        )
-        at_num, valence = ForceOccupation.get_electronic_structure(
-            element_symbols, constr_atom
-        )
+        fo.read_ground_inp("run_dir/ground/geometry.in", element_symbols)
+
+        at_num, valence = fo.get_electronic_structure(element_symbols, constr_atom)
         nucleus, n_index, valence_index = Projector.setup_init_1(
             basis_set,
             species,
@@ -577,53 +585,9 @@ def basis(ctx, run_type, occ_type, ks_max, control_opt):
     mu.check_args(run_loc)
 
     if run_type == "ground":
-        # Create the ground directory if it doesn't already exist
-        os.system(f"mkdir -p {run_loc}/ground")
-
-        # Write the geometry file if the system is specified through CLI
-        if geom is None and control is not None:
-            write(f"{run_loc}/geometry.in", atoms, format="aims")
-
-        # Copy the geometry.in and control.in files to the ground directory
-        if control is not None:
-            os.system(f"mv {control} {run_loc}/ground")
-
-        if geom is not None:
-            os.system(f"mv {geom} {run_loc}/ground")
-
-        if os.path.isfile(f"{run_loc}/ground/aims.out") == False:
-            # Run the ground state calculation
-            print("running calculation...")
-
-            if ase:
-                if len(control_opt) > 0:
-                    print(
-                        "WARNING: it is required to use '--control_input' and "
-                        "'--geometry_input' instead of supplying additional control "
-                        "options for the ground calculations"
-                    )
-
-                atoms.get_potential_energy()
-                # Move files to ground directory
-                os.system(
-                    f"mv geometry.in control.in aims.out parameters.ase {run_loc}/ground/"
-                )
-
-            else:  # Don't use ASE
-                os.system(
-                    f"cd {run_loc}/ground && mpirun -n {nprocs} {binary} > aims.out"
-                )
-
-            print("ground calculation completed successfully\n")
-
-            # Print the KS states from aims.out so it is easier to specify the
-            # KS states for the hole calculation
-            if not hpc:
-                mu.print_ks_states(run_loc)
-
-        else:
-            print("aims.out file found in ground calculation directory")
-            print("skipping calculation...")
+        mu.ground_calc(
+            run_loc, geom, control, atoms, ase, control_opt, nprocs, binary, hpc
+        )
 
     if (
         run_type == "hole"
@@ -659,7 +623,6 @@ def basis(ctx, run_type, occ_type, ks_max, control_opt):
             occ_type,
             run_loc,
             control_opt,
-            ad_cont_opts,
         )
 
         # Add molecule identifier to hole geometry.in

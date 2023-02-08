@@ -12,73 +12,68 @@ import yaml
 class ForceOccupation:
     """Manipulate FHIaims input files to setup basis and projector calculations."""
 
-    def __init__(self, target_atom):
-        self.target_atom = target_atom
+    def __init__(self, constr_atoms, spec_at_constr, element_symbols):
+        self.constr_atoms = constr_atoms
+        self.spec_at_constr = spec_at_constr
+        self.element_symbols = element_symbols
         self.atom_specifier = []
 
         # All supported elements
         with open("elements.yml", "r") as elements:
-            self.element_symbols = yaml.load(elements, Loader=yaml.SafeLoader)
+            self.elements = yaml.load(elements, Loader=yaml.SafeLoader)
 
-    def read_ground_inp(self, geometry_path, *args):
-        """Find number of atoms in geometry."""
+    def read_ground_inp(self, geometry_path):
+        """Find the number of atoms in the geometry file."""
 
-        # Check arguments and add atoms to list
-        if self.target_atom not in self.element_symbols:
-            raise ValueError("invalid element symbol")
-
-        # Do something like this
-        for arg in args:
-            atoms.append(arg)
-
-        if atoms is not None:
-            if type(atoms) == list:
-                for atom in atoms:
-                    if type(atom) is int:
-                        self.atom_specifier.append(atom)
-                    else:
-                        raise ValueError(
-                            "atoms list should only contain integer values"
-                        )
-
-            elif type(atoms) == int:
-                self.atom_specifier.append(atoms)
-
+        # For if the user supplied element symbols to constrain
+        if self.constr_atoms is not None:
+            # Check validity of specified elements
+            if type(self.constr_atoms) is not list:
+                list_constr_atoms = list(self.constr_atoms)
             else:
-                raise ValueError("atoms list must be a list of ints or an int")
+                list_constr_atoms = self.constr_atoms
 
-            print("specified atoms:", self.atom_specifier)
+            for atom in list_constr_atoms:
+                if atom not in self.elements:
+                    raise ValueError("invalid element specified")
 
-        # Default to all atoms if specific atoms aren't specified
-        elif len(self.atom_specifier) == 0:
             print(
                 "atoms argument not specified, defaulting to all target atoms in geometry.in"
             )
 
-            with open(geometry_path, "r") as geom_in:
-                atom_counter = 0
+            # Constrain all atoms of the target element
+            for atom in self.constr_atoms:
+                with open(geometry_path, "r") as geom_in:
+                    atom_counter = 0
 
-                for line in geom_in:
-                    spl = line.split()
+                    for line in geom_in:
+                        spl = line.split()
 
-                    if len(spl) > 0 and "atom" == spl[0] and self.target_atom in line:
-                        atom_counter += 1
-                        element = spl[-1]  # Identify atom
-                        identifier = spl[0]  # Extra check that line is an atom
+                        if len(spl) > 0 and "atom" == spl[0] and atom in line:
+                            atom_counter += 1
+                            element = spl[-1]  # Identify atom
+                            identifier = spl[0]  # Extra check that line is an atom
 
-                        if identifier == "atom" and element == self.target_atom:
-                            self.atom_specifier.append(atom_counter)
+                            if identifier == "atom" and element == atom:
+                                self.atom_specifier.append(atom_counter)
 
-            print("specified atoms:", self.atom_specifier)
+        # For if the user supplied atom indices to constrain
+        if self.element_symbols is not None:
+            # Check validity of specified elements
+            for atom in self.element_symbols:
+                if atom not in self.elements:
+                    raise ValueError("invalid element specified")
 
-        else:
-            raise ValueError("invalid atoms argument")
+            for atom in self.spec_at_constr:
+                self.atom_specifier.append(atom)
+
+        print("specified atoms:", self.atom_specifier)
 
     def get_electronic_structure(self):
         """Get valence electronic structure of target atom."""
         # Adapted from scipython.com question P2.5.12
 
-        atom_index = self.element_symbols.index(str(self.target_atom)) + 1
+        atom_index = self.elements.index(str(self.target_atom)) + 1
 
         # Letters identifying subshells
         l_letter = ["s", "p", "d", "f", "g"]
@@ -108,7 +103,7 @@ class ForceOccupation:
 
         s_config = ""
 
-        for i, _ in enumerate(self.element_symbols[:atom_index]):
+        for i, _ in enumerate(self.elements[:atom_index]):
             nelec += 1
 
             if nelec > 2 * (2 * l + 1):
@@ -117,7 +112,7 @@ class ForceOccupation:
                     # The most recent configuration was for a Noble gas: store it
                     noble_gas_config = (
                         get_config_str(config),
-                        "[{}]".format(self.element_symbols[i - 1]),
+                        "[{}]".format(self.elements[i - 1]),
                     )
                 # Start a new subshell
                 inl += 1
@@ -684,7 +679,7 @@ class Basis(ForceOccupation):
     def setup_basis(
         self, target_atom, num_atom, occ_no, ks_max, occ_type, run_loc, ad_cont_opts
     ):
-        """Write new directories and control files to calculate FOB."""
+        """Write new directories and control files for basis calculations."""
 
         # The new basis method should utilise ks method parallel
         ks_method = ""

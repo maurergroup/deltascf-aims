@@ -1,15 +1,17 @@
 """Utilities which are used in aims_dscf"""
 
+import os
 import sys
 
 from ase.build import molecule
 from ase.calculators.aims import Aims
 from ase.data.pubchem import pubchem_atoms_search
+from ase.io import write
 from click import MissingParameter
 
 
 class MainUtils:
-    """Various static methods used in aims_dscf"""
+    """Various utilities used in aims_dscf"""
 
     @staticmethod
     def build_geometry(geometry):
@@ -147,3 +149,84 @@ class MainUtils:
 
         print("Spin-down KS eigenvalues:\n")
         print(*sd_eigs, sep="")
+
+    @staticmethod
+    def ground_calc(
+        run_loc, geom, control, atoms, ase, control_opts, nprocs, binary, hpc
+    ):
+        """Run a ground state calculation"""
+
+        # Create the ground directory if it doesn't already exist
+        os.system(f"mkdir -p {run_loc}/ground")
+
+        # Write the geometry file if the system is specified through CLI
+        if geom is None and control is not None:
+            write(f"{run_loc}/geometry.in", atoms, format="aims")
+
+        # Copy the geometry.in and control.in files to the ground directory
+        if control is not None:
+            os.system(f"mv {control} {run_loc}/ground")
+
+        if geom is not None:
+            os.system(f"mv {geom} {run_loc}/ground")
+
+        if os.path.isfile(f"{run_loc}/ground/aims.out") == False:
+            # Run the ground state calculation
+            print("running calculation...")
+
+            if ase:
+                if len(control_opts) > 0:
+                    print(
+                        "WARNING: it is required to use '--control_input' and "
+                        "'--geometry_input' instead of supplying additional control "
+                        "options for the ground calculations"
+                    )
+
+                atoms.get_potential_energy()
+                # Move files to ground directory
+                os.system(
+                    f"mv geometry.in control.in aims.out parameters.ase {run_loc}/ground/"
+                )
+
+            else:  # Don't use ASE
+                os.system(
+                    f"cd {run_loc}/ground && mpirun -n {nprocs} {binary} > aims.out"
+                )
+
+            print("ground calculation completed successfully\n")
+
+            # Print the KS states from aims.out so it is easier to specify the
+            # KS states for the hole calculation
+            if not hpc:
+                MainUtils.print_ks_states(run_loc)
+
+        else:
+            print("aims.out file found in ground calculation directory")
+            print("skipping calculation...")
+
+    @staticmethod
+    def get_element_symbols(geom, spec_at_constr):
+        """Find the element symbols from specified atom indices in a geometry file."""
+
+        with open(geom, "r") as geom:
+            lines = geom.readlines()
+
+        atom_lines = []
+
+        # Copy only the lines which specify atom coors into a new list
+        for line in lines:
+            if "atom" in line:
+                atom_lines.append(line)
+
+        element_symbols = []
+
+        # Get the element symbols from the atom coors
+        # Uniquely add each element symbol
+        for atom in spec_at_constr:
+
+            element = atom_lines[atom].split()[-1]
+
+            if element not in element_symbols:
+                element_symbols.append(element)
+
+        return element_symbols
