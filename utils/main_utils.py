@@ -215,7 +215,7 @@ class MainUtils:
 
         # Copy only the lines which specify atom coors into a new list
         for line in lines:
-            if "atom" in line:
+            if len(line) > 0 and "atom" == spl[0]:
                 atom_lines.append(line)
 
         element_symbols = []

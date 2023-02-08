@@ -12,10 +12,20 @@ import yaml
 class ForceOccupation:
     """Manipulate FHIaims input files to setup basis and projector calculations."""
 
-    def __init__(self, constr_atoms, spec_at_constr, element_symbols):
+    def __init__(
+        self,
+        constr_atoms,
+        spec_at_constr,
+        element_symbols,
+        geometry,
+        control,
+    ):
+
         self.constr_atoms = constr_atoms
         self.spec_at_constr = spec_at_constr
         self.element_symbols = element_symbols
+        self.geometry = geometry
+        self.control = control
         self.atom_specifier = []
 
         # All supported elements
@@ -28,12 +38,7 @@ class ForceOccupation:
         # For if the user supplied element symbols to constrain
         if self.constr_atoms is not None:
             # Check validity of specified elements
-            if type(self.constr_atoms) is not list:
-                list_constr_atoms = list(self.constr_atoms)
-            else:
-                list_constr_atoms = self.constr_atoms
-
-            for atom in list_constr_atoms:
+            for atom in self.constr_atoms:
                 if atom not in self.elements:
                     raise ValueError("invalid element specified")
 
@@ -49,7 +54,7 @@ class ForceOccupation:
                     for line in geom_in:
                         spl = line.split()
 
-                        if len(spl) > 0 and "atom" == spl[0] and atom in line:
+                        if len(spl) > 0 and "atom" == spl[0]:
                             atom_counter += 1
                             element = spl[-1]  # Identify atom
                             identifier = spl[0]  # Extra check that line is an atom
@@ -64,101 +69,112 @@ class ForceOccupation:
                 if atom not in self.elements:
                     raise ValueError("invalid element specified")
 
-            for atom in self.spec_at_constr:
-                self.atom_specifier.append(atom)
+            self.atom_specifier = self.spec_at_constr
 
         print("specified atoms:", self.atom_specifier)
 
-    def get_electronic_structure(self):
+    def get_electronic_structure(self, atom):
         """Get valence electronic structure of target atom."""
         # Adapted from scipython.com question P2.5.12
 
-        atom_index = self.elements.index(str(self.target_atom)) + 1
+        self.atom_index = self.elements.index(str(atom)) + 1
 
         # Letters identifying subshells
         l_letter = ["s", "p", "d", "f", "g"]
 
-        def get_config_str(config):
-            """Turn a list of orbital, nelec pairs into a configuration string."""
-            return ".".join(["{:2s}{:d}".format(*e) for e in config])
-
         # Create and order a list of tuples, (n+l, n, l), corresponding to the order
         # in which the corresponding orbitals are filled using the Madelung rule.
         nl_pairs = []
+
         for n in range(1, 8):
             for l in range(n):
                 nl_pairs.append((n + l, n, l))
+
         nl_pairs.sort()
 
         # inl indexes the subshell in the nl_pairs list; nelec is the number of
         # electrons currently inhabiting this subshell
         inl, nelec = 0, 0
+
         # start with the 1s orbital
         n, l = 1, 0
+
         # a list of orbitals and the electrons they contain for a configuration
         config = [["1s", 0]]
+
         # Store the most recent Noble gas configuration encountered in a tuple with the
         # corresponding element symbol
         noble_gas_config = ("", "")
-
         s_config = ""
 
-        for i, _ in enumerate(self.elements[:atom_index]):
+        for i in range(len(self.elements[: self.atom_index])):
             nelec += 1
 
+            # this subshell is now full
             if nelec > 2 * (2 * l + 1):
-                # this subshell is now full
+
+                # The most recent configuration was for a Noble gas: store it
                 if l == 1:
-                    # The most recent configuration was for a Noble gas: store it
+
+                    # Turn a list of orbital, nelec pairs into a configuration string
                     noble_gas_config = (
-                        get_config_str(config),
+                        ".".join(["{:2s}{:d}".format(*e) for e in config]),
                         "[{}]".format(self.elements[i - 1]),
                     )
+
                 # Start a new subshell
                 inl += 1
                 _, n, l = nl_pairs[inl]
                 config.append(["{}{}".format(n, l_letter[l]), 1])
                 nelec = 1
+
+            # add an electron to the current subshell
             else:
-                # add an electron to the current subshell
                 config[-1][1] += 1
 
             # Turn config into a string
-            s_config = get_config_str(config)
+            s_config = ".".join(["{:2s}{:d}".format(*e) for e in config])
+
             # Replace the heaviest Noble gas configuration with its symbol
             s_config = s_config.replace(*noble_gas_config)
-            # print('{:2s}: {}'.format(element, s_config))
 
         output = list(s_config.split(".").pop(-1))
-        valence = f"    valence      {output[0]}  {output[1]}   {output[2]}.1\n"
+        self.valence = f"    valence      {output[0]}  {output[1]}   {output[2]}.1\n"
 
-        return atom_index, valence
+        return self.atom_index, self.valence
 
-    def mod_keywords(self, ad_cont_opts, opts):
+    @staticmethod
+    def mod_keywords(ad_cont_opts, opts):
         """Allow users to modify and add keywords"""
 
         for ad_opt in list(ad_cont_opts):
             spl_key = ad_opt.split(" ", 1)[0]
 
+            # Split the keyword and its value
             try:
                 spl_val = ad_opt.split(" ", 1)[1]
             except IndexError:
                 spl_val = None
 
-            for j, opt in enumerate(list(opts)):
+            # Check if the keyword is already in the input file
+            for opt in list(opts):
                 if spl_key == opt:
                     if spl_val is not None:
                         opts[opt] = spl_val
                     else:
                         del opts[opt]
 
+            # Add new keywords
             if spl_key not in list(opts):
                 if spl_val is not None:
                     opts.update({spl_key: spl_val})
                 else:
                     opts.update({spl_key: ""})
 
-    def change_control_keywords(self, control, opts):
+        return opts
+
+    @staticmethod
+    def change_control_keywords(control, opts):
         """Modify the keywords in a control.in file from a dictionary of options."""
 
         # Find and replace keywords in control file
@@ -191,7 +207,8 @@ class ForceOccupation:
 
         return content
 
-    def add_partial_charge(self, content, target_atom, at_num, atom_valence, charge):
+    @staticmethod
+    def add_partial_charge(content, target_atom, at_num, atom_valence, charge):
         """Add a partial charge to a basis set in a control.in file."""
 
         # Ensure returned variables are bound
@@ -292,9 +309,9 @@ class Projector(ForceOccupation):
         }
 
         # Ensure returned variables are bound
-        n_index = 0
-        valence_index = 0
-        nucleus = None
+        # n_index = 0
+        # valence_index = 0
+        # nucleus = None
 
         self.mod_keywords(ad_cond_opts, opts)
 
@@ -700,7 +717,7 @@ class Basis(ForceOccupation):
         }
 
         # Allow users to modify and add keywords
-        self.mod_keywords(ad_cont_opts, opts)
+        opts = self.mod_keywords(ad_cont_opts, opts)
 
         # Iterate over each constrained atom
         for i in range(num_atom):

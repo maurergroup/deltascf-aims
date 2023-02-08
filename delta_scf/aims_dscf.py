@@ -385,7 +385,7 @@ def projector(ctx, run_type, occ_type, basis_set, pbc, ks_start, ks_stop):
     nprocs = ctx.obj["NPROCS"]
     binary = ctx.obj["BINARY"]
     hpc = ctx.obj["HPC"]
-    constr_atom = ctx.obj["CONSTR_ATOM"]
+    constr_atoms = ctx.obj["CONSTR_ATOM"]
     spec_at_constr = ctx.obj["SPEC_AT_CONSTR"]
     n_atoms = ctx.obj["N_ATOMS"]
     species = ctx.obj["SPECIES"]
@@ -401,20 +401,38 @@ def projector(ctx, run_type, occ_type, basis_set, pbc, ks_start, ks_stop):
             run_loc, geom, control, atoms, ase, control_opts, nprocs, binary, hpc
         )
 
+    # Create a list of element symbols to constrain
     if spec_at_constr is not None:
         element_symbols = mu.get_element_symbols(geom, spec_at_constr)
     else:
-        element_symbols = None
+        element_symbols = constr_atoms
 
-    fo = ForceOccupation(constr_atom, spec_atom_constr)
+    # Makes following code simpler if everything is assumed to be a list
+    if type(constr_atoms) is not list:
+        list_constr_atoms = list(constr_atoms)
+    else:
+        list_constr_atoms = constr_atoms
+
+    fo = ForceOccupation(
+        list_constr_atoms, spec_at_constr, element_symbols, geom, control
+    )
 
     if run_type == "init_1":
         # Check required arguments are given in main()
-        mu.check_args(constr_atom, n_atoms, occ_type, ks_start, ks_stop)
+        mu.check_args(list_constr_atoms, n_atoms, occ_type, ks_start, ks_stop)
 
-        fo.read_ground_inp("run_dir/ground/geometry.in", element_symbols)
+        # Get atom indices from the ground state geometry file
+        fo.read_ground_inp("run_dir/ground/geometry.in")
 
-        at_num, valence = fo.get_electronic_structure(element_symbols, constr_atom)
+        atom_indices = []
+        valencies = []
+
+        # Obtain specified atom valence structures and
+        for atom in element_symbols:
+            atom_index, valence = fo.get_electronic_structure(atom)
+            atom_indices.append(atom_index)
+            valencies.append(valence)
+
         nucleus, n_index, valence_index = Projector.setup_init_1(
             basis_set,
             species,
