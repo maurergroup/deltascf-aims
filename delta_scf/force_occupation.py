@@ -17,15 +17,19 @@ class ForceOccupation:
         constr_atoms,
         spec_at_constr,
         element_symbols,
+        run_loc,
         geometry,
         control,
+        ad_cont_opts,
     ):
-
         self.constr_atoms = constr_atoms
         self.spec_at_constr = spec_at_constr
         self.element_symbols = element_symbols
+        self.run_loc = run_loc
         self.geometry = geometry
         self.control = control
+        self.ad_cont_opts = ad_cont_opts
+
         self.atom_specifier = []
 
         # All supported elements
@@ -112,10 +116,8 @@ class ForceOccupation:
 
             # this subshell is now full
             if nelec > 2 * (2 * l + 1):
-
                 # The most recent configuration was for a Noble gas: store it
                 if l == 1:
-
                     # Turn a list of orbital, nelec pairs into a configuration string
                     noble_gas_config = (
                         ".".join(["{:2s}{:d}".format(*e) for e in config]),
@@ -286,15 +288,14 @@ class ForceOccupation:
 class Projector(ForceOccupation):
     """Create input files for projector calculations."""
 
+    def __init__(self, parent_instance):
+        """Inherit all the variables from an instance of the parent class"""
+        vars(self).update(vars(parent_instance))
+
     def setup_init_1(
         self,
         basis_set,
         defaults,
-        target_atom,
-        calc_path,
-        at_num,
-        atom_valence,
-        ad_cond_opts,
     ):
         """Write new directories and control files for the first initialisation calculation."""
 
@@ -309,73 +310,73 @@ class Projector(ForceOccupation):
         }
 
         # Ensure returned variables are bound
-        # n_index = 0
-        # valence_index = 0
-        # nucleus = None
+        n_index = 0
+        valence_index = 0
+        nucleus = None
 
-        self.mod_keywords(ad_cond_opts, opts)
+        self.mod_keywords(self.ad_cont_opts, opts)
 
         # Create a new intermediate file and write basis sets to it
-        shutil.copyfile(
-            f"{calc_path}ground/control.in", f"{calc_path}ground/control.in.new"
-        )
+        shutil.copyfile(self.control, f"{self.run_loc}ground/control.in.new")
 
         # Find species defaults location from location of binary
-        basis_set = glob.glob(
-            f"{defaults}/defaults_2020/{basis_set}/*{target_atom}_default"
-        )
-        bash_add_basis = f"cat {basis_set[0]}"
-        new_control = open(f"{calc_path}ground/control.in.new", "a")
-        subprocess.run(bash_add_basis.split(), check=True, stdout=new_control)
+        for el in self.constr_atoms:
+            basis_set = glob.glob(f"{defaults}/defaults_2020/{basis_set}/*{el}_default")
+            bash_add_basis = f"cat {basis_set[0]}"
+            new_control = open(f"{self.run_loc}ground/control.in.new", "a")
+            subprocess.run(bash_add_basis.split(), check=True, stdout=new_control)
 
-        for i in range(len(self.atom_specifier)):
-            i += 1
+            for i in range(len(self.atom_specifier)):
+                i += 1
 
-            os.makedirs(f"{calc_path}{target_atom}{i}/init_1", exist_ok=True)
-            shutil.copyfile(
-                f"{calc_path}ground/control.in.new",
-                f"{calc_path}{target_atom}{i}/init_1/control.in",
-            )
-            shutil.copyfile(
-                f"{calc_path}ground/geometry.in",
-                f"{calc_path}{target_atom}{i}/init_1/geometry.in",
-            )
+                os.makedirs(f"{self.run_loc}{el}{i}/init_1", exist_ok=True)
+                shutil.copyfile(
+                    f"{self.run_loc}ground/control.in.new",
+                    f"{self.run_loc}{el}{i}/init_1/control.in",
+                )
+                shutil.copyfile(
+                    f"{self.run_loc}ground/geometry.in",
+                    f"{self.run_loc}{el}{i}/init_1/geometry.in",
+                )
 
-            found_target_atom = False
-            control = f"{calc_path}{target_atom}{i}/init_1/control.in"
-            geometry = f"{calc_path}{target_atom}{i}/init_1/geometry.in"
+                # Change geometry file
+                with open(self.geometry, "r") as read_geom:
+                    geom_content = read_geom.readlines()
 
-            # Change geometry file
-            with open(geometry, "r") as read_geom:
-                geom_content = read_geom.readlines()
+                # Change atom to {atom}{num}
+                atom_counter = 0
+                for j, line in enumerate(geom_content):
+                    spl = line.split()
 
-            # Change atom to {atom}{num}
-            atom_counter = 0
-            for j, line in enumerate(geom_content):
-                spl = line.split()
+                    if "atom" in line and el in line:
+                        if atom_counter + 1 == i:
+                            partial_hole_atom = f" {el}1\n"
+                            geom_content[j] = " ".join(spl[0:-1]) + partial_hole_atom
 
-                if "atom" in line and target_atom in line:
-                    if atom_counter + 1 == i:
-                        partial_hole_atom = f" {target_atom}1\n"
-                        geom_content[j] = " ".join(spl[0:-1]) + partial_hole_atom
+                        atom_counter += 1
 
-                    atom_counter += 1
+                with open(self.geometry, "w") as write_geom:
+                    write_geom.writelines(geom_content)
 
-            with open(geometry, "w") as write_geom:
-                write_geom.writelines(geom_content)
+                # Change control file
+                control_content = self.change_control_keywords(self.control, opts)
+                (
+                    self.n_index,
+                    self.valence_index,
+                    self.nucleus,
+                    self.control_content,
+                ) = self.add_partial_charge(
+                    control_content,
+                    el,
+                    self.elements[el]["number"],
+                    self.valence,
+                    opts["charge"],
+                )
 
-            # Change control file
-            control_content = self.change_control_keywords(control, opts)
-            n_index, valence_index, nucleus, control_content = self.add_partial_charge(
-                control_content, target_atom, at_num, atom_valence, opts["charge"]
-            )
-
-            with open(control, "w") as write_control:
-                write_control.writelines(control_content)
+                with open(self.control, "w") as write_control:
+                    write_control.writelines(control_content)
 
         print("init_1 files written successfully")
-
-        return nucleus, n_index, valence_index
 
     def setup_init_2(
         self,

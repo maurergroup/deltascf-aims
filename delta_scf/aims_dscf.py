@@ -175,15 +175,15 @@ def main(
     ase = True
     if geometry_input is not None:
         mu.check_geom_constraints(geometry_input)
-        ctx.obj["GEOM"] = geometry_input
+        ctx.obj["GEOM_INP"] = geometry_input
     else:
-        ctx.obj["GEOM"] = None
+        ctx.obj["GEOM_INP"] = None
 
     if control_input is not None:
         ase = False
-        ctx.obj["CONTROL"] = control_input
+        ctx.obj["CONTROL_INP"] = control_input
     else:
-        ctx.obj["CONTROL"] = None
+        ctx.obj["CONTROL_INP"] = None
 
     # Find the structure if not given
     # Build the structure if given
@@ -377,8 +377,8 @@ def projector(ctx, run_type, occ_type, basis_set, pbc, ks_start, ks_stop):
     """Force occupation of the Kohn-Sham states."""
 
     run_loc = ctx.obj["RUN_LOC"]
-    geom = ctx.obj["GEOM"]
-    control = ctx.obj["CONTROL"]
+    geom_inp = ctx.obj["GEOM_INP"]
+    control_inp = ctx.obj["CONTROL_INP"]
     atoms = ctx.obj["ATOMS"]
     ase = ctx.obj["ASE"]
     control_opts = ctx.obj["CONTROL_OPTIONS"]
@@ -398,12 +398,26 @@ def projector(ctx, run_type, occ_type, basis_set, pbc, ks_start, ks_stop):
 
     if run_type == "ground":
         mu.ground_calc(
-            run_loc, geom, control, atoms, ase, control_opts, nprocs, binary, hpc
+            run_loc,
+            geom_inp,
+            control_inp,
+            atoms,
+            ase,
+            control_opts,
+            nprocs,
+            binary,
+            hpc,
         )
+
+        return
+
+    else:
+        ground_geom = f"{run_loc}/ground/geometry.in"
+        ground_control = f"{run_loc}/ground/control.in"
 
     # Create a list of element symbols to constrain
     if spec_at_constr is not None:
-        element_symbols = mu.get_element_symbols(geom, spec_at_constr)
+        element_symbols = mu.get_element_symbols(ground_geom, spec_at_constr)
     else:
         element_symbols = constr_atoms
 
@@ -414,34 +428,37 @@ def projector(ctx, run_type, occ_type, basis_set, pbc, ks_start, ks_stop):
         list_constr_atoms = constr_atoms
 
     fo = ForceOccupation(
-        list_constr_atoms, spec_at_constr, element_symbols, geom, control
+        list_constr_atoms,
+        spec_at_constr,
+        element_symbols,
+        run_loc,
+        ground_geom,
+        ground_control,
+        control_opts,
     )
 
     if run_type == "init_1":
         # Check required arguments are given in main()
-        mu.check_args(list_constr_atoms, n_atoms, occ_type, ks_start, ks_stop)
+        # TODO
+        # mu.check_args(list_constr_atoms, n_atoms)
 
         # Get atom indices from the ground state geometry file
-        fo.read_ground_inp("run_dir/ground/geometry.in")
+        fo.read_ground_inp(ground_geom)
 
         atom_indices = []
         valencies = []
 
-        # Obtain specified atom valence structures and
+        # Iterate over each constrained element and save for each constrained element
         for atom in element_symbols:
             atom_index, valence = fo.get_electronic_structure(atom)
             atom_indices.append(atom_index)
             valencies.append(valence)
 
-        nucleus, n_index, valence_index = Projector.setup_init_1(
-            basis_set,
-            species,
-            constr_atom,
-            read_atoms,
-            "./run_dir/",
-            at_num,
-            valence,
-        )
+        # Setup files required for the initialisation and hole calculations
+        # TODO Do this for each constrained atom
+        proj = Projector(fo)
+        proj.setup_init_1(basis_set, species)
+
         Projector.setup_init_2(
             [i for i in range(ks_start + 1, ks_stop + 1)],
             "./run_dir/",
@@ -453,6 +470,7 @@ def projector(ctx, run_type, occ_type, basis_set, pbc, ks_start, ks_stop):
             valence_index,
             occ_type,
         )
+
         Projector.setup_hole(
             "./run_dir/",
             [i for i in range(ks_start + 1, ks_stop + 1)],
@@ -464,11 +482,11 @@ def projector(ctx, run_type, occ_type, basis_set, pbc, ks_start, ks_stop):
             valence_index,
         )
 
-        spec_run_info = ""
+    spec_run_info = ""
 
     if run_type == "init_2":
         # Check required arguments are given in main()
-        check_args(ctx.obj["CONSTR_ATOM"], ctx.obj["N_ATOMS"])
+        mu.check_args(list_constr_atoms, n_atoms, occ_type, ks_start, ks_stop)
 
         # Catch for if init_1 hasn't been run
         for i in range(1, ctx.obj["N_ATOMS"] + 1):

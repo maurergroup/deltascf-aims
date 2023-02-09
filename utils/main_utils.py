@@ -152,7 +152,7 @@ class MainUtils:
 
     @staticmethod
     def ground_calc(
-        run_loc, geom, control, atoms, ase, control_opts, nprocs, binary, hpc
+        run_loc, geom_inp, control_inp, atoms, ase, control_opts, nprocs, binary, hpc
     ):
         """Run a ground state calculation"""
 
@@ -160,15 +160,15 @@ class MainUtils:
         os.system(f"mkdir -p {run_loc}/ground")
 
         # Write the geometry file if the system is specified through CLI
-        if geom is None and control is not None:
+        if geom_inp is None and control_inp is not None:
             write(f"{run_loc}/geometry.in", atoms, format="aims")
 
         # Copy the geometry.in and control.in files to the ground directory
-        if control is not None:
-            os.system(f"mv {control} {run_loc}/ground")
+        if control_inp is not None:
+            os.system(f"mv {control_inp} {run_loc}/ground")
 
-        if geom is not None:
-            os.system(f"mv {geom} {run_loc}/ground")
+        if geom_inp is not None:
+            os.system(f"mv {geom_inp} {run_loc}/ground")
 
         if os.path.isfile(f"{run_loc}/ground/aims.out") == False:
             # Run the ground state calculation
@@ -215,6 +215,7 @@ class MainUtils:
 
         # Copy only the lines which specify atom coors into a new list
         for line in lines:
+            spl = line.split()
             if len(line) > 0 and "atom" == spl[0]:
                 atom_lines.append(line)
 
@@ -223,7 +224,6 @@ class MainUtils:
         # Get the element symbols from the atom coors
         # Uniquely add each element symbol
         for atom in spec_at_constr:
-
             element = atom_lines[atom].split()[-1]
 
             if element not in element_symbols:

@@ -14,7 +14,7 @@ class MutuallyExclusive(Option):
                 " | NOTE: This argument is mutually exclusive with: [" + ex_str + "]."
             )
 
-        super(MutuallyExclusive, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
     def handle_parse_result(self, ctx, opts, args):
         if self.mutually_exclusive.intersection(opts) and self.name in opts:
@@ -23,4 +23,4 @@ class MutuallyExclusive(Option):
                 "arguments `{}`.".format(self.name, ", ".join(self.mutually_exclusive))
             )
 
-        return super(MutuallyExclusive, self).handle_parse_result(ctx, opts, args)
+        return super().handle_parse_result(ctx, opts, args)
