@@ -77,11 +77,13 @@ class ForceOccupation:
 
         print("specified atoms:", self.atom_specifier)
 
+        return self.atom_specifier
+
     def get_electronic_structure(self, atom):
         """Get valence electronic structure of target atom."""
         # Adapted from scipython.com question P2.5.12
 
-        self.atom_index = self.elements.index(str(atom)) + 1
+        self.atom_index = self.elements[str(atom)]["number"]
 
         # Letters identifying subshells
         l_letter = ["s", "p", "d", "f", "g"]
@@ -243,7 +245,7 @@ class ForceOccupation:
                     principle_qns = np.array([])
                     azimuthal_orbs = np.array([])
                     azimuthal_qns = np.zeros(io_index - vbs_index - 1)
-                    azimuthal_refs = {"s": 1, "p": 2, "d": 3, "f": 4}
+                    azimuthal_refs = {"s": 1, "p": 2, "d": 3, "f": 4, "g": 5}
 
                     # Get azimuthal and principle quantum numbers
                     for count, valence_orbital in enumerate(
@@ -310,9 +312,9 @@ class Projector(ForceOccupation):
         }
 
         # Ensure returned variables are bound
-        n_index = 0
-        valence_index = 0
-        nucleus = None
+        # n_index = 0
+        # valence_index = 0
+        # nucleus = None
 
         self.mod_keywords(self.ad_cont_opts, opts)
 
@@ -380,7 +382,10 @@ class Projector(ForceOccupation):
 
     def setup_init_2(
         self,
-        ks_states,
+        ks_start,
+        ks_stop,
+        occ,
+        spin,
         calc_path,
         target_atom,
         num_atom,
@@ -392,23 +397,18 @@ class Projector(ForceOccupation):
     ):
         """Write new directories and control files for the second initialisation calculation."""
 
-        if (
-            type(ks_states) is not list
-            or len(ks_states) != 2
-            or not all(isinstance(i, int) for i in ks_states)
-        ):
-            raise ValueError("ks_states must be an integer list of length 2")
+        opts = {
+            "xc": "pbe",
+            "spin": "collinear",
+            "default_initial_moment": 0,
+            "charge": 1.1,
+            "sc_iter_limit": 1,
+            occ_type: f"{atom_index} {spin} {occ}, {ks_start} {ks_stop}",
+            "restart": "restart_file",
+            "restart_save_iterations": 20,
+        }
 
-        iter_limit = "sc_iter_limit             1\n"
-        restart_file = "restart             restart_file\n"
-        restart_force = "# force_single_restartfile .true.\n"
-        charge = "charge                    1.1\n"
-
-        fop = None
-        if occ_type == "old_projector":
-            fop = f"force_occupation_projector {ks_states[0]} 1 0.0 {ks_states[0]} {ks_states[1]}\n"
-        # elif p_type == 'new_fop':
-        #     fop =
+        self.mod_keywords(self.ad_cont_opts, opts)
 
         if type(num_atom) == list:
             loop_iterator = num_atom

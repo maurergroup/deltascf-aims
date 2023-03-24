@@ -93,6 +93,14 @@ from delta_scf.plot import Plot
     show_default=True,
     help="occupation value of the core ",
 )
+@click.option(
+    "-a",
+    "--spin",
+    type=int,
+    defualt=0,
+    show_default=True,
+    help="set the multiplicity of the system",
+)
 @click.option("-g", "--graph", is_flag=True, help="print out the simulated XPS spectra")
 @click.option(
     "--graph_min_percent",
@@ -125,6 +133,7 @@ def main(
     constr_atom,
     spec_at_constr,
     occupation,
+    spin,
     n_atoms,
     graph,
     graph_min_percent,
@@ -267,6 +276,7 @@ def main(
         ctx.obj["CONSTR_ATOM"] = constr_atom
         ctx.obj["SPEC_AT_CONSTR"] = spec_at_constr
         ctx.obj["OCC"] = occupation
+        ctx.obj["SPIN"] = spin
         ctx.obj["N_ATOMS"] = n_atoms
         ctx.obj["GRAPH"] = graph
         ctx.obj["GMP"] = graph_min_percent
@@ -389,6 +399,8 @@ def projector(ctx, run_type, occ_type, basis_set, pbc, ks_start, ks_stop):
     spec_at_constr = ctx.obj["SPEC_AT_CONSTR"]
     n_atoms = ctx.obj["N_ATOMS"]
     species = ctx.obj["SPECIES"]
+    occ = ctx.obj["OCC"]
+    spin = ctx.obj["SPIN"]
 
     # Used later to redirect STDERR to /dev/null to prevent printing not converged errors
     spec_run_info = None
@@ -445,17 +457,12 @@ def projector(ctx, run_type, occ_type, basis_set, pbc, ks_start, ks_stop):
         # Get atom indices from the ground state geometry file
         fo.read_ground_inp(ground_geom)
 
-        atom_indices = []
-        valencies = []
-
-        # Iterate over each constrained element and save for each constrained element
+        # TODO allow this for multiple constrained atoms
+        # NB: atom_index here is atomic number
         for atom in element_symbols:
-            atom_index, valence = fo.get_electronic_structure(atom)
-            atom_indices.append(atom_index)
-            valencies.append(valence)
+            _, _ = fo.get_electronic_structure(atom)
 
         # Setup files required for the initialisation and hole calculations
-        # TODO Do this for each constrained atom
         proj = Projector(fo)
         proj.setup_init_1(basis_set, species)
 
