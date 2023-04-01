@@ -6,8 +6,7 @@ from pathlib import Path
 
 import click
 from ase import Atoms
-from ase.atoms import default
-from ase.io import read, write
+from ase.io import read
 from utils.custom_click import MutuallyExclusive as me
 from utils.main_utils import MainUtils as mu
 
@@ -97,7 +96,7 @@ from delta_scf.plot import Plot
     "-a",
     "--spin",
     type=int,
-    defualt=0,
+    default=0,
     show_default=True,
     help="set the multiplicity of the system",
 )
@@ -121,6 +120,8 @@ from delta_scf.plot import Plot
 @click.option(
     "-d", "--debug", is_flag=True, help="for developer use: print debug information"
 )
+# TODO:
+@click.option("-na", "--n_atoms", help="number of atoms to constrain")
 @click.pass_context
 def main(
     ctx,
@@ -172,8 +173,8 @@ def main(
                 param_hint="'--control_input'", param_type="option"
             )
 
-    # A geometry file must be given specific atom indices are to be constrained
-    if spec_at_constr is not None:
+    # A geometry file must be given if specific atom indices are to be constrained
+    if len(spec_at_constr) > 0:
         if not geometry_input:
             raise click.MissingParameter(
                 param_hint="'--geometry_input'", param_type="option"
@@ -371,19 +372,21 @@ def process(ctx):
     "-p", "--pbc", is_flag=True, help="create a cell with periodic boundary conditions"
 )
 @click.option(
-    "-b",
-    "--ks_start",
-    type=click.IntRange(1),
-    help="first Kohn-Sham state to constrain",
+    "-k",
+    "--constrained_states",
+    "constr_state",
+    type=list,
+    help="Kohn-Sham states to constrain",
 )
 @click.option(
-    "-e",
-    "--ks_stop",
+    "-k",
+    "--ks_range",
+    nargs=2,
     type=click.IntRange(1),
-    help="last Kohn-Sham state to constrain",
+    help="range of Kohn-Sham states to constrain",
 )
 @click.pass_context
-def projector(ctx, run_type, occ_type, basis_set, pbc, ks_start, ks_stop):
+def projector(ctx, run_type, occ_type, basis_set, pbc, ks_range):
     """Force occupation of the Kohn-Sham states."""
 
     run_loc = ctx.obj["RUN_LOC"]
@@ -421,6 +424,7 @@ def projector(ctx, run_type, occ_type, basis_set, pbc, ks_start, ks_stop):
             hpc,
         )
 
+        # Ground must be run separately to hole calculations
         return
 
     else:
@@ -465,18 +469,7 @@ def projector(ctx, run_type, occ_type, basis_set, pbc, ks_start, ks_stop):
         # Setup files required for the initialisation and hole calculations
         proj = Projector(fo)
         proj.setup_init_1(basis_set, species)
-
-        Projector.setup_init_2(
-            [i for i in range(ks_start + 1, ks_stop + 1)],
-            "./run_dir/",
-            ctx.obj["CONSTR_ATOM"],
-            ctx.obj["N_ATOMS"],
-            at_num,
-            valence,
-            n_index,
-            valence_index,
-            occ_type,
-        )
+        proj.setup_init_2(ks_range[0], ks_range[1], occ, occ_type, spin)
 
         Projector.setup_hole(
             "./run_dir/",

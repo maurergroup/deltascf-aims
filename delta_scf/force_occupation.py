@@ -311,31 +311,32 @@ class Projector(ForceOccupation):
             "restart_save_iterations": 20,
         }
 
-        # Ensure returned variables are bound
-        # n_index = 0
-        # valence_index = 0
-        # nucleus = None
-
+        # Add or change user-specified keywords to the control file
         self.mod_keywords(self.ad_cont_opts, opts)
 
         # Create a new intermediate file and write basis sets to it
         shutil.copyfile(self.control, f"{self.run_loc}ground/control.in.new")
 
-        # Find species defaults location from location of binary
+        # Loop over each element to constrain
         for el in self.constr_atoms:
+            # Find species defaults location from location of binary
             basis_set = glob.glob(f"{defaults}/defaults_2020/{basis_set}/*{el}_default")
             bash_add_basis = f"cat {basis_set[0]}"
+            # Create a new intermediate control file
             new_control = open(f"{self.run_loc}ground/control.in.new", "a")
             subprocess.run(bash_add_basis.split(), check=True, stdout=new_control)
 
+            # Loop over each individual atom to constrain
             for i in range(len(self.atom_specifier)):
                 i += 1
 
+                # Create new directory and control file for init_1 calc
                 os.makedirs(f"{self.run_loc}{el}{i}/init_1", exist_ok=True)
                 shutil.copyfile(
                     f"{self.run_loc}ground/control.in.new",
                     f"{self.run_loc}{el}{i}/init_1/control.in",
                 )
+                # Create new geometry file for init_1 calc
                 shutil.copyfile(
                     f"{self.run_loc}ground/geometry.in",
                     f"{self.run_loc}{el}{i}/init_1/geometry.in",
@@ -345,7 +346,7 @@ class Projector(ForceOccupation):
                 with open(self.geometry, "r") as read_geom:
                     geom_content = read_geom.readlines()
 
-                # Change atom to {atom}{num}
+                # Change core hole atom to {atom}{num}
                 atom_counter = 0
                 for j, line in enumerate(geom_content):
                     spl = line.split()
@@ -362,11 +363,12 @@ class Projector(ForceOccupation):
 
                 # Change control file
                 control_content = self.change_control_keywords(self.control, opts)
+
                 (
                     self.n_index,
-                    self.valence_index,
+                    self.v_index,
                     self.nucleus,
-                    self.control_content,
+                    control_content,
                 ) = self.add_partial_charge(
                     control_content,
                     el,
@@ -385,133 +387,58 @@ class Projector(ForceOccupation):
         ks_start,
         ks_stop,
         occ,
-        spin,
-        calc_path,
-        target_atom,
-        num_atom,
-        at_num,
-        atom_valence,
-        n_index,
-        valence_index,
         occ_type,
+        spin,
     ):
         """Write new directories and control files for the second initialisation calculation."""
 
-        opts = {
-            "xc": "pbe",
-            "spin": "collinear",
-            "default_initial_moment": 0,
-            "charge": 1.1,
-            "sc_iter_limit": 1,
-            occ_type: f"{atom_index} {spin} {occ}, {ks_start} {ks_stop}",
-            "restart": "restart_file",
-            "restart_save_iterations": 20,
-        }
+        # Loop over each element to constrain
+        for el in self.constr_atoms:
+            # Loop over each individual atom to constrain
+            for i in range(len(self.atom_specifier)):
+                opts = {
+                    "xc": "pbe",
+                    "spin": "collinear",
+                    "default_initial_moment": 0,
+                    "charge": 1.1,
+                    "sc_iter_limit": 1,
+                    occ_type: f"{ks_start + i} {spin} {occ} {ks_start} {ks_stop}",
+                    "restart": "restart_file",
+                    "restart_save_iterations": 20,
+                }
 
-        self.mod_keywords(self.ad_cont_opts, opts)
+                # Add or change user-specified keywords to the control file
+                self.mod_keywords(self.ad_cont_opts, opts)
 
-        if type(num_atom) == list:
-            loop_iterator = num_atom
-        else:
-            loop_iterator = range(num_atom)
-
-        for i in loop_iterator:
-            if type(num_atom) != list:
                 i += 1
 
-            os.makedirs(f"{calc_path}{target_atom}{i}/init_2", exist_ok=True)
-            shutil.copyfile(
-                f"{calc_path}ground/control.in.new",
-                f"{calc_path}{target_atom}{i}/init_2/control.in",
-            )
-            shutil.copyfile(
-                f"{calc_path}{target_atom}{i}/init_1/geometry.in",
-                f"{calc_path}{target_atom}{i}/init_2/geometry.in",
-            )
+                # Create new directory for init_2 calc
+                os.makedirs(f"{self.run_loc}{el}{i}/init_2", exist_ok=True)
+                shutil.copyfile(
+                    f"{self.run_loc}ground/control.in.new",
+                    f"{self.run_loc}{el}{i}/init_2/control.in",
+                )
+                shutil.copyfile(
+                    f"{self.run_loc}{el}{i}/init_1/geometry.in",
+                    f"{self.run_loc}{el}{i}/init_2/geometry.in",
+                )
 
-            found_target_atom = False
-            control = f"{calc_path}{target_atom}{i}/init_2/control.in"
+                control = f"{self.run_loc}{el}{i}/init_2/control.in"
 
-            # Change control file
-            with open(control, "r") as read_control:
-                control_content = read_control.readlines()
+                # Change control file
+                control_content = self.change_control_keywords(self.control, opts)
 
-            # Replace specific lines
-            for j, line in enumerate(control_content):
-                spl = line.split()
+                # Add partial charge to the control file
+                _, _, _, control_content = self.add_partial_charge(
+                    control_content,
+                    el,
+                    self.elements[el]["number"],
+                    self.valence,
+                    opts["charge"],
+                )
 
-                if len(spl) > 1:
-                    # Fix basis sets
-                    if "species" == spl[0] and target_atom == spl[1]:
-                        if found_target_atom is False:
-                            control_content[j] = f"  species        {target_atom}1\n"
-                            found_target_atom = True
-
-                    # Change keyword lines
-                    if "sc_iter_limit" in spl:
-                        control_content[j] = iter_limit
-                    if "restart_write_only" in spl:
-                        control_content[j] = restart_file
-                    if "force_single_restartfile" in spl:
-                        control_content[j] = restart_force
-                    if "#force_occupation_projector" == spl[0]:
-                        control_content[j] = fop
-                    if "charge" in spl:
-                        control_content[j] = charge
-                    if "#" == spl[0] and "charge" == spl[1]:
-                        control_content[j] = charge
-
-            # Check if parameters not found
-            no_iter_limit = False
-            no_restart = False
-            no_charge = False
-
-            if iter_limit not in control_content:
-                no_iter_limit = True
-            if restart_file not in control_content:
-                no_restart = True
-            if charge not in control_content:
-                no_charge = True
-
-            # Write the data to the file
-            with open(control, "w+") as write_control:
-                write_control.writelines(control_content)
-
-                # Append parameters to end of file if not found
-                if no_iter_limit is True:
-                    write_control.write(iter_limit)
-                if no_restart is True:
-                    write_control.write(restart_file)
-                if no_charge is True:
-                    write_control.write(charge)
-
-            # Add 0.1 charge
-            with open(control, "r") as read_control:
-                control_content = read_control.readlines()
-
-            # Replace specific lines
-            for j, line in enumerate(control_content):
-                spl = line.split()
-
-                if target_atom + "1" in spl:
-                    # Add to nucleus
-                    if f"    nucleus             {at_num}\n" in control_content[j:]:
-                        # nucleus = control_content[n_index]  # save for hole
-                        control_content[
-                            n_index
-                        ] = f"    nucleus             {at_num}.1\n"
-                    elif f"    nucleus      {at_num}\n" in control_content[j:]:
-                        # nucleus = control_content[n_index]  # save for hole
-                        control_content[n_index] = f"    nucleus      {at_num}.1\n"
-
-                    # Add to valence orbital
-                    if "#     ion occupancy\n" in control_content[j:]:
-                        # Add the 0.1 electron
-                        control_content[valence_index] = atom_valence
-                        break
-
-            with open(control, "w+") as write_control:
-                write_control.writelines(control_content)
+                with open(control, "w+") as write_control:
+                    write_control.writelines(control_content)
 
         print("init_2 files written successfully")
 
