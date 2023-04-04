@@ -90,15 +90,23 @@ from delta_scf.plot import Plot
     type=float,
     default=0.0,
     show_default=True,
-    help="occupation value of the core ",
+    help="occupation value of the core hole",
 )
 @click.option(
-    "-a",
+    "-u",
     "--spin",
     type=int,
     default=0,
     show_default=True,
     help="set the multiplicity of the system",
+)
+@click.option(
+    "-a",
+    "--n_atoms",
+    type=click.IntRange(1),
+    default=1,
+    show_default=True,
+    help="number of atoms to constrain",
 )
 @click.option("-g", "--graph", is_flag=True, help="print out the simulated XPS spectra")
 @click.option(
@@ -120,8 +128,6 @@ from delta_scf.plot import Plot
 @click.option(
     "-d", "--debug", is_flag=True, help="for developer use: print debug information"
 )
-# TODO:
-@click.option("-na", "--n_atoms", help="number of atoms to constrain")
 @click.pass_context
 def main(
     ctx,
@@ -333,11 +339,12 @@ def process(ctx):
             # Write out the spectrum to a text file
             dat = []
             for xi, yi in zip(x, y):
-                dat.append(str(xi) + " " + str(yi) + "\n")
+                dat.append(f"{str(xi)} {str(yi)}\n")
 
             with open(f"{element}_xps_spectrum.txt", "w") as spec:
                 spec.writelines(dat)
 
+            # Move the spectrum to the run location
             os.system(f'mv {element}_xps_spectrum.txt ./{ctx.obj["RUN_LOC"]}/')
 
             print("\nplotting spectrum and calculating MABE...")
@@ -357,6 +364,8 @@ def process(ctx):
 @click.option(
     "-t",
     "--occ_type",
+    default="deltascf_projector",
+    show_default=True,
     type=click.Choice(["deltascf_projector", "force_occupation_projector"]),
     help="select whether the old or new occupation routine is used",
 )
@@ -373,20 +382,20 @@ def process(ctx):
 )
 @click.option(
     "-k",
-    "--constrained_states",
-    "constr_state",
-    type=list,
-    help="Kohn-Sham states to constrain",
-)
-@click.option(
-    "-k",
     "--ks_range",
     nargs=2,
     type=click.IntRange(1),
     help="range of Kohn-Sham states to constrain taken with 2 arguments",
 )
+@click.option(
+    "-c",
+    "--control_opts",
+    multiple=True,
+    type=str,
+    help="provide additional options to be used in 'control.in'",
+)
 @click.pass_context
-def projector(ctx, run_type, occ_type, basis_set, pbc, ks_range):
+def projector(ctx, run_type, occ_type, basis_set, pbc, ks_range, control_opts):
     """Force occupation of the Kohn-Sham states."""
 
     run_loc = ctx.obj["RUN_LOC"]
@@ -394,7 +403,6 @@ def projector(ctx, run_type, occ_type, basis_set, pbc, ks_range):
     control_inp = ctx.obj["CONTROL_INP"]
     atoms = ctx.obj["ATOMS"]
     ase = ctx.obj["ASE"]
-    control_opts = ctx.obj["CONTROL_OPTIONS"]
     nprocs = ctx.obj["NPROCS"]
     binary = ctx.obj["BINARY"]
     hpc = ctx.obj["HPC"]
@@ -433,7 +441,7 @@ def projector(ctx, run_type, occ_type, basis_set, pbc, ks_range):
         ground_control = f"{run_loc}/ground/control.in"
 
     # Create a list of element symbols to constrain
-    if spec_at_constr is not None:
+    if len(spec_at_constr) > 0:
         element_symbols = mu.get_element_symbols(ground_geom, spec_at_constr)
     else:
         element_symbols = constr_atoms
@@ -445,22 +453,18 @@ def projector(ctx, run_type, occ_type, basis_set, pbc, ks_range):
         list_constr_atoms = constr_atoms
 
     fo = ForceOccupation(
-        list_constr_atoms,
-        spec_at_constr,
         element_symbols,
         run_loc,
         ground_geom,
-        ground_control,
         control_opts,
     )
 
     if run_type == "init_1":
         # Check required arguments are given in main()
-        # TODO
-        # mu.check_args(list_constr_atoms, n_atoms)
+        mu.check_args(ks_range)
 
         # Get atom indices from the ground state geometry file
-        fo.read_ground_inp(ground_geom)
+        fo.read_ground_inp(list_constr_atoms, spec_at_constr, ground_geom)
 
         # TODO allow this for multiple constrained atoms
         # NB: atom_index here is atomic number
@@ -469,15 +473,15 @@ def projector(ctx, run_type, occ_type, basis_set, pbc, ks_range):
 
         # Setup files required for the initialisation and hole calculations
         proj = Projector(fo)
-        proj.setup_init_1(basis_set, species)
+        proj.setup_init_1(basis_set, species, ground_control)
         proj.setup_init_2(ks_range[0], ks_range[1], occ, occ_type, spin)
         proj.setup_hole(ks_range[0], ks_range[1], occ, occ_type, spin)
 
     spec_run_info = ""
 
     if run_type == "init_2":
-        # Check required arguments are given in main()
-        mu.check_args(list_constr_atoms, n_atoms, occ_type, ks_range[0], ks_range[1])
+        # Check required arguments are given
+        mu.check_args(n_atoms, ks_range)
 
         # Catch for if init_1 hasn't been run
         for i in range(1, n_atoms + 1):
@@ -539,11 +543,12 @@ def projector(ctx, run_type, occ_type, basis_set, pbc, ks_range):
         and os.path.isfile(f"run_dir/{constr_atoms}1/{run_type}/aims.out") == False
     ):
         with click.progressbar(
-            range(1, ctx.obj["N_ATOMS"] + 1), label=f"calculating {run_type}:"
+            range(1, n_atoms + 1), label=f"calculating {run_type}:"
         ) as bar:
             for i in bar:
                 os.system(
-                    f"cd ./run_dir/{constr_atoms}{i}/{run_type} && mpirun -n {nprocs} {binary} > aims.out{spec_run_info}"
+                    f"cd ./run_dir/{constr_atoms}{i}/{run_type} && mpirun -n {nprocs} "
+                    f"{binary} > aims.out{spec_run_info}"
                 )
 
         print(f"{run_type} calculations completed successfully")
@@ -564,39 +569,67 @@ def projector(ctx, run_type, occ_type, basis_set, pbc, ks_range):
     help="select the type of calculation to perform",
 )
 @click.option(
-    "-t",
+    "-a", "--atom_index", type=int, help="index of the (first) atom to constrain"
+)
+@click.option(
+    "-o",
     "--occ_type",
+    default="deltascf_basis",
+    show_default=True,
     type=click.Choice(["deltascf_basis", "force_occupation_basis"]),
     help="select whether the old or new occupation routine is used",
 )
 @click.option(
-    "-e",
+    "-n",
+    "--n_quantum_number",
+    "n_qn",
+    type=int,
+    help="principal quantum number of constrained state",
+)
+@click.option(
+    "-l",
+    "--l_quantum_number",
+    "l_qn",
+    type=int,
+    help="orbital momentum quantum number of constrained state",
+)
+@click.option(
+    "-m",
+    "--m_quantum_number",
+    "m_qn",
+    type=int,
+    help="magnetic quantum number for projection of orbital momentum",
+)
+@click.option(
+    "-k",
     "--ks_max",
     type=click.IntRange(1),
     help="maximum Kohn-Sham state to constrain",
 )
 @click.option(
     "-c",
-    "--control_opt",
+    "--control_opts",
     multiple=True,
     type=str,
     help="provide additional options to be used in 'control.in'",
 )
 @click.pass_context
-def basis(ctx, run_type, occ_type, ks_max, control_opt):
+def basis(ctx, run_type, atom_index, occ_type, n_qn, l_qn, m_qn, ks_max, control_opts):
     """Force occupation of the basis states."""
 
     # It gets annoying to type the full context object out every time
     run_loc = ctx.obj["RUN_LOC"]
-    geom = ctx.obj["GEOM"]
-    control = ctx.obj["CONTROL"]
+    geom = ctx.obj["GEOM_INP"]
+    control = ctx.obj["CONTROL_INP"]
     spec_mol = ctx.obj["SPEC_MOL"]
     atoms = ctx.obj["ATOMS"]
     ase = ctx.obj["ASE"]
     nprocs = ctx.obj["NPROCS"]
     binary = ctx.obj["BINARY"]
-    constr_atom = ctx.obj["CONSTR_ATOM"]
+    constr_atoms = ctx.obj["CONSTR_ATOM"]
+    spec_at_constr = ctx.obj["SPEC_AT_CONSTR"]
     n_atoms = ctx.obj["N_ATOMS"]
+    spin = ctx.obj["SPIN"]
     occ = ctx.obj["OCC"]
     hpc = ctx.obj["HPC"]
 
@@ -604,25 +637,38 @@ def basis(ctx, run_type, occ_type, ks_max, control_opt):
 
     if run_type == "ground":
         mu.ground_calc(
-            run_loc, geom, control, atoms, ase, control_opt, nprocs, binary, hpc
+            run_loc, geom, control, atoms, ase, control_opts, nprocs, binary, hpc
         )
+
+        # Ground must be run separately to hole calculations
+        return
+
+    else:
+        ground_geom = f"{run_loc}/ground/geometry.in"
 
     if (
         run_type == "hole"
-        and os.path.isfile(f"{run_loc}/{constr_atom}1/hole/aims.out") is False
+        and os.path.isfile(f"{run_loc}/{constr_atoms}1/hole/aims.out") is False
     ):
+        # TODO:
         # Check required arguments are given for main()
-        mu.check_args(
-            ("spec_mol", spec_mol),
-            ("constr_atom", constr_atom),
-            ("n_atoms", n_atoms),
-            ("occ_type", occ_type),
-            ("ks_max", ks_max),
-        )
+        # mu.check_args(
+        #     ("spec_mol", spec_mol),
+        #     ("constr_atoms", constr_atoms),
+        #     ("n_atoms", n_atoms),
+        #     ("occ_type", occ_type),
+        #     ("ks_max", ks_max),
+        #     ("atom_index", atom_index),
+        #     ("spin", spin),
+        #     ("n_qn", n_qn),
+        #     ("l_qn", l_qn),
+        #     ("m_qn", m_qn),
+        # )
 
         if os.path.isfile(f"{run_loc}/ground/aims.out") == False:
             print(
-                "ground aims.out not found, please ensure the ground calculation has been run"
+                "ground aims.out not found, please ensure the ground calculation has been "
+                "run"
             )
             raise FileNotFoundError
 
@@ -632,24 +678,39 @@ def basis(ctx, run_type, occ_type, ks_max, control_opt):
                 "runs"
             )
 
+        # Create a list of element symbols to constrain
+        if len(spec_at_constr) > 0:
+            element_symbols = mu.get_element_symbols(ground_geom, spec_at_constr)
+        else:
+            element_symbols = constr_atoms
+
+        # Makes following code simpler if everything is assumed to be a list
+        if type(constr_atoms) is not list:
+            list_constr_atoms = list(constr_atoms)
+        else:
+            list_constr_atoms = constr_atoms
+
         # Create the directories required for the hole calculation
-        Basis.setup_basis(
-            constr_atom,
-            n_atoms,
-            occ,
-            ks_max,
-            occ_type,
+        fo = ForceOccupation(
+            element_symbols,
             run_loc,
-            control_opt,
+            ground_geom,
+            control_opts,
         )
 
+        # Get atom indices from the ground state geometry file
+        fo.read_ground_inp(list_constr_atoms, spec_at_constr, ground_geom)
+
+        basis = Basis(fo)
+        basis.setup_basis(atom_index, spin, n_qn, l_qn, m_qn, occ, ks_max, occ_type)
+
         # Add molecule identifier to hole geometry.in
-        with open(f"{run_loc}/{constr_atom}1/hole/geometry.in", "r") as hole_geom:
+        with open(f"{run_loc}{constr_atoms}1/hole/geometry.in", "r") as hole_geom:
             lines = hole_geom.readlines()
 
         lines.insert(4, f"# {spec_mol}\n")
 
-        with open(f"{run_loc}/{constr_atom}1/hole/geometry.in", "w") as hole_geom:
+        with open(f"{run_loc}/{constr_atoms}1/hole/geometry.in", "w") as hole_geom:
             hole_geom.writelines(lines)
 
         # Run the hole calculation
@@ -658,11 +719,11 @@ def basis(ctx, run_type, occ_type, ks_max, control_opt):
         ) as prog_bar:
             for i in prog_bar:
                 os.system(
-                    f"cd {run_loc}/{constr_atom}{i}/hole/ && mpirun -n "
+                    f"cd {run_loc}/{constr_atoms}{i}/hole/ && mpirun -n "
                     f"{nprocs} {binary} > aims.out"
                 )
 
-    elif os.path.isfile(f"{run_loc}/{constr_atom}1/hole/aims.out") is True:
+    elif os.path.isfile(f"{run_loc}/{constr_atoms}1/hole/aims.out") is True:
         print("hole calculations already completed, skipping calculation...")
 
     # This needs to be passed to process()

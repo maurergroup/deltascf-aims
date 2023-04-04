@@ -14,35 +14,33 @@ class ForceOccupation:
 
     def __init__(
         self,
-        constr_atoms,
-        spec_at_constr,
         element_symbols,
         run_loc,
         geometry,
-        control,
         ad_cont_opts,
     ):
-        self.constr_atoms = constr_atoms
-        self.spec_at_constr = spec_at_constr
         self.element_symbols = element_symbols
         self.run_loc = run_loc
         self.geometry = geometry
-        self.control = control  # TODO: Check if this needs to be a class variable
         self.ad_cont_opts = ad_cont_opts
 
+        self.new_control = f"{self.run_loc}ground/control.in.new"
         self.atom_specifier = []
 
+        # Find the root directory of the package
+        current_path = os.path.dirname(os.path.realpath(__file__))
+
         # All supported elements
-        with open("elements.yml", "r") as elements:
+        with open(f"{current_path}/elements.yml", "r") as elements:
             self.elements = yaml.load(elements, Loader=yaml.SafeLoader)
 
-    def read_ground_inp(self, geometry_path):
+    def read_ground_inp(self, constr_atoms, spec_at_constr, geometry_path):
         """Find the number of atoms in the geometry file."""
 
         # For if the user supplied element symbols to constrain
-        if self.constr_atoms is not None:
+        if constr_atoms is not None:
             # Check validity of specified elements
-            for atom in self.constr_atoms:
+            for atom in constr_atoms:
                 if atom not in self.elements:
                     raise ValueError("invalid element specified")
 
@@ -51,7 +49,7 @@ class ForceOccupation:
             )
 
             # Constrain all atoms of the target element
-            for atom in self.constr_atoms:
+            for atom in constr_atoms:
                 with open(geometry_path, "r") as geom_in:
                     atom_counter = 0
 
@@ -67,13 +65,13 @@ class ForceOccupation:
                                 self.atom_specifier.append(atom_counter)
 
         # For if the user supplied atom indices to constrain
-        if self.element_symbols is not None:
+        if len(spec_at_constr) > 0:
             # Check validity of specified elements
             for atom in self.element_symbols:
                 if atom not in self.elements:
                     raise ValueError("invalid element specified")
 
-            self.atom_specifier = self.spec_at_constr
+            self.atom_specifier = spec_at_constr
 
         print("specified atoms:", self.atom_specifier)
 
@@ -298,11 +296,7 @@ class Projector(ForceOccupation):
         """Inherit all the variables from an instance of the parent class"""
         vars(self).update(vars(parent_instance))
 
-    def setup_init_1(
-        self,
-        basis_set,
-        defaults,
-    ):
+    def setup_init_1(self, basis_set, defaults, control):
         """Write new directories and control files for the first initialisation calculation."""
 
         # Default control file options
@@ -319,26 +313,28 @@ class Projector(ForceOccupation):
         opts = self.mod_keywords(self.ad_cont_opts, opts)
 
         # Create a new intermediate file and write basis sets to it
-        shutil.copyfile(self.control, f"{self.run_loc}ground/control.in.new")
+        shutil.copyfile(control, self.new_control)
 
         # Loop over each element to constrain
-        for el in self.constr_atoms:
+        for el in self.element_symbols:
             # Find species defaults location from location of binary
             basis_set = glob.glob(f"{defaults}/defaults_2020/{basis_set}/*{el}_default")
             bash_add_basis = f"cat {basis_set[0]}"
             # Create a new intermediate control file
-            new_control = open(f"{self.run_loc}ground/control.in.new", "a")
+            new_control = open(self.new_control, "a")
             subprocess.run(bash_add_basis.split(), check=True, stdout=new_control)
 
             # Loop over each individual atom to constrain
             for i in range(len(self.atom_specifier)):
                 i += 1
 
+                i1_control = f"{self.run_loc}{el}{i}/init_1/control.in"
+
                 # Create new directory and control file for init_1 calc
                 os.makedirs(f"{self.run_loc}{el}{i}/init_1", exist_ok=True)
                 shutil.copyfile(
-                    f"{self.run_loc}ground/control.in.new",
-                    f"{self.run_loc}{el}{i}/init_1/control.in",
+                    self.new_control,
+                    i1_control,
                 )
                 # Create new geometry file for init_1 calc
                 shutil.copyfile(
@@ -366,7 +362,7 @@ class Projector(ForceOccupation):
                     write_geom.writelines(geom_content)
 
                 # Change control file
-                control_content = self.change_control_keywords(self.control, opts)
+                control_content = self.change_control_keywords(i1_control, opts)
 
                 (
                     self.n_index,
@@ -381,7 +377,7 @@ class Projector(ForceOccupation):
                     opts["charge"],
                 )
 
-                with open(self.control, "w") as write_control:
+                with open(i1_control, "w") as write_control:
                     write_control.writelines(control_content)
 
         print("init_1 files written successfully")
@@ -397,7 +393,7 @@ class Projector(ForceOccupation):
         """Write new directories and control files for the second initialisation calculation."""
 
         # Loop over each element to constrain
-        for el in self.constr_atoms:
+        for el in self.element_symbols:
             # Loop over each individual atom to constrain
             for i in range(len(self.atom_specifier)):
                 opts = {
@@ -416,21 +412,18 @@ class Projector(ForceOccupation):
 
                 i += 1
 
+                i2_control = f"{self.run_loc}{el}{i}/init_2/control.in"
+
                 # Create new directory for init_2 calc
                 os.makedirs(f"{self.run_loc}{el}{i}/init_2", exist_ok=True)
-                shutil.copyfile(
-                    f"{self.run_loc}ground/control.in.new",
-                    f"{self.run_loc}{el}{i}/init_2/control.in",
-                )
+                shutil.copyfile(self.new_control, i2_control)
                 shutil.copyfile(
                     f"{self.run_loc}{el}{i}/init_1/geometry.in",
                     f"{self.run_loc}{el}{i}/init_2/geometry.in",
                 )
 
-                control = f"{self.run_loc}{el}{i}/init_2/control.in"
-
                 # Change control file
-                control_content = self.change_control_keywords(self.control, opts)
+                control_content = self.change_control_keywords(i2_control, opts)
 
                 # Add partial charge to the control file
                 _, _, _, control_content = self.add_partial_charge(
@@ -441,7 +434,7 @@ class Projector(ForceOccupation):
                     opts["charge"] - 1,
                 )
 
-                with open(control, "w") as write_control:
+                with open(i2_control, "w") as write_control:
                     write_control.writelines(control_content)
 
         print("init_2 files written successfully")
@@ -471,7 +464,7 @@ class Projector(ForceOccupation):
             ks_method = "parallel"
 
         # Loop over each element to constrain
-        for el in self.constr_atoms:
+        for el in self.element_symbols:
             # Loop over each individual atom to constrain
             for i in range(len(self.atom_specifier)):
                 opts = {
@@ -492,18 +485,15 @@ class Projector(ForceOccupation):
 
                 i += 1
 
+                h_control = f"{self.run_loc}{el}{i}/hole/control.in"
+
                 # Create new directory for hole calc
                 os.makedirs(f"{self.run_loc}{el}{i}/hole", exist_ok=True)
                 shutil.copyfile(
                     f"{self.run_loc}{el}{i}/init_1/geometry.in",
                     f"{self.run_loc}{el}{i}/hole/geometry.in",
                 )
-                shutil.copyfile(
-                    f"{self.run_loc}{el}{i}/init_1/control.in",
-                    f"{self.run_loc}{el}{i}/hole/control.in",
-                )
-
-                control = f"{self.run_loc}{el}{i}/hole/control.in"
+                shutil.copyfile(self.new_control, h_control)
 
                 # TODO: delete this if necessary
                 # with open(control, "r") as read_control:
@@ -514,7 +504,7 @@ class Projector(ForceOccupation):
                 # control_content[self.v_index] = self.valence
 
                 # Change control file
-                control_content = self.change_control_keywords(self.control, opts)
+                control_content = self.change_control_keywords(h_control, opts)
 
                 # Remove partial charge from the control file
                 _, _, _, control_content = self.add_partial_charge(
@@ -522,7 +512,7 @@ class Projector(ForceOccupation):
                 )
 
                 # Write the data to the file
-                with open(control, "w") as write_control:
+                with open(h_control, "w") as write_control:
                     write_control.writelines(control_content)
 
         print("hole files written successfully")
@@ -531,9 +521,11 @@ class Projector(ForceOccupation):
 class Basis(ForceOccupation):
     """Create input files for basis calculations."""
 
-    def setup_basis(
-        self, target_atom, num_atom, occ_no, ks_max, occ_type, run_loc, ad_cont_opts
-    ):
+    def __init__(self, parent_instance):
+        """Inherit all the variables from an instance of the parent class"""
+        vars(self).update(vars(parent_instance))
+
+    def setup_basis(self, atom_index, spin, n_qn, l_qn, m_qn, occ_no, ks_max, occ_type):
         """Write new directories and control files for basis calculations."""
 
         # The new basis method should utilise ks method parallel
@@ -543,41 +535,43 @@ class Basis(ForceOccupation):
         if occ_type == "deltascf_basis":
             ks_method = "parallel"
 
-        # Default control file options
-        opts = {
-            "xc": "pbe",
-            "spin": "collinear",
-            "default_initial_moment": 0,
-            "charge": 1.0,
-            occ_type: f"1 1 atomic 2 1 1 {occ_no} {ks_max}",
-            "KS_method": ks_method,
-        }
-
-        # Allow users to modify and add keywords
-        opts = self.mod_keywords(ad_cont_opts, opts)
-
         # Iterate over each constrained atom
-        for i in range(num_atom):
-            i += 1
+        for el in self.element_symbols:
+            # Loop over each individual atom to constrain
+            for i in range(len(self.atom_specifier)):
+                # Default control file options
+                opts = {
+                    "xc": "pbe",
+                    "spin": "collinear",
+                    "default_initial_moment": 0,
+                    "charge": 1.0,
+                    occ_type: f"{atom_index} {spin} atomic {n_qn} {l_qn} {m_qn} {occ_no} {ks_max}",
+                    "KS_method": ks_method,
+                }
 
-            # Create new directories and .in files for each constrained atom
-            os.makedirs(f"{run_loc}/{target_atom}{i}/hole/", exist_ok=True)
-            shutil.copyfile(
-                f"{run_loc}/ground/control.in",
-                f"{run_loc}/{target_atom}{i}/hole/control.in",
-            )
-            shutil.copyfile(
-                f"{run_loc}/ground/geometry.in",
-                f"{run_loc}/{target_atom}{i}/hole/geometry.in",
-            )
+                # Allow users to modify and add keywords
+                opts = self.mod_keywords(self.ad_cont_opts, opts)
 
-            control = f"{run_loc}/{target_atom}{i}/hole/control.in"
+                i += 1
 
-            # Change control file
-            content = self.change_control_keywords(control, opts)
+                control = f"{self.run_loc}/{el}{i}/hole/control.in"
 
-            # Write the data to the file
-            with open(control, "w") as write_control:
-                write_control.writelines(content)
+                # Create new directories and .in files for each constrained atom
+                os.makedirs(f"{self.run_loc}/{el}{i}/hole/", exist_ok=True)
+                shutil.copyfile(
+                    f"{self.run_loc}/ground/control.in",
+                    control,
+                )
+                shutil.copyfile(
+                    f"{self.run_loc}/ground/geometry.in",
+                    f"{self.run_loc}/{el}{i}/hole/geometry.in",
+                )
+
+                # Change control file
+                content = self.change_control_keywords(control, opts)
+
+                # Write the data to the file
+                with open(control, "w") as write_control:
+                    write_control.writelines(content)
 
         print("files and directories written successfully")
