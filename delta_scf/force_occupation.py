@@ -27,7 +27,7 @@ class ForceOccupation:
         self.element_symbols = element_symbols
         self.run_loc = run_loc
         self.geometry = geometry
-        self.control = control
+        self.control = control  # TODO: Check if this needs to be a class variable
         self.ad_cont_opts = ad_cont_opts
 
         self.atom_specifier = []
@@ -145,8 +145,6 @@ class ForceOccupation:
         output = list(s_config.split(".").pop(-1))
         self.valence = f"    valence      {output[0]}  {output[1]}   {output[2]}.1\n"
 
-        return self.atom_index, self.valence
-
     @staticmethod
     def mod_keywords(ad_cont_opts, opts):
         """Allow users to modify and add keywords"""
@@ -212,13 +210,13 @@ class ForceOccupation:
         return content
 
     @staticmethod
-    def add_partial_charge(content, target_atom, at_num, atom_valence, charge):
+    def add_partial_charge(content, target_atom, at_num, atom_valence, partial_charge):
         """Add a partial charge to a basis set in a control.in file."""
 
         # Ensure returned variables are bound
-        n_index = 0
+        nuclear_index = 0
         valence_index = 0
-        nucleus = None
+        nucleus = ""
 
         for j, line in enumerate(content):
             spl = line.split()
@@ -226,15 +224,21 @@ class ForceOccupation:
             if target_atom + "1" in spl:
                 # Add to nucleus
                 if f"    nucleus             {at_num}\n" in content[j:]:
-                    n_index = (
+                    nuclear_index = (
                         content[j:].index(f"    nucleus             {at_num}\n") + j
                     )
-                    nucleus = content[n_index]  # save for hole
-                    content[n_index] = f"    nucleus             {at_num + charge}\n"
+                    nucleus = content[nuclear_index]  # save for hole
+                    content[
+                        nuclear_index
+                    ] = f"    nucleus             {at_num + partial_charge}\n"
                 elif f"    nucleus      {at_num}\n" in content[j:]:
-                    n_index = content[j:].index(f"    nucleus      {at_num}\n") + j
-                    nucleus = content[n_index]  # save for hole
-                    content[n_index] = f"    nucleus      {at_num + charge}\n"
+                    nuclear_index = (
+                        content[j:].index(f"    nucleus      {at_num}\n") + j
+                    )
+                    nucleus = content[nuclear_index]  # save for hole
+                    content[
+                        nuclear_index
+                    ] = f"    nucleus      {at_num + partial_charge}\n"
 
                 # Add to valence orbital
                 if "#     ion occupancy\n" in content[j:]:
@@ -264,17 +268,17 @@ class ForceOccupation:
 
                     # Find the orbital with highest principle and azimuthal qn
                     highest_n = np.amax(principle_qns)
-                    highest_n_index = np.where(principle_qns == highest_n)
+                    highest_nuclear_index = np.where(principle_qns == highest_n)
 
                     # Check for highest l if 2 orbitals have the same n
-                    if len(highest_n_index[0]) > 1:
+                    if len(highest_nuclear_index[0]) > 1:
                         highest_l = np.amax(azimuthal_qns)
                         highest_l_index = np.where(azimuthal_qns == highest_l)
                         addition_state = np.intersect1d(
-                            highest_n_index, highest_l_index
+                            highest_nuclear_index, highest_l_index
                         )[0]
                     else:
-                        addition_state = highest_n_index[0][0]
+                        addition_state = highest_nuclear_index[0][0]
 
                     # Add the 0.1 electron
                     # valence = content[
@@ -284,7 +288,7 @@ class ForceOccupation:
                     content[valence_index] = atom_valence
                     break
 
-        return n_index, valence_index, nucleus, content
+        return nuclear_index, valence_index, nucleus, content
 
 
 class Projector(ForceOccupation):
@@ -312,7 +316,7 @@ class Projector(ForceOccupation):
         }
 
         # Add or change user-specified keywords to the control file
-        self.mod_keywords(self.ad_cont_opts, opts)
+        opts = self.mod_keywords(self.ad_cont_opts, opts)
 
         # Create a new intermediate file and write basis sets to it
         shutil.copyfile(self.control, f"{self.run_loc}ground/control.in.new")
@@ -408,7 +412,7 @@ class Projector(ForceOccupation):
                 }
 
                 # Add or change user-specified keywords to the control file
-                self.mod_keywords(self.ad_cont_opts, opts)
+                opts = self.mod_keywords(self.ad_cont_opts, opts)
 
                 i += 1
 
@@ -434,186 +438,92 @@ class Projector(ForceOccupation):
                     el,
                     self.elements[el]["number"],
                     self.valence,
-                    opts["charge"],
+                    opts["charge"] - 1,
                 )
 
-                with open(control, "w+") as write_control:
+                with open(control, "w") as write_control:
                     write_control.writelines(control_content)
 
         print("init_2 files written successfully")
 
-    @staticmethod
     def setup_hole(
-        calc_path,
-        ks_states,
-        target_atom,
-        num_atom,
-        nucleus,
-        valence,
-        n_index,
-        valence_index,
+        self,
+        ks_start,
+        ks_stop,
+        occ,
+        occ_type,
+        spin,
     ):
-        """Write new hole directories and control files to calculate FOP."""
+        """Write new hole directories and control files for the hole calculation."""
 
-        # occ_type = 'occupation_type         gaussian 0.1\n'
-        # iter_limit = 'sc_iter_limit             20\n'
-        init_iter = "sc_init_iter              75\n"
-        ks_method = "KS_method                serial\n"
-        # mixer = 'mixer                    pulay\n'
-        # charge_mix = 'charge_mix_param          0.02\n'
-        restart = "restart_read_only       restart_file\n"
-        charge = "charge                    1.0\n"
-        fop = f"force_occupation_projector {ks_states[0]} 1 0.0 {ks_states[0]} {ks_states[1]}\n"
-        output_cube = "output                  cube spin_density\n"
-        output_mull = "#output                  mulliken\n"
-        output_hirsh = "#output                  hirshfeld\n"
-
+        # TODO: delete this if necessary
         # Calculate original valence state
-        val_spl = valence.split(".")
-        del val_spl[-1]
-        val_spl.append(".\n")
-        valence = "".join(val_spl)
+        # val_spl = self.valence.split(".")
+        # del val_spl[-1]
+        # val_spl.append(".\n")
+        # self.valence = "".join(val_spl)
 
-        if type(num_atom) == list:
-            loop_iterator = num_atom
-        else:
-            loop_iterator = range(num_atom)
+        # The new basis method should utilise ks method parallel
+        ks_method = ""
+        if occ_type == "force_occupation_basis":
+            ks_method = "serial"
+        if occ_type == "deltascf_basis":
+            ks_method = "parallel"
 
-        for i in loop_iterator:
-            if type(num_atom) != list:
+        # Loop over each element to constrain
+        for el in self.constr_atoms:
+            # Loop over each individual atom to constrain
+            for i in range(len(self.atom_specifier)):
+                opts = {
+                    "xc": "pbe",
+                    "spin": "collinear",
+                    "default_initial_moment": 0,
+                    "charge": 1.0,
+                    "sc_iter_limit": 500,
+                    "sc_init_iter": 75,
+                    occ_type: f"{ks_start + i} {spin} {occ} {ks_start} {ks_stop}",
+                    "KS_method": ks_method,
+                    "restart_read_only": "restart_file",
+                    "output": "cube spin_density",
+                }
+
+                # Add or change user-specified keywords to the control file
+                opts = self.mod_keywords(self.ad_cont_opts, opts)
+
                 i += 1
 
-            os.makedirs(f"{calc_path}{target_atom}{i}/hole", exist_ok=True)
-            shutil.copyfile(
-                f"{calc_path}{target_atom}{i}/init_1/geometry.in",
-                f"{calc_path}{target_atom}{i}/hole/geometry.in",
-            )
-            shutil.copyfile(
-                f"{calc_path}{target_atom}{i}/init_1/control.in",
-                f"{calc_path}{target_atom}{i}/hole/control.in",
-            )
+                # Create new directory for hole calc
+                os.makedirs(f"{self.run_loc}{el}{i}/hole", exist_ok=True)
+                shutil.copyfile(
+                    f"{self.run_loc}{el}{i}/init_1/geometry.in",
+                    f"{self.run_loc}{el}{i}/hole/geometry.in",
+                )
+                shutil.copyfile(
+                    f"{self.run_loc}{el}{i}/init_1/control.in",
+                    f"{self.run_loc}{el}{i}/hole/control.in",
+                )
 
-            control = f"{calc_path}{target_atom}{i}/hole/control.in"
+                control = f"{self.run_loc}{el}{i}/hole/control.in"
 
-            with open(control, "r") as read_control:
-                control_content = read_control.readlines()
+                # TODO: delete this if necessary
+                # with open(control, "r") as read_control:
+                #     control_content = read_control.readlines()
 
-            # Set nuclear and valence orbitals back to integer values
-            control_content[n_index] = nucleus
-            control_content[valence_index] = valence
+                # Set nuclear and valence orbitals back to integer values
+                # control_content[self.n_index] = self.nucleus
+                # control_content[self.v_index] = self.valence
 
-            # Replace specific lines
-            for j, line in enumerate(control_content):
-                spl = line.split()
+                # Change control file
+                control_content = self.change_control_keywords(self.control, opts)
 
-                if len(spl) > 1:
-                    # Change keyword lines
-                    # if 'occupation_type' in spl:
-                    #     control_content[j] = occ_type
-                    # if 'sc_iter_limit' in spl:
-                    #     control_content[j] = iter_limit
-                    if "#sc_init_iter" in spl:
-                        control_content[j] = init_iter
-                    if "#" == spl[0] and "sc_init_iter" == spl[1]:
-                        control_content[j] = init_iter
-                    if "KS_method" in spl:
-                        control_content[j] = ks_method
-                    # if 'mixer' in spl:
-                    #     control_content[j] = mixer
-                    if "restart" in spl or "restart_write_only" in spl:
-                        control_content[j] = restart
-                    if "#force_occupation_projector" == spl[0]:
-                        control_content[j] = fop
-                    if "#" == spl[0] and "force_occupation_projector" == spl[1]:
-                        control_content[j] = fop
-                    if "charge" in spl:
-                        control_content[j] = charge
-                    # if 'charge_mix_param' in spl:
-                    #     control_content[j] = charge_mix
-                    if ["#output", "cube", "spin_density"] == spl or [
-                        "#",
-                        "output",
-                        "cube",
-                        "spin_density",
-                    ] == spl:
-                        control_content[j] = output_cube
-                    if ["#output", "hirshfeld"] == spl or [
-                        "#",
-                        "output",
-                        "hirshfeld",
-                    ] == spl:
-                        control_content[j] = output_hirsh
-                    if ["#output", "mulliken"] == spl or [
-                        "#",
-                        "output",
-                        "mulliken",
-                    ] == spl:
-                        control_content[j] = output_mull
+                # Remove partial charge from the control file
+                _, _, _, control_content = self.add_partial_charge(
+                    control_content, el, self.elements[el]["number"], self.valence, 0
+                )
 
-            # Check if parameters not found
-            # no_occ_type = False
-            no_init_iter = False
-            # no_iter_limit = False
-            # no_mixer = False
-            no_restart = False
-            no_fop = False
-            no_charge = False
-            # no_charge_mix = False
-            no_output_cube = False
-            # no_output_mull = False
-            # no_output_hirsh = False
-
-            # TODO finish adding mixer stuff
-            # if occ_type not in control_content:
-            #     no_occ_type = True
-            # if iter_limit not in control_content:
-            #     no_iter_limit = True
-            if init_iter not in control_content:
-                no_init_iter = True
-            # if mixer not in control_content:
-            #     no_mixer = True
-            if restart not in control_content:
-                no_restart = True
-            if fop not in control_content:
-                no_fop = True
-            if charge not in control_content:
-                no_charge = True
-            # if charge_mix not in control_content:
-            #     no_charge_mix = True
-            if output_cube not in control_content:
-                no_output_cube = True
-            # if output_mull not in control_content:
-            #     no_output_mull = True
-            # if output_hirsh not in control_content:
-            #     no_output_hirsh = True
-
-            # Write the data to the file
-            with open(control, "w+") as write_control:
-                write_control.writelines(control_content)
-
-                # Append parameters to end of file if not found
-                # if no_occ_type is True:
-                #     write_control.write(occ_type)
-                # if no_iter_limit is True:
-                #     write_control.write(iter_limit)
-                if no_init_iter is True:
-                    write_control.write(init_iter)
-                # if no_mixer is True:
-                #     write_control.write(mixer)
-                if no_restart is True:
-                    write_control.write(restart)
-                if no_fop is True:
-                    write_control.write(fop)
-                if no_charge is True:
-                    write_control.write(charge)
-                # if no_charge_mix is True:
-                #     write_control.write(charge_mix)
-                if no_output_cube is True:
-                    write_control.write(output_cube)
-                # if no_output_mull is True:
-                #     write_control.write(output_mull)
-                # if no_output_hirsh is True:
-                #     write_control.write(output_hirsh)
+                # Write the data to the file
+                with open(control, "w") as write_control:
+                    write_control.writelines(control_content)
 
         print("hole files written successfully")
 
@@ -641,7 +551,6 @@ class Basis(ForceOccupation):
             "charge": 1.0,
             occ_type: f"1 1 atomic 2 1 1 {occ_no} {ks_max}",
             "KS_method": ks_method,
-            # "output": "cube spin_density",
         }
 
         # Allow users to modify and add keywords
@@ -671,4 +580,4 @@ class Basis(ForceOccupation):
             with open(control, "w") as write_control:
                 write_control.writelines(content)
 
-        print("Files and directories written successfully")
+        print("files and directories written successfully")

@@ -383,7 +383,7 @@ def process(ctx):
     "--ks_range",
     nargs=2,
     type=click.IntRange(1),
-    help="range of Kohn-Sham states to constrain",
+    help="range of Kohn-Sham states to constrain taken with 2 arguments",
 )
 @click.pass_context
 def projector(ctx, run_type, occ_type, basis_set, pbc, ks_range):
@@ -400,6 +400,7 @@ def projector(ctx, run_type, occ_type, basis_set, pbc, ks_range):
     hpc = ctx.obj["HPC"]
     constr_atoms = ctx.obj["CONSTR_ATOM"]
     spec_at_constr = ctx.obj["SPEC_AT_CONSTR"]
+    spec_mol = ctx.obj["SPEC_MOL"]
     n_atoms = ctx.obj["N_ATOMS"]
     species = ctx.obj["SPECIES"]
     occ = ctx.obj["OCC"]
@@ -464,36 +465,24 @@ def projector(ctx, run_type, occ_type, basis_set, pbc, ks_range):
         # TODO allow this for multiple constrained atoms
         # NB: atom_index here is atomic number
         for atom in element_symbols:
-            _, _ = fo.get_electronic_structure(atom)
+            fo.get_electronic_structure(atom)
 
         # Setup files required for the initialisation and hole calculations
         proj = Projector(fo)
         proj.setup_init_1(basis_set, species)
         proj.setup_init_2(ks_range[0], ks_range[1], occ, occ_type, spin)
-
-        Projector.setup_hole(
-            "./run_dir/",
-            [i for i in range(ks_start + 1, ks_stop + 1)],
-            ctx.obj["CONSTR_ATOM"],
-            ctx.obj["N_ATOMS"],
-            nucleus,
-            valence,
-            n_index,
-            valence_index,
-        )
+        proj.setup_hole(ks_range[0], ks_range[1], occ, occ_type, spin)
 
     spec_run_info = ""
 
     if run_type == "init_2":
         # Check required arguments are given in main()
-        mu.check_args(list_constr_atoms, n_atoms, occ_type, ks_start, ks_stop)
+        mu.check_args(list_constr_atoms, n_atoms, occ_type, ks_range[0], ks_range[1])
 
         # Catch for if init_1 hasn't been run
-        for i in range(1, ctx.obj["N_ATOMS"] + 1):
+        for i in range(1, n_atoms + 1):
             if (
-                os.path.isfile(
-                    f"run_dir/{ctx.obj['CONSTR_ATOM']}{i}/init_1/restart_file"
-                )
+                os.path.isfile(f"run_dir/{constr_atoms}{i}/init_1/restart_file")
                 is False
             ):
                 print(
@@ -501,11 +490,11 @@ def projector(ctx, run_type, occ_type, basis_set, pbc, ks_range):
                 )
                 raise FileNotFoundError
 
-        # Move the restart files to init_1
-        for i in range(1, ctx.obj["N_ATOMS"] + 1):
-            os.path.isfile(f"run_dir/{ctx.obj['CONSTR_ATOM']}{i}/init_1/restart_file")
+        # Copy the restart files to init_1
+        for i in range(1, n_atoms + 1):
+            os.path.isfile(f"run_dir/{constr_atoms}{i}/init_1/restart_file")
             os.system(
-                f"cp run_dir/{ctx.obj['CONSTR_ATOM']}{i}/init_1/restart* run_dir/{ctx.obj['CONSTR_ATOM']}{i}/init_2/"
+                f"cp run_dir/{constr_atoms}{i}/init_1/restart* run_dir/{constr_atoms}{i}/init_2/"
             )
 
         # Prevent SCF not converged errors from printing
@@ -513,27 +502,21 @@ def projector(ctx, run_type, occ_type, basis_set, pbc, ks_range):
 
     if run_type == "hole":
         # Check required arguments are given in main()
-        check_args(ctx.obj["SPEC_MOL"], ctx.obj["CONSTR_ATOM"], ctx.obj["N_ATOMS"])
+        mu.check_args(spec_mol, constr_atoms, n_atoms)
 
         # Add molecule identifier to hole geometry.in
-        with open(
-            f"run_dir/{ctx.obj['CONSTR_ATOM']}1/hole/geometry.in", "r"
-        ) as hole_geom:
+        with open(f"run_dir/{constr_atoms}1/hole/geometry.in", "r") as hole_geom:
             lines = hole_geom.readlines()
 
-        lines.insert(4, f"# {ctx.obj['SPEC_MOL']}\n")
+        lines.insert(4, f"# {spec_mol}\n")
 
-        with open(
-            f"run_dir/{ctx.obj['CONSTR_ATOM']}1/hole/geometry.in", "w"
-        ) as hole_geom:
+        with open(f"run_dir/{constr_atoms}1/hole/geometry.in", "w") as hole_geom:
             hole_geom.writelines(lines)
 
         # Catch for if init_2 hasn't been run
-        for i in range(1, ctx.obj["N_ATOMS"] + 1):
+        for i in range(1, n_atoms + 1):
             if (
-                os.path.isfile(
-                    f"run_dir/{ctx.obj['CONSTR_ATOM']}{i}/init_2/restart_file"
-                )
+                os.path.isfile(f"run_dir/{constr_atoms}{i}/init_2/restart_file")
                 is False
             ):
                 print(
@@ -542,10 +525,10 @@ def projector(ctx, run_type, occ_type, basis_set, pbc, ks_range):
                 raise FileNotFoundError
 
         # Move the restart files to hole
-        for i in range(1, ctx.obj["N_ATOMS"] + 1):
-            os.path.isfile(f"run_dir/{ctx.obj['CONSTR_ATOM']}{i}/init_2/restart_file")
+        for i in range(1, n_atoms + 1):
+            os.path.isfile(f"run_dir/{constr_atoms}{i}/init_2/restart_file")
             os.system(
-                f"cp run_dir/{ctx.obj['CONSTR_ATOM']}{i}/init_2/restart* run_dir/{ctx.obj['CONSTR_ATOM']}{i}/hole/"
+                f"cp run_dir/{constr_atoms}{i}/init_2/restart* run_dir/{constr_atoms}{i}/hole/"
             )
 
         spec_run_info = ""
@@ -553,15 +536,14 @@ def projector(ctx, run_type, occ_type, basis_set, pbc, ks_range):
     # Run the calculation with a nice progress bar if not already run
     if (
         run_type != "ground"
-        and os.path.isfile(f"run_dir/{ctx.obj['CONSTR_ATOM']}1/{run_type}/aims.out")
-        == False
+        and os.path.isfile(f"run_dir/{constr_atoms}1/{run_type}/aims.out") == False
     ):
         with click.progressbar(
             range(1, ctx.obj["N_ATOMS"] + 1), label=f"calculating {run_type}:"
         ) as bar:
             for i in bar:
                 os.system(
-                    f"cd ./run_dir/{ctx.obj['CONSTR_ATOM']}{i}/{run_type} && mpirun -n {ctx.obj['PROCS']} {ctx.obj['BINARY']} > aims.out{spec_run_info}"
+                    f"cd ./run_dir/{constr_atoms}{i}/{run_type} && mpirun -n {nprocs} {binary} > aims.out{spec_run_info}"
                 )
 
         print(f"{run_type} calculations completed successfully")
