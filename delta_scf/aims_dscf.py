@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import glob
 import os
 import sys
 from pathlib import Path
@@ -463,12 +464,12 @@ def projector(ctx, run_type, occ_type, pbc, ks_range, control_opts):
         control_opts,
     )
 
+    # Get atom indices from the ground state geometry file
+    atom_specifier = fo.read_ground_inp(list_constr_atoms, spec_at_constr, ground_geom)
+
     if run_type == "init_1":
         # Check required arguments are given in main()
         mu.check_args(ks_range)
-
-        # Get atom indices from the ground state geometry file
-        fo.read_ground_inp(list_constr_atoms, spec_at_constr, ground_geom)
 
         # TODO allow this for multiple constrained atoms
         # NB: atom_index here is atomic number
@@ -484,13 +485,17 @@ def projector(ctx, run_type, occ_type, pbc, ks_range, control_opts):
     spec_run_info = ""
 
     if run_type == "init_2":
+        # TODO
         # Check required arguments are given
-        mu.check_args(n_atoms, ks_range)
+        # mu.check_args(n_atoms, ks_range)
 
         # Catch for if init_1 hasn't been run
-        for i in range(1, n_atoms + 1):
+        for i in range(len(atom_specifier)):
+            i += 1
             if (
-                os.path.isfile(f"{run_loc}/{constr_atoms}{i}/init_1/restart_file")
+                os.path.isfile(
+                    glob.glob(f"{run_loc}/{constr_atoms}{i}/init_1/*restart*")[0]
+                )
                 is False
             ):
                 print(
@@ -498,19 +503,21 @@ def projector(ctx, run_type, occ_type, pbc, ks_range, control_opts):
                 )
                 raise FileNotFoundError
 
-        # Copy the restart files to init_2 from init_1
-        for i in range(1, n_atoms + 1):
-            os.path.isfile(f"{run_loc}/{constr_atoms}{i}/init_1/restart_file")
+            # Copy the restart files to init_2 from init_1
+            os.path.isfile(
+                glob.glob(f"{run_loc}/{constr_atoms}{i}/init_1/*restart*")[0]
+            )
             os.system(
-                f"cp {run_loc}/{constr_atoms}{i}/init_1/restart* {run_loc}/{constr_atoms}{i}/init_2/"
+                f"cp {run_loc}/{constr_atoms}{i}/init_1/*restart* {run_loc}/{constr_atoms}{i}/init_2/"
             )
 
         # Prevent SCF not converged errors from printing
         spec_run_info = " 2>/dev/null"
 
     if run_type == "hole":
+        # TODO
         # Check required arguments are given in main()
-        mu.check_args(spec_mol, constr_atoms, n_atoms)
+        # mu.check_args(spec_mol, constr_atoms, n_atoms)
 
         # Add molecule identifier to hole geometry.in
         with open(f"{run_loc}/{constr_atoms}1/hole/geometry.in", "r") as hole_geom:
@@ -522,9 +529,12 @@ def projector(ctx, run_type, occ_type, pbc, ks_range, control_opts):
             hole_geom.writelines(lines)
 
         # Catch for if init_2 hasn't been run
-        for i in range(1, n_atoms + 1):
+        for i in range(len(atom_specifier)):
+            i += 1
             if (
-                os.path.isfile(f"{run_loc}/{constr_atoms}{i}/init_2/restart_file")
+                os.path.isfile(
+                    glob.glob(f"{run_loc}/{constr_atoms}{i}/init_2/*restart*")[0]
+                )
                 is False
             ):
                 print(
@@ -532,11 +542,11 @@ def projector(ctx, run_type, occ_type, pbc, ks_range, control_opts):
                 )
                 raise FileNotFoundError
 
-        # Copy the restart files to hole from init_2
-        for i in range(1, n_atoms + 1):
-            os.path.isfile(f"{run_loc}/{constr_atoms}{i}/init_2/restart_file")
+            # Copy the restart files to hole from init_2
+            i += 1
+            os.path.isfile(f"{run_loc}/{constr_atoms}{i}/init_2/*restart*")
             os.system(
-                f"cp {run_loc}/{constr_atoms}{i}/init_2/restart* {run_loc}/{constr_atoms}{i}/hole/"
+                f"cp {run_loc}/{constr_atoms}{i}/init_2/*restart* {run_loc}/{constr_atoms}{i}/hole/"
             )
 
         spec_run_info = ""
@@ -548,9 +558,10 @@ def projector(ctx, run_type, occ_type, pbc, ks_range, control_opts):
         and not hpc
     ):
         with click.progressbar(
-            range(1, n_atoms + 1), label=f"calculating {run_type}:"
+            range(len(atom_specifier)), label=f"calculating {run_type}:"
         ) as bar:
             for i in bar:
+                i += 1
                 os.system(
                     f"cd ./{run_loc}/{constr_atoms}{i}/{run_type} && mpirun -n {nprocs} "
                     f"{binary} > aims.out{spec_run_info}"
