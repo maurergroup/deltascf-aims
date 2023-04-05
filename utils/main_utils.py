@@ -1,5 +1,6 @@
 """Utilities which are used in aims_dscf"""
 
+import glob
 import os
 import sys
 
@@ -8,6 +9,7 @@ from ase.calculators.aims import Aims
 from ase.data.pubchem import pubchem_atoms_search
 from ase.io import write
 from click import MissingParameter
+from delta_scf.force_occupation import ForceOccupation as fo
 
 
 class MainUtils:
@@ -82,9 +84,23 @@ class MainUtils:
                 sys.exit(1)
 
     @staticmethod
+    def convert_opts_to_dict(opts):
+        """Convert the control options from a tuple to a dictionary"""
+
+        opts_dict = {}
+
+        for opt in opts:
+            spl = opt.split(sep="=")
+
+            opts_dict[spl[0]] = spl[1]
+
+        return opts_dict
+
+    @staticmethod
     def create_calc(procs, binary, species):
         """Create an ASE calculator object"""
 
+        # Choose some sane defaults
         aims_calc = Aims(
             xc="pbe",
             spin="collinear",
@@ -151,8 +167,45 @@ class MainUtils:
         print(*sd_eigs, sep="")
 
     @staticmethod
+    def write_control(run_loc, control_opts, calc_type, atoms, int_grid, defaults):
+        """Write a control.in file"""
+
+        if calc_type == "ground":
+
+            # Firstly create the control file
+            os.system(f"touch {run_loc}/ground/control.in")
+
+            # Use the static method from ForceOccupation
+            lines = fo.change_control_keywords(
+                f"{run_loc}/ground/control.in", control_opts
+            )
+
+            with open(f"{run_loc}/ground/control.in", "w") as control:
+                control.writelines(lines)
+
+            # Then add the basis set
+            elements = list(dict.fromkeys(atoms.get_chemical_symbols()))
+
+            for el in elements:
+                basis_set = glob.glob(
+                    f"{defaults}defaults_2020/{int_grid}/*{el}_default"
+                )[0]
+                os.system(f"cat {basis_set} >> {run_loc}/ground/control.in")
+
+    @staticmethod
     def ground_calc(
-        run_loc, geom_inp, control_inp, atoms, ase, control_opts, nprocs, binary, hpc
+        run_loc,
+        geom_inp,
+        control_inp,
+        atoms,
+        basis_set,
+        species,
+        calc,
+        ase,
+        control_opts,
+        nprocs,
+        binary,
+        hpc,
     ):
         """Run a ground state calculation"""
 
@@ -172,28 +225,41 @@ class MainUtils:
 
         if os.path.isfile(f"{run_loc}/ground/aims.out") == False:
             # Run the ground state calculation
-            print("running calculation...")
 
             if ase:
-                if len(control_opts) > 0:
-                    print(
-                        "WARNING: it is required to use '--control_input' and "
-                        "'--geometry_input' instead of supplying additional control "
-                        "options for the ground calculations"
+                # Change the defaults if any are specified by the user
+                # Update with all control options from the calculator
+                calc.set(**control_opts)
+                control_opts = calc.parameters
+
+                if not hpc:
+                    print("running calculation...")
+                    atoms.get_potential_energy()
+                    # Move files to ground directory
+                    os.system(
+                        f"mv geometry.in control.in aims.out parameters.ase {run_loc}/ground/"
                     )
 
-                atoms.get_potential_energy()
-                # Move files to ground directory
-                os.system(
-                    f"mv geometry.in control.in aims.out parameters.ase {run_loc}/ground/"
-                )
+                    print("ground calculation completed successfully\n")
 
-            else:  # Don't use ASE
+                else:
+                    # Prevent species dir from being written
+                    control_opts.pop("species_dir")
+
+                    print("writing geometry.in file...")
+                    write(f"{run_loc}ground/geometry.in", images=atoms, format="aims")
+
+                    print("writing control.in file...")
+                    MainUtils.write_control(
+                        run_loc, control_opts, "ground", atoms, basis_set, species
+                    )
+
+            elif not hpc:  # Don't use ASE
+                print("running calculation...")
                 os.system(
                     f"cd {run_loc}/ground && mpirun -n {nprocs} {binary} > aims.out"
                 )
-
-            print("ground calculation completed successfully\n")
+                print("ground calculation completed successfully\n")
 
             # Print the KS states from aims.out so it is easier to specify the
             # KS states for the hole calculation

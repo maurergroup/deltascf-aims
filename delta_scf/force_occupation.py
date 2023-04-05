@@ -81,7 +81,7 @@ class ForceOccupation:
         """Get valence electronic structure of target atom."""
         # Adapted from scipython.com question P2.5.12
 
-        self.atom_index = self.elements[str(atom)]["number"]
+        self.atom_index = self.elements.index(str(atom)) + 1
 
         # Letters identifying subshells
         l_letter = ["s", "p", "d", "f", "g"]
@@ -147,29 +147,9 @@ class ForceOccupation:
     def mod_keywords(ad_cont_opts, opts):
         """Allow users to modify and add keywords"""
 
-        for ad_opt in list(ad_cont_opts):
-            spl_key = ad_opt.split(" ", 1)[0]
-
-            # Split the keyword and its value
-            try:
-                spl_val = ad_opt.split(" ", 1)[1]
-            except IndexError:
-                spl_val = None
-
-            # Check if the keyword is already in the input file
-            for opt in list(opts):
-                if spl_key == opt:
-                    if spl_val is not None:
-                        opts[opt] = spl_val
-                    else:
-                        del opts[opt]
-
-            # Add new keywords
-            if spl_key not in list(opts):
-                if spl_val is not None:
-                    opts.update({spl_key: spl_val})
-                else:
-                    opts.update({spl_key: ""})
+        # Check if the keyword is already in the input file
+        for key in list(ad_cont_opts.keys()):
+            opts.update({key: ad_cont_opts[key]})
 
         return opts
 
@@ -279,9 +259,6 @@ class ForceOccupation:
                         addition_state = highest_nuclear_index[0][0]
 
                     # Add the 0.1 electron
-                    # valence = content[
-                    #     vbs_index + addition_state + 1
-                    # ]  # save for write hole file
                     valence_index = vbs_index + addition_state + 1
                     content[valence_index] = atom_valence
                     break
@@ -320,15 +297,36 @@ class Projector(ForceOccupation):
             # Find species defaults location from location of binary
             basis_set = glob.glob(f"{defaults}/defaults_2020/{basis_set}/*{el}_default")
             bash_add_basis = f"cat {basis_set[0]}"
+
             # Create a new intermediate control file
             new_control = open(self.new_control, "a")
             subprocess.run(bash_add_basis.split(), check=True, stdout=new_control)
+
+            # Change basis set label for core hole atom
+            with open(self.new_control, "r") as read_control:
+                new_basis_content = read_control.readlines()
+
+            found_target_atom = False
+
+            for j, line in enumerate(new_basis_content):
+                spl = line.split()
+
+                if len(spl) > 1:
+                    if "species" == spl[0] and el == spl[1]:
+                        if found_target_atom is False:
+                            new_basis_content[j] = f"  species        {el}1\n"
+                            found_target_atom = True
+
+            # Write it to intermediate control file
+            with open(self.new_control, "w") as write_control:
+                write_control.writelines(new_basis_content)
 
             # Loop over each individual atom to constrain
             for i in range(len(self.atom_specifier)):
                 i += 1
 
                 i1_control = f"{self.run_loc}{el}{i}/init_1/control.in"
+                i1_geometry = f"{self.run_loc}{el}{i}/init_1/geometry.in"
 
                 # Create new directory and control file for init_1 calc
                 os.makedirs(f"{self.run_loc}{el}{i}/init_1", exist_ok=True)
@@ -337,13 +335,10 @@ class Projector(ForceOccupation):
                     i1_control,
                 )
                 # Create new geometry file for init_1 calc
-                shutil.copyfile(
-                    f"{self.run_loc}ground/geometry.in",
-                    f"{self.run_loc}{el}{i}/init_1/geometry.in",
-                )
+                shutil.copyfile(f"{self.run_loc}ground/geometry.in", i1_geometry)
 
                 # Change geometry file
-                with open(self.geometry, "r") as read_geom:
+                with open(i1_geometry, "r") as read_geom:
                     geom_content = read_geom.readlines()
 
                 # Change core hole atom to {atom}{num}
@@ -358,7 +353,7 @@ class Projector(ForceOccupation):
 
                         atom_counter += 1
 
-                with open(self.geometry, "w") as write_geom:
+                with open(i1_geometry, "w") as write_geom:
                     write_geom.writelines(geom_content)
 
                 # Change control file
@@ -372,7 +367,7 @@ class Projector(ForceOccupation):
                 ) = self.add_partial_charge(
                     control_content,
                     el,
-                    self.elements[el]["number"],
+                    self.elements.index(el) + 1,
                     self.valence,
                     opts["charge"],
                 )
@@ -392,6 +387,12 @@ class Projector(ForceOccupation):
     ):
         """Write new directories and control files for the second initialisation calculation."""
 
+        ks_method = ""
+        if occ_type == "force_occupation_projector":
+            ks_method = "serial"
+        if occ_type == "deltascf_projector":
+            ks_method = "parallel"
+
         # Loop over each element to constrain
         for el in self.element_symbols:
             # Loop over each individual atom to constrain
@@ -403,6 +404,7 @@ class Projector(ForceOccupation):
                     "charge": 1.1,
                     "sc_iter_limit": 1,
                     occ_type: f"{ks_start + i} {spin} {occ} {ks_start} {ks_stop}",
+                    "KS_method": ks_method,
                     "restart": "restart_file",
                     "restart_save_iterations": 20,
                 }
@@ -429,7 +431,7 @@ class Projector(ForceOccupation):
                 _, _, _, control_content = self.add_partial_charge(
                     control_content,
                     el,
-                    self.elements[el]["number"],
+                    self.elements.index(el) + 1,
                     self.valence,
                     opts["charge"] - 1,
                 )
@@ -449,18 +451,17 @@ class Projector(ForceOccupation):
     ):
         """Write new hole directories and control files for the hole calculation."""
 
-        # TODO: delete this if necessary
         # Calculate original valence state
-        # val_spl = self.valence.split(".")
-        # del val_spl[-1]
-        # val_spl.append(".\n")
-        # self.valence = "".join(val_spl)
+        val_spl = self.valence.split(".")
+        del val_spl[-1]
+        val_spl.append(".\n")
+        self.valence = "".join(val_spl)
 
         # The new basis method should utilise ks method parallel
         ks_method = ""
-        if occ_type == "force_occupation_basis":
+        if occ_type == "force_occupation_projector":
             ks_method = "serial"
-        if occ_type == "deltascf_basis":
+        if occ_type == "deltascf_projector":
             ks_method = "parallel"
 
         # Loop over each element to constrain
@@ -485,6 +486,7 @@ class Projector(ForceOccupation):
 
                 i += 1
 
+                # Location of the hole control file
                 h_control = f"{self.run_loc}{el}{i}/hole/control.in"
 
                 # Create new directory for hole calc
@@ -495,20 +497,19 @@ class Projector(ForceOccupation):
                 )
                 shutil.copyfile(self.new_control, h_control)
 
-                # TODO: delete this if necessary
-                # with open(control, "r") as read_control:
-                #     control_content = read_control.readlines()
+                with open(h_control, "r") as read_control:
+                    control_content = read_control.readlines()
 
                 # Set nuclear and valence orbitals back to integer values
-                # control_content[self.n_index] = self.nucleus
-                # control_content[self.v_index] = self.valence
+                control_content[self.n_index] = self.nucleus
+                control_content[self.v_index] = self.valence
 
                 # Change control file
                 control_content = self.change_control_keywords(h_control, opts)
 
                 # Remove partial charge from the control file
                 _, _, _, control_content = self.add_partial_charge(
-                    control_content, el, self.elements[el]["number"], self.valence, 0
+                    control_content, el, self.elements.index(el) + 1, self.valence, 0
                 )
 
                 # Write the data to the file

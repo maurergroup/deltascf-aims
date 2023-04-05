@@ -50,7 +50,7 @@ from delta_scf.plot import Plot
     help="specify a custom control.in instead of automatically generating one",
 )
 @click.option(
-    "-b",
+    "-y",
     "--binary",
     cls=me,
     mutually_exclusive=["hpc"],
@@ -108,6 +108,14 @@ from delta_scf.plot import Plot
     show_default=True,
     help="number of atoms to constrain",
 )
+@click.option(
+    "-b",
+    "--basis_set",
+    default="tight",
+    show_default=True,
+    type=click.Choice(["light", "intermediate", "tight", "really_tight"]),
+    help="the basis set to use for the calculation",
+)
 @click.option("-g", "--graph", is_flag=True, help="print out the simulated XPS spectra")
 @click.option(
     "--graph_min_percent",
@@ -142,6 +150,7 @@ def main(
     occupation,
     spin,
     n_atoms,
+    basis_set,
     graph,
     graph_min_percent,
     nprocs,
@@ -167,17 +176,6 @@ def main(
 
     # Pass global options to subcommands
     ctx.ensure_object(dict)
-
-    # Ensure control.in and geometry.in files are given if on HPC
-    if hpc:
-        if not geometry_input:
-            raise click.MissingParameter(
-                param_hint="'--geometry_input'", param_type="option"
-            )
-        if not control_input:
-            raise click.MissingParameter(
-                param_hint="'--control_input'", param_type="option"
-            )
 
     # A geometry file must be given if specific atom indices are to be constrained
     if len(spec_at_constr) > 0:
@@ -285,6 +283,7 @@ def main(
         ctx.obj["OCC"] = occupation
         ctx.obj["SPIN"] = spin
         ctx.obj["N_ATOMS"] = n_atoms
+        ctx.obj["BASIS_SET"] = basis_set
         ctx.obj["GRAPH"] = graph
         ctx.obj["GMP"] = graph_min_percent
         ctx.obj["NPROCS"] = nprocs
@@ -370,14 +369,6 @@ def process(ctx):
     help="select whether the old or new occupation routine is used",
 )
 @click.option(
-    "-s",
-    "--basis_set",
-    default="tight",
-    show_default=True,
-    type=click.Choice(["light", "intermediate", "tight", "really_tight"]),
-    help="the basis set to use for the calculation",
-)
-@click.option(
     "-p", "--pbc", is_flag=True, help="create a cell with periodic boundary conditions"
 )
 @click.option(
@@ -392,16 +383,18 @@ def process(ctx):
     "--control_opts",
     multiple=True,
     type=str,
-    help="provide additional options to be used in 'control.in'",
+    help="provide additional options to be used in 'control.in' in a key=value format",
 )
 @click.pass_context
-def projector(ctx, run_type, occ_type, basis_set, pbc, ks_range, control_opts):
+def projector(ctx, run_type, occ_type, pbc, ks_range, control_opts):
     """Force occupation of the Kohn-Sham states."""
 
     run_loc = ctx.obj["RUN_LOC"]
     geom_inp = ctx.obj["GEOM_INP"]
     control_inp = ctx.obj["CONTROL_INP"]
     atoms = ctx.obj["ATOMS"]
+    calc = ctx.obj["CALC"]
+    basis_set = ctx.obj["BASIS_SET"]
     ase = ctx.obj["ASE"]
     nprocs = ctx.obj["NPROCS"]
     binary = ctx.obj["BINARY"]
@@ -417,15 +410,26 @@ def projector(ctx, run_type, occ_type, basis_set, pbc, ks_range, control_opts):
     # Used later to redirect STDERR to /dev/null to prevent printing not converged errors
     spec_run_info = None
 
+    # Convert control options to a dictionary
+    control_opts = mu.convert_opts_to_dict(control_opts)
+
     if pbc == True:
         atoms.set_pbc(True)
 
     if run_type == "ground":
+
+        if len(control_opts) < 1:
+            print("\nWARNING: no control options provided, using default options")
+            print("these can be found in the 'control.in' file")
+
         mu.ground_calc(
             run_loc,
             geom_inp,
             control_inp,
             atoms,
+            basis_set,
+            species,
+            calc,
             ase,
             control_opts,
             nprocs,
@@ -436,7 +440,7 @@ def projector(ctx, run_type, occ_type, basis_set, pbc, ks_range, control_opts):
         # Ground must be run separately to hole calculations
         return
 
-    else:
+    else:  # run_type != ground
         ground_geom = f"{run_loc}/ground/geometry.in"
         ground_control = f"{run_loc}/ground/control.in"
 
@@ -486,7 +490,7 @@ def projector(ctx, run_type, occ_type, basis_set, pbc, ks_range, control_opts):
         # Catch for if init_1 hasn't been run
         for i in range(1, n_atoms + 1):
             if (
-                os.path.isfile(f"run_dir/{constr_atoms}{i}/init_1/restart_file")
+                os.path.isfile(f"{run_loc}/{constr_atoms}{i}/init_1/restart_file")
                 is False
             ):
                 print(
@@ -494,11 +498,11 @@ def projector(ctx, run_type, occ_type, basis_set, pbc, ks_range, control_opts):
                 )
                 raise FileNotFoundError
 
-        # Copy the restart files to init_1
+        # Copy the restart files to init_2 from init_1
         for i in range(1, n_atoms + 1):
-            os.path.isfile(f"run_dir/{constr_atoms}{i}/init_1/restart_file")
+            os.path.isfile(f"{run_loc}/{constr_atoms}{i}/init_1/restart_file")
             os.system(
-                f"cp run_dir/{constr_atoms}{i}/init_1/restart* run_dir/{constr_atoms}{i}/init_2/"
+                f"cp {run_loc}/{constr_atoms}{i}/init_1/restart* {run_loc}/{constr_atoms}{i}/init_2/"
             )
 
         # Prevent SCF not converged errors from printing
@@ -509,18 +513,18 @@ def projector(ctx, run_type, occ_type, basis_set, pbc, ks_range, control_opts):
         mu.check_args(spec_mol, constr_atoms, n_atoms)
 
         # Add molecule identifier to hole geometry.in
-        with open(f"run_dir/{constr_atoms}1/hole/geometry.in", "r") as hole_geom:
+        with open(f"{run_loc}/{constr_atoms}1/hole/geometry.in", "r") as hole_geom:
             lines = hole_geom.readlines()
 
         lines.insert(4, f"# {spec_mol}\n")
 
-        with open(f"run_dir/{constr_atoms}1/hole/geometry.in", "w") as hole_geom:
+        with open(f"{run_loc}/{constr_atoms}1/hole/geometry.in", "w") as hole_geom:
             hole_geom.writelines(lines)
 
         # Catch for if init_2 hasn't been run
         for i in range(1, n_atoms + 1):
             if (
-                os.path.isfile(f"run_dir/{constr_atoms}{i}/init_2/restart_file")
+                os.path.isfile(f"{run_loc}/{constr_atoms}{i}/init_2/restart_file")
                 is False
             ):
                 print(
@@ -528,11 +532,11 @@ def projector(ctx, run_type, occ_type, basis_set, pbc, ks_range, control_opts):
                 )
                 raise FileNotFoundError
 
-        # Move the restart files to hole
+        # Copy the restart files to hole from init_2
         for i in range(1, n_atoms + 1):
-            os.path.isfile(f"run_dir/{constr_atoms}{i}/init_2/restart_file")
+            os.path.isfile(f"{run_loc}/{constr_atoms}{i}/init_2/restart_file")
             os.system(
-                f"cp run_dir/{constr_atoms}{i}/init_2/restart* run_dir/{constr_atoms}{i}/hole/"
+                f"cp {run_loc}/{constr_atoms}{i}/init_2/restart* {run_loc}/{constr_atoms}{i}/hole/"
             )
 
         spec_run_info = ""
@@ -540,21 +544,25 @@ def projector(ctx, run_type, occ_type, basis_set, pbc, ks_range, control_opts):
     # Run the calculation with a nice progress bar if not already run
     if (
         run_type != "ground"
-        and os.path.isfile(f"run_dir/{constr_atoms}1/{run_type}/aims.out") == False
+        and os.path.isfile(f"{run_loc}/{constr_atoms}1/{run_type}/aims.out") == False
+        and not hpc
     ):
         with click.progressbar(
             range(1, n_atoms + 1), label=f"calculating {run_type}:"
         ) as bar:
             for i in bar:
                 os.system(
-                    f"cd ./run_dir/{constr_atoms}{i}/{run_type} && mpirun -n {nprocs} "
+                    f"cd ./{run_loc}/{constr_atoms}{i}/{run_type} && mpirun -n {nprocs} "
                     f"{binary} > aims.out{spec_run_info}"
                 )
 
         print(f"{run_type} calculations completed successfully")
 
-    elif run_type != "ground":
+    elif run_type != "ground" and not hpc:
         print(f"{run_type} calculations already completed, skipping calculation...")
+
+    # This needs to be passed to process()
+    ctx.obj["RUN_TYPE"] = run_type
 
     # Compute the dscf energies and plot if option provided
     process(ctx)
@@ -614,7 +622,17 @@ def projector(ctx, run_type, occ_type, basis_set, pbc, ks_range, control_opts):
     help="provide additional options to be used in 'control.in'",
 )
 @click.pass_context
-def basis(ctx, run_type, atom_index, occ_type, n_qn, l_qn, m_qn, ks_max, control_opts):
+def basis(
+    ctx,
+    run_type,
+    atom_index,
+    occ_type,
+    n_qn,
+    l_qn,
+    m_qn,
+    ks_max,
+    control_opts,
+):
     """Force occupation of the basis states."""
 
     # It gets annoying to type the full context object out every time
@@ -624,6 +642,9 @@ def basis(ctx, run_type, atom_index, occ_type, n_qn, l_qn, m_qn, ks_max, control
     spec_mol = ctx.obj["SPEC_MOL"]
     atoms = ctx.obj["ATOMS"]
     ase = ctx.obj["ASE"]
+    calc = ctx.obj["CALC"]
+    species = ctx.obj["SPECIES"]
+    basis_set = ctx.obj["BASIS_SET"]
     nprocs = ctx.obj["NPROCS"]
     binary = ctx.obj["BINARY"]
     constr_atoms = ctx.obj["CONSTR_ATOM"]
@@ -636,8 +657,27 @@ def basis(ctx, run_type, atom_index, occ_type, n_qn, l_qn, m_qn, ks_max, control
     mu.check_args(run_loc)
 
     if run_type == "ground":
+
+        if len(control_opts) < 1:
+            print("\nWARNING: no control options provided, using default options")
+            print("these can be found in the 'control.in' file")
+
+        # Convert control options to a dictionary
+        control_opts = mu.convert_opts_to_dict(control_opts)
+
         mu.ground_calc(
-            run_loc, geom, control, atoms, ase, control_opts, nprocs, binary, hpc
+            run_loc,
+            geom,
+            control,
+            atoms,
+            basis_set,
+            species,
+            calc,
+            ase,
+            control_opts,
+            nprocs,
+            binary,
+            hpc,
         )
 
         # Ground must be run separately to hole calculations
