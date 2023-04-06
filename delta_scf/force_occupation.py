@@ -50,6 +50,7 @@ class ForceOccupation:
 
             # Constrain all atoms of the target element
             for atom in constr_atoms:
+                print(atom)
                 with open(geometry_path, "r") as geom_in:
                     atom_counter = 0
 

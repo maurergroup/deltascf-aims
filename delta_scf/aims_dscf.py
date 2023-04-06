@@ -415,7 +415,13 @@ def projector(ctx, run_type, occ_type, pbc, ks_range, control_opts):
     control_opts = mu.convert_opts_to_dict(control_opts)
 
     if pbc == True:
-        atoms.set_pbc(True)
+
+        for arg in control_opts:
+            if arg.split()[0] == "k_grid":
+                atoms.set_pbc(True)
+
+            else:
+                raise ValueError("k_grid must be set in control_opts to use PBCs")
 
     if run_type == "ground":
 
