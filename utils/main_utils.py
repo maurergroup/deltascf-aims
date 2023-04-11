@@ -67,13 +67,12 @@ class MainUtils:
                 raise MissingParameter(param_hint=f"'--{arg[0]}'", param_type="option")
 
     @staticmethod
-    def check_geom_constraints(geom_file):
+    def check_geom(geom_file):
         """Check if there are any constrain_relaxation keywords in geometry.in"""
 
-        with open(geom_file, "r") as geom:
-            lines = geom.readlines()
+        lattice_vecs = False
 
-        for line in lines:
+        for line in geom_file:
             if "constrain_relaxation" in line:
                 print("'constrain_relaxation' keyword found in geometry.in")
                 print("Ensure that no atoms are fixed in the geometry.in file")
@@ -82,6 +81,11 @@ class MainUtils:
                 )
                 print("Aborting...")
                 sys.exit(1)
+
+            if "lattice_vector" in line:
+                lattice_vecs = True
+
+        return lattice_vecs
 
     @staticmethod
     def convert_opts_to_dict(opts):
@@ -171,7 +175,6 @@ class MainUtils:
         """Write a control.in file"""
 
         if calc_type == "ground":
-
             # Firstly create the control file
             os.system(f"touch {run_loc}/ground/control.in")
 
@@ -198,6 +201,7 @@ class MainUtils:
         geom_inp,
         control_inp,
         atoms,
+        pbc,
         basis_set,
         species,
         calc,
@@ -230,6 +234,10 @@ class MainUtils:
                 # Change the defaults if any are specified by the user
                 # Update with all control options from the calculator
                 calc.set(**control_opts)
+
+                if pbc is not None:
+                    calc.set(kpts=pbc)
+
                 control_opts = calc.parameters
 
                 if not hpc:

@@ -37,17 +37,19 @@ from delta_scf.plot import Plot
     help="molecule to be used in the calculation",
 )
 @click.option(
-    "-g",
+    "-e",
     "--geometry_input",
     cls=me,
     mutually_exclusive=["--molecule"],
-    type=click.Path(exists=True, file_okay=True, dir_okay=False),
+    nargs=1,
+    type=click.File(),
     help="specify a custom geometry.in instead of using a structure from PubChem or ASE",
 )
 @click.option(
     "-i",
     "--control_input",
-    type=click.Path(exists=True, file_okay=True, dir_okay=False),
+    nargs=1,
+    type=click.File(),
     help="specify a custom control.in instead of automatically generating one",
 )
 @click.option(
@@ -189,14 +191,15 @@ def main(
     # Also don't use ASE if a control.in is specified
     ase = True
     if geometry_input is not None:
-        mu.check_geom_constraints(geometry_input)
-        ctx.obj["GEOM_INP"] = geometry_input
+        found_lattice_vecs = mu.check_geom(geometry_input)
+        ctx.obj["GEOM_INP"] = geometry_input.name
+        ctx.obj["LATTICE_VECS"] = found_lattice_vecs
     else:
         ctx.obj["GEOM_INP"] = None
 
     if control_input is not None:
         ase = False
-        ctx.obj["CONTROL_INP"] = control_input
+        ctx.obj["CONTROL_INP"] = control_input.name
     else:
         ctx.obj["CONTROL_INP"] = None
 
@@ -221,7 +224,7 @@ def main(
         if spec_mol is not None:
             atoms = mu.build_geometry(spec_mol)
         if geometry_input is not None:
-            atoms = read(geometry_input)
+            atoms = read(geometry_input.name)
 
     # Check if a binary has been specified
     if "--help" not in sys.argv:
@@ -261,7 +264,7 @@ def main(
         # Check if the species_defaults directory exists in the correct location
         if not Path(species).exists():
             print(
-                "ensure the FHI-aims binary is in the 'build' directory of the FHI-aims"
+                "\nError: ensure the FHI-aims binary is in the 'build' directory of the FHI-aims"
                 " source code directory, and that the 'species_defaults' directory exists"
             )
             raise NotADirectoryError(
@@ -370,7 +373,19 @@ def process(ctx):
     help="select whether the old or new occupation routine is used",
 )
 @click.option(
-    "-p", "--pbc", is_flag=True, help="create a cell with periodic boundary conditions"
+    "-p",
+    "--pbc",
+    nargs=3,
+    type=int,
+    help="create a cell with periodic boundary conditions",
+)
+@click.option(
+    "-l",
+    "--lattice_vectors",
+    "l_vecs",
+    nargs=1,
+    type=list,
+    help="provide the lattice vectors in a 3x3 matrix",
 )
 @click.option(
     "-k",
@@ -387,13 +402,14 @@ def process(ctx):
     help="provide additional options to be used in 'control.in' in a key=value format",
 )
 @click.pass_context
-def projector(ctx, run_type, occ_type, pbc, ks_range, control_opts):
+def projector(ctx, run_type, occ_type, pbc, l_vecs, ks_range, control_opts):
     """Force occupation of the Kohn-Sham states."""
 
     run_loc = ctx.obj["RUN_LOC"]
     geom_inp = ctx.obj["GEOM_INP"]
     control_inp = ctx.obj["CONTROL_INP"]
     atoms = ctx.obj["ATOMS"]
+    found_lattice_vecs = ctx.obj["LATTICE_VECS"]
     calc = ctx.obj["CALC"]
     basis_set = ctx.obj["BASIS_SET"]
     ase = ctx.obj["ASE"]
@@ -414,17 +430,14 @@ def projector(ctx, run_type, occ_type, pbc, ks_range, control_opts):
     # Convert control options to a dictionary
     control_opts = mu.convert_opts_to_dict(control_opts)
 
-    if pbc == True:
-
-        for arg in control_opts:
-            if arg.split()[0] == "k_grid":
-                atoms.set_pbc(True)
-
-            else:
-                raise ValueError("k_grid must be set in control_opts to use PBCs")
+    if found_lattice_vecs or l_vecs is not None:
+        if pbc is None:
+            print(
+                "\nERROR: 'lattice_vector' keyword found in geometry.in but -p/--pbc"
+                " option has not been provided"
+            )
 
     if run_type == "ground":
-
         if len(control_opts) < 1:
             print("\nWARNING: no control options provided, using default options")
             print("these can be found in the 'control.in' file")
@@ -434,6 +447,7 @@ def projector(ctx, run_type, occ_type, pbc, ks_range, control_opts):
             geom_inp,
             control_inp,
             atoms,
+            pbc,
             basis_set,
             species,
             calc,
@@ -674,7 +688,6 @@ def basis(
     mu.check_args(run_loc)
 
     if run_type == "ground":
-
         if len(control_opts) < 1:
             print("\nWARNING: no control options provided, using default options")
             print("these can be found in the 'control.in' file")
