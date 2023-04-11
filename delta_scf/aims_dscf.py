@@ -109,7 +109,7 @@ from delta_scf.plot import Plot
     type=click.IntRange(1),
     default=1,
     show_default=True,
-    help="number of atoms to constrain",
+    help="number of atoms to constrain per calculation",
 )
 @click.option(
     "-b",
@@ -196,6 +196,7 @@ def main(
         ctx.obj["LATTICE_VECS"] = found_lattice_vecs
     else:
         ctx.obj["GEOM_INP"] = None
+        ctx.obj["LATTICE_VECS"] = None
 
     if control_input is not None:
         ase = False
@@ -286,7 +287,7 @@ def main(
         ctx.obj["SPEC_AT_CONSTR"] = spec_at_constr
         ctx.obj["OCC"] = occupation
         ctx.obj["SPIN"] = spin
-        ctx.obj["N_ATOMS"] = n_atoms
+        ctx.obj["N_ATOMS"] = n_atoms  # TODO
         ctx.obj["BASIS_SET"] = basis_set
         ctx.obj["GRAPH"] = graph
         ctx.obj["GMP"] = graph_min_percent
@@ -317,8 +318,7 @@ def process(ctx):
             # Define parameters for broadening
             xstart = 1
             xstop = 1000
-            broad1 = 0.7
-            broad2 = 0.7
+            broad = 0.7
             firstpeak = 285.0
             ewid1 = firstpeak + 1.0
             ewid2 = firstpeak + 2.0
@@ -328,13 +328,13 @@ def process(ctx):
             # Apply the broadening
             x, y = dos_binning(
                 xps,
-                broadening=broad1,
+                broadening=broad,
                 mix1=mix1,
                 mix2=mix2,
                 start=xstart,
                 stop=xstop,
                 coeffs=None,
-                broadening2=broad2,
+                broadening2=broad,
                 ewid1=ewid1,
                 ewid2=ewid2,
             )
@@ -377,7 +377,7 @@ def process(ctx):
     "--pbc",
     nargs=3,
     type=int,
-    help="create a cell with periodic boundary conditions",
+    help="give the k-grid for a periodic calculation",
 )
 @click.option(
     "-l",
@@ -419,7 +419,6 @@ def projector(ctx, run_type, occ_type, pbc, l_vecs, ks_range, control_opts):
     constr_atoms = ctx.obj["CONSTR_ATOM"]
     spec_at_constr = ctx.obj["SPEC_AT_CONSTR"]
     spec_mol = ctx.obj["SPEC_MOL"]
-    n_atoms = ctx.obj["N_ATOMS"]
     species = ctx.obj["SPECIES"]
     occ = ctx.obj["OCC"]
     spin = ctx.obj["SPIN"]
@@ -427,27 +426,48 @@ def projector(ctx, run_type, occ_type, pbc, l_vecs, ks_range, control_opts):
     # Used later to redirect STDERR to /dev/null to prevent printing not converged errors
     spec_run_info = None
 
-    # Convert control options to a dictionary
-    control_opts = mu.convert_opts_to_dict(control_opts)
+    # Raise a warning if no additional control options have been specified
+    if len(control_opts) < 1:
+        print(
+            "\nWARNING: no control options provided, using default options "
+            "which can be found in the 'control.in' file"
+        )
 
+    # Convert control options to a dictionary
+    control_opts = mu.convert_opts_to_dict(control_opts, pbc)
+
+    # Check if the lattice vectors and k_grid have been provided
     if found_lattice_vecs or l_vecs is not None:
         if pbc is None:
-            print(
-                "\nERROR: 'lattice_vector' keyword found in geometry.in but -p/--pbc"
-                " option has not been provided"
-            )
+            # Try to parse the k-grid if other calculations have been run
+            try:
+                pbc_list = []
+                for control in glob.glob(f"{run_loc}/**/control.in", recursive=True):
+                    with open(control, "r") as control:
+                        for line in control:
+                            if "k_grid" in line:
+                                pbc_list.append(line.split()[1:])
+
+                # If different k_grids have been used for different calculations, then
+                # enforce the user to provide the k_grid
+                if not pbc_list.count(pbc_list[0]) == len(pbc_list):
+                    raise click.MissingParameter(
+                        "\nERROR: 'k_grid' keyword found in "
+                        "control.in but -p/--pbc option has not been provided"
+                    )
+
+            except FileNotFoundError:
+                raise click.MissingParameter(
+                    "\nERROR: 'lattice_vector' keyword found in "
+                    "geometry.in but -p/--pbc option has not provided been"
+                )
 
     if run_type == "ground":
-        if len(control_opts) < 1:
-            print("\nWARNING: no control options provided, using default options")
-            print("these can be found in the 'control.in' file")
-
         mu.ground_calc(
             run_loc,
             geom_inp,
             control_inp,
             atoms,
-            pbc,
             basis_set,
             species,
             calc,
@@ -488,11 +508,15 @@ def projector(ctx, run_type, occ_type, pbc, l_vecs, ks_range, control_opts):
     atom_specifier = fo.read_ground_inp(list_constr_atoms, spec_at_constr, ground_geom)
 
     if run_type == "init_1":
-        # Check required arguments are given in main()
-        mu.check_args(ks_range)
+        if hpc:
+            raise click.BadParameter(
+                "ERROR: the -h/--hpc flag is only supported for the 'hole' run type"
+            )
 
-        # TODO allow this for multiple constrained atoms
-        # NB: atom_index here is atomic number
+        # Check required arguments are given in main()
+        mu.check_args(("ks_range", ks_range), ("constr_atoms", constr_atoms))
+
+        # TODO allow this for multiple constrained atoms using n_atoms
         for atom in element_symbols:
             fo.get_electronic_structure(atom)
 
@@ -505,41 +529,58 @@ def projector(ctx, run_type, occ_type, pbc, l_vecs, ks_range, control_opts):
     spec_run_info = ""
 
     if run_type == "init_2":
-        # TODO
-        # Check required arguments are given
-        # mu.check_args(n_atoms, ks_range)
+        if hpc:
+            raise click.BadParameter(
+                "ERROR: the -h/--hpc flag is only supported for the 'hole' run type"
+            )
 
         # Catch for if init_1 hasn't been run
         for i in range(len(atom_specifier)):
             i += 1
-            if (
-                os.path.isfile(
-                    glob.glob(f"{run_loc}/{constr_atoms}{i}/init_1/*restart*")[0]
-                )
-                is False
-            ):
+
+            if len(glob.glob(f"{run_loc}{constr_atoms}{i}/init_1/*restart*")) < 1:
                 print(
                     'init_1 restart files not found, please ensure "init_1" has been run'
                 )
                 raise FileNotFoundError
 
-            # Copy the restart files to init_2 from init_1
-            os.path.isfile(
-                glob.glob(f"{run_loc}/{constr_atoms}{i}/init_1/*restart*")[0]
+            # Add any additional control options to the init_2 control file
+            parsed_control_opts = fo.get_control_keywords(
+                f"{run_loc}{constr_atoms}{i}/init_2/control.in"
             )
+            control_opts = fo.mod_keywords(control_opts, parsed_control_opts)
+            control_content = fo.change_control_keywords(
+                f"{run_loc}{constr_atoms}{i}/init_2/control.in", control_opts
+            )
+
+            with open(
+                f"{run_loc}{constr_atoms}{i}/init_2/control.in", "w"
+            ) as control_file:
+                control_file.writelines(control_content)
+
+            # Copy the restart files to init_2 from init_1
+            os.path.isfile(glob.glob(f"{run_loc}{constr_atoms}{i}/init_1/*restart*")[0])
             os.system(
-                f"cp {run_loc}/{constr_atoms}{i}/init_1/*restart* {run_loc}/{constr_atoms}{i}/init_2/"
+                f"cp {run_loc}{constr_atoms}{i}/init_1/*restart* {run_loc}{constr_atoms}{i}/init_2/"
             )
 
         # Prevent SCF not converged errors from printing
         spec_run_info = " 2>/dev/null"
 
     if run_type == "hole":
-        # TODO
-        # Check required arguments are given in main()
-        # mu.check_args(spec_mol, constr_atoms, n_atoms)
+        # TODO Check required arguments are given in main()
+        mu.check_args(("constr_atoms", constr_atoms))
 
         # Add molecule identifier to hole geometry.in
+        if hpc:
+            mu.check_args(("ks_range", ks_range), ("constr_atoms", constr_atoms))
+
+            # Setup files required for the initialisation and hole calculations
+            proj = Projector(fo)
+            proj.setup_init_1(basis_set, species, ground_control)
+            proj.setup_init_2(ks_range[0], ks_range[1], occ, occ_type, spin)
+            proj.setup_hole(ks_range[0], ks_range[1], occ, occ_type, spin)
+
         with open(f"{run_loc}/{constr_atoms}1/hole/geometry.in", "r") as hole_geom:
             lines = hole_geom.readlines()
 
@@ -547,6 +588,9 @@ def projector(ctx, run_type, occ_type, pbc, l_vecs, ks_range, control_opts):
 
         with open(f"{run_loc}/{constr_atoms}1/hole/geometry.in", "w") as hole_geom:
             hole_geom.writelines(lines)
+
+        if hpc:
+            return
 
         # Catch for if init_2 hasn't been run
         for i in range(len(atom_specifier)):
@@ -562,9 +606,24 @@ def projector(ctx, run_type, occ_type, pbc, l_vecs, ks_range, control_opts):
                 )
                 raise FileNotFoundError
 
+            # Add any additional control options to the hole control file
+            parsed_control_opts = fo.get_control_keywords(
+                f"{run_loc}{constr_atoms}{i}/hole/control.in"
+            )
+            control_opts = fo.mod_keywords(control_opts, parsed_control_opts)
+            control_content = fo.change_control_keywords(
+                f"{run_loc}{constr_atoms}{i}/hole/control.in", control_opts
+            )
+
+            with open(
+                f"{run_loc}{constr_atoms}{i}/hole/control.in", "w"
+            ) as control_file:
+                control_file.writelines(control_content)
+
             # Copy the restart files to hole from init_2
-            i += 1
-            os.path.isfile(f"{run_loc}/{constr_atoms}{i}/init_2/*restart*")
+            os.path.isfile(
+                glob.glob(f"{run_loc}/{constr_atoms}{i}/init_2/*restart*")[0]
+            )
             os.system(
                 f"cp {run_loc}/{constr_atoms}{i}/init_2/*restart* {run_loc}/{constr_atoms}{i}/hole/"
             )
@@ -577,6 +636,12 @@ def projector(ctx, run_type, occ_type, pbc, l_vecs, ks_range, control_opts):
         and os.path.isfile(f"{run_loc}/{constr_atoms}1/{run_type}/aims.out") == False
         and not hpc
     ):
+        mu.check_args(("constr_atoms", constr_atoms))
+
+        # Ensure that aims always runs with the following environment variables:
+        os.system("export OMP_NUM_THREADS=1")
+        os.system("export MKL_NUM_THREADS=1")
+
         with click.progressbar(
             range(len(atom_specifier)), label=f"calculating {run_type}:"
         ) as bar:
@@ -678,22 +743,25 @@ def basis(
     basis_set = ctx.obj["BASIS_SET"]
     nprocs = ctx.obj["NPROCS"]
     binary = ctx.obj["BINARY"]
+    hpc = ctx.obj["HPC"]
     constr_atoms = ctx.obj["CONSTR_ATOM"]
     spec_at_constr = ctx.obj["SPEC_AT_CONSTR"]
-    n_atoms = ctx.obj["N_ATOMS"]
     spin = ctx.obj["SPIN"]
     occ = ctx.obj["OCC"]
-    hpc = ctx.obj["HPC"]
 
-    mu.check_args(run_loc)
+    # Raise a warning if no additional control options have been specified
+    if len(control_opts) < 1:
+        print(
+            "\nWARNING: no control options provided, using default options "
+            "which can be found in the 'control.in' file"
+        )
+
+    # Convert control options to a dictionary
+    control_opts = mu.convert_opts_to_dict(control_opts, None)
 
     if run_type == "ground":
-        if len(control_opts) < 1:
-            print("\nWARNING: no control options provided, using default options")
-            print("these can be found in the 'control.in' file")
-
         # Convert control options to a dictionary
-        control_opts = mu.convert_opts_to_dict(control_opts)
+        control_opts = mu.convert_opts_to_dict(control_opts, None)
 
         mu.ground_calc(
             run_loc,
@@ -713,39 +781,30 @@ def basis(
         # Ground must be run separately to hole calculations
         return
 
-    else:
+    else:  # run_type == 'hole'
         ground_geom = f"{run_loc}/ground/geometry.in"
 
     if (
         run_type == "hole"
         and os.path.isfile(f"{run_loc}/{constr_atoms}1/hole/aims.out") is False
     ):
-        # TODO:
-        # Check required arguments are given for main()
-        # mu.check_args(
-        #     ("spec_mol", spec_mol),
-        #     ("constr_atoms", constr_atoms),
-        #     ("n_atoms", n_atoms),
-        #     ("occ_type", occ_type),
-        #     ("ks_max", ks_max),
-        #     ("atom_index", atom_index),
-        #     ("spin", spin),
-        #     ("n_qn", n_qn),
-        #     ("l_qn", l_qn),
-        #     ("m_qn", m_qn),
-        # )
+        mu.check_args(
+            ("constr_atoms", constr_atoms),
+            ("atom_index", atom_index),
+            ("ks_max", ks_max),
+            ("n_qn", n_qn),
+            ("l_qn", l_qn),
+            ("m_qn", m_qn),
+        )
+
+        # Ensure that aims always runs with the following environment variables:
+        os.system("export OMP_NUM_THREADS=1")
+        os.system("export MKL_NUM_THREADS=1")
 
         if os.path.isfile(f"{run_loc}/ground/aims.out") == False:
-            print(
-                "ground aims.out not found, please ensure the ground calculation has been "
+            raise FileNotFoundError(
+                "\nERROR: ground aims.out not found, please ensure the ground calculation has been "
                 "run"
-            )
-            raise FileNotFoundError
-
-        if geom or control:
-            print(
-                "WARNING: custom geometry.in and control.in files will be ignored for hole "
-                "runs"
             )
 
         # Create a list of element symbols to constrain
@@ -769,31 +828,55 @@ def basis(
         )
 
         # Get atom indices from the ground state geometry file
-        fo.read_ground_inp(list_constr_atoms, spec_at_constr, ground_geom)
+        atom_specifier = fo.read_ground_inp(
+            list_constr_atoms, spec_at_constr, ground_geom
+        )
 
         basis = Basis(fo)
-        basis.setup_basis(atom_index, spin, n_qn, l_qn, m_qn, occ, ks_max, occ_type)
+        basis.setup_basis(spin, n_qn, l_qn, m_qn, occ, ks_max, occ_type)
 
         # Add molecule identifier to hole geometry.in
-        with open(f"{run_loc}{constr_atoms}1/hole/geometry.in", "r") as hole_geom:
+        with open(f"{run_loc}{constr_atoms}1/geometry.in", "r") as hole_geom:
             lines = hole_geom.readlines()
 
         lines.insert(4, f"# {spec_mol}\n")
 
-        with open(f"{run_loc}/{constr_atoms}1/hole/geometry.in", "w") as hole_geom:
+        with open(f"{run_loc}/{constr_atoms}1/geometry.in", "w") as hole_geom:
             hole_geom.writelines(lines)
 
-        # Run the hole calculation
-        with click.progressbar(
-            range(1, n_atoms + 1), label="calculating basis hole:"
-        ) as prog_bar:
-            for i in prog_bar:
-                os.system(
-                    f"cd {run_loc}/{constr_atoms}{i}/hole/ && mpirun -n "
-                    f"{nprocs} {binary} > aims.out"
+        # TODO allow multiple constraints using n_atoms
+
+        for i in range(len(atom_specifier)):
+            i += 1
+
+            if len(control_opts) > 0:
+                # Add any additional control options to the hole control file
+                parsed_control_opts = fo.get_control_keywords(
+                    f"{run_loc}{constr_atoms}{i}/control.in"
+                )
+                control_opts = fo.mod_keywords(control_opts, parsed_control_opts)
+                control_content = fo.change_control_keywords(
+                    f"{run_loc}{constr_atoms}{i}/control.in", control_opts
                 )
 
-    elif os.path.isfile(f"{run_loc}/{constr_atoms}1/hole/aims.out") is True:
+                with open(
+                    f"{run_loc}{constr_atoms}{i}/control.in", "w"
+                ) as control_file:
+                    control_file.writelines(control_content)
+
+        if not hpc:
+            # Run the hole calculation
+            with click.progressbar(
+                range(len(atom_specifier)), label="calculating basis hole:"
+            ) as prog_bar:
+                for i in prog_bar:
+                    i += 1
+                    os.system(
+                        f"cd {run_loc}/{constr_atoms}{i} && mpirun -n "
+                        f"{nprocs} {binary} > aims.out"
+                    )
+
+    elif os.path.isfile(f"{run_loc}/{constr_atoms}1/aims.out") is True:
         print("hole calculations already completed, skipping calculation...")
 
     # This needs to be passed to process()

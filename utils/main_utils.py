@@ -88,7 +88,7 @@ class MainUtils:
         return lattice_vecs
 
     @staticmethod
-    def convert_opts_to_dict(opts):
+    def convert_opts_to_dict(opts, pbc):
         """Convert the control options from a tuple to a dictionary"""
 
         opts_dict = {}
@@ -97,6 +97,10 @@ class MainUtils:
             spl = opt.split(sep="=")
 
             opts_dict[spl[0]] = spl[1]
+
+        # Also add k_grid if given
+        if pbc is not None:
+            opts_dict.update({"k_grid": pbc})
 
         return opts_dict
 
@@ -201,7 +205,6 @@ class MainUtils:
         geom_inp,
         control_inp,
         atoms,
-        pbc,
         basis_set,
         species,
         calc,
@@ -212,6 +215,10 @@ class MainUtils:
         hpc,
     ):
         """Run a ground state calculation"""
+
+        # Ensure that aims always runs with the following environment variables:
+        os.system("export OMP_NUM_THREADS=1")
+        os.system("export MKL_NUM_THREADS=1")
 
         # Create the ground directory if it doesn't already exist
         os.system(f"mkdir -p {run_loc}/ground")
@@ -234,9 +241,6 @@ class MainUtils:
                 # Change the defaults if any are specified by the user
                 # Update with all control options from the calculator
                 calc.set(**control_opts)
-
-                if pbc is not None:
-                    calc.set(kpts=pbc)
 
                 control_opts = calc.parameters
 

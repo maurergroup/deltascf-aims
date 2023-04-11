@@ -24,6 +24,12 @@ class ForceOccupation:
         self.geometry = geometry
         self.ad_cont_opts = ad_cont_opts
 
+        # Convert k_grid key to a string from a tuple
+        # Writing the options for a hole calculation doesn't uses ASE, so it must be
+        # converted to a string here
+        if "k_grid" in ad_cont_opts.keys():
+            ad_cont_opts["k_grid"] = " ".join(map(str, ad_cont_opts["k_grid"]))
+
         self.new_control = f"{self.run_loc}ground/control.in.new"
         self.atom_specifier = []
 
@@ -50,19 +56,18 @@ class ForceOccupation:
 
             # Constrain all atoms of the target element
             for atom in constr_atoms:
-                print(atom)
                 with open(geometry_path, "r") as geom_in:
                     atom_counter = 0
 
                     for line in geom_in:
                         spl = line.split()
 
-                        if len(spl) > 0 and "atom" == spl[0]:
+                        if len(spl) > 0 and "atom" in spl[0]:
                             atom_counter += 1
                             element = spl[-1]  # Identify atom
                             identifier = spl[0]  # Extra check that line is an atom
 
-                            if identifier == "atom" and element == atom:
+                            if "atom" in identifier and element == atom:
                                 self.atom_specifier.append(atom_counter)
 
         # For if the user supplied atom indices to constrain
@@ -74,7 +79,7 @@ class ForceOccupation:
 
             self.atom_specifier = spec_at_constr
 
-        print("specified atoms:", self.atom_specifier)
+        print("specified atom indices:", self.atom_specifier)
 
         return self.atom_specifier
 
@@ -145,10 +150,51 @@ class ForceOccupation:
         self.valence = f"    valence      {output[0]}  {output[1]}   {output[2]}.1\n"
 
     @staticmethod
+    def get_control_keywords(control):
+        """Get the keywords in a control.in file"""
+
+        # Find and replace keywords in control file
+        with open(control, "r") as read_control:
+            content = read_control.readlines()
+
+        # Get keywords
+        opts = {}
+        for line in content:
+            spl = line.split()
+
+            # Break when basis set definitions start
+            if (
+                "################################################################################"
+                in line
+            ):
+                break
+
+            # Try first adding the dictionary key as a float, then an int, then a string
+            if len(spl) > 1 and "#" not in spl[0]:
+                if len(spl[1:]) > 1:
+                    try:
+                        opts[spl[0]] = [int(i) for i in spl[1:]]
+                    except ValueError:
+                        try:
+                            opts[spl[0]] = [float(i) for i in spl[1:]]
+                        except ValueError:
+                            opts[spl[0]] = " ".join(spl[1:])
+
+                else:
+                    try:
+                        opts[spl[0]] = int(spl[1])
+                    except ValueError:
+                        try:
+                            opts[spl[0]] = float(spl[1])
+                        except ValueError:
+                            opts[spl[0]] = spl[1]
+
+        return opts
+
+    @staticmethod
     def mod_keywords(ad_cont_opts, opts):
         """Allow users to modify and add keywords"""
 
-        # Check if the keyword is already in the input file
         for key in list(ad_cont_opts.keys()):
             opts.update({key: ad_cont_opts[key]})
 
@@ -172,19 +218,19 @@ class ForceOccupation:
                 spl = line.split()
 
                 if opt in spl:
-                    content[j] = f"{opt:<35} {opts[opt]}\n"
+                    content[j] = f"{opt:<34} {opts[opt]}\n"
                     break
 
                 # Marker if ASE was used so keywords will be added in the same place as the others
                 elif divider in line:
                     ident += 1
                     if ident == 3:
-                        content.insert(j, f"{opt:<35} {opts[opt]}\n")
+                        content.insert(j, f"{opt:<34} {opts[opt]}\n")
                         break
 
             # For when a non-ASE input file is used
             if ident == 0:
-                content.append(f"{opt:<35} {opts[opt]}\n")
+                content.append(f"{opt:<34} {opts[opt]}\n")
 
         return content
 
@@ -284,7 +330,7 @@ class Projector(ForceOccupation):
             "default_initial_moment": 0,
             "charge": 0.1,
             "restart_write_only": "restart_file",
-            "restart_save_iterations": 20,
+            "restart_save_iterations": 5,
         }
 
         # Add or change user-specified keywords to the control file
@@ -392,7 +438,8 @@ class Projector(ForceOccupation):
         if occ_type == "force_occupation_projector":
             ks_method = "serial"
         if occ_type == "deltascf_projector":
-            ks_method = "parallel"
+            # ks_method = "parallel"
+            ks_method = "serial"
 
         # Loop over each element to constrain
         for el in self.element_symbols:
@@ -407,7 +454,7 @@ class Projector(ForceOccupation):
                     occ_type: f"{ks_start + i} {spin} {occ} {ks_start} {ks_stop}",
                     "KS_method": ks_method,
                     "restart": "restart_file",
-                    "restart_save_iterations": 20,
+                    "restart_save_iterations": 1,
                 }
 
                 # Add or change user-specified keywords to the control file
@@ -463,7 +510,8 @@ class Projector(ForceOccupation):
         if occ_type == "force_occupation_projector":
             ks_method = "serial"
         if occ_type == "deltascf_projector":
-            ks_method = "parallel"
+            # ks_method = "parallel"
+            ks_method = "serial"
 
         # Loop over each element to constrain
         for el in self.element_symbols:
@@ -527,7 +575,7 @@ class Basis(ForceOccupation):
         """Inherit all the variables from an instance of the parent class"""
         vars(self).update(vars(parent_instance))
 
-    def setup_basis(self, atom_index, spin, n_qn, l_qn, m_qn, occ_no, ks_max, occ_type):
+    def setup_basis(self, spin, n_qn, l_qn, m_qn, occ_no, ks_max, occ_type):
         """Write new directories and control files for basis calculations."""
 
         # The new basis method should utilise ks method parallel
@@ -547,7 +595,7 @@ class Basis(ForceOccupation):
                     "spin": "collinear",
                     "default_initial_moment": 0,
                     "charge": 1.0,
-                    occ_type: f"{atom_index} {spin} atomic {n_qn} {l_qn} {m_qn} {occ_no} {ks_max}",
+                    occ_type: f"{self.atom_specifier[i]} {spin} atomic {n_qn} {l_qn} {m_qn} {occ_no} {ks_max}",
                     "KS_method": ks_method,
                 }
 
@@ -556,17 +604,17 @@ class Basis(ForceOccupation):
 
                 i += 1
 
-                control = f"{self.run_loc}/{el}{i}/hole/control.in"
+                control = f"{self.run_loc}/{el}{i}/control.in"
 
                 # Create new directories and .in files for each constrained atom
-                os.makedirs(f"{self.run_loc}/{el}{i}/hole/", exist_ok=True)
+                os.makedirs(f"{self.run_loc}/{el}{i}/", exist_ok=True)
                 shutil.copyfile(
                     f"{self.run_loc}/ground/control.in",
                     control,
                 )
                 shutil.copyfile(
                     f"{self.run_loc}/ground/geometry.in",
-                    f"{self.run_loc}/{el}{i}/hole/geometry.in",
+                    f"{self.run_loc}/{el}{i}/geometry.in",
                 )
 
                 # Change control file
