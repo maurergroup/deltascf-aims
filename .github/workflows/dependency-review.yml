@@ -5,12 +5,13 @@
 # Source repository: https://github.com/actions/dependency-review-action
 # Public documentation: https://docs.github.com/en/code-security/supply-chain-security/understanding-your-software-supply-chain/about-dependency-review#dependency-review-enforcement
 name: 'Dependency Review'
-on: 
+on:
+  push:
+    branches: [ "master", "release" ]
   pull_request:
-    branches:
-    - master
+    branches: [ "master" ]
   schedule:
-    - cron: "0 2 * * 1-5"
+    - cron: "0 2 * * 1-5" 
   workflow_dispatch:
 
 permissions:
@@ -18,7 +19,11 @@ permissions:
 
 jobs:
   dependency-review:
-    runs-on: "ubuntu-latest"
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macOS-latest]
+
     steps:
       - name: 'Checkout Repository'
         uses: actions/checkout@v3
