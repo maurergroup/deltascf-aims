@@ -16,7 +16,7 @@ on:
 jobs:
   build:
 
-    runs-on: [ "ubuntu-latest", "mac-latest" ]
+    runs-on: "ubuntu-latest"
     strategy:
       fail-fast: false
       matrix:
