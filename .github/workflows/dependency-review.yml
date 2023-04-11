@@ -13,8 +13,9 @@ permissions:
 jobs:
   dependency-review:
     runs-on: ${{ matrix.os }}
-    matrix:
-      os: [ubuntu-latest, macOS-latest]
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macOS-latest]
     steps:
       - name: 'Checkout Repository'
         uses: actions/checkout@v3
