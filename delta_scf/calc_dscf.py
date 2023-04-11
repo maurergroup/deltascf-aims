@@ -1,79 +1,86 @@
 import os
 
 
-def read_ground(calc_path):
-    """Get the ground state energy."""
-    with open(f"{calc_path}ground/aims.out", "r", encoding="utf-8") as ground:
-        lines = ground.readlines()
+class CalcDeltaSCF:
+    """Calculate delta-scf energies from the output of ground and excited state calculations"""
 
-    grenrgys = None
+    @staticmethod
+    def read_ground(calc_path):
+        """Get the ground state energy."""
 
-    for line in lines:
-        # Get the energy
-        if "s.c.f. calculation      :" in line:
-            grenrgys = float(line.split()[-2])
+        with open(f"{calc_path}ground/aims.out", "r", encoding="utf-8") as ground:
+            lines = ground.readlines()
 
-    if grenrgys == None:
-        raise ValueError("No ground state energy found.")
+        grenrgys = None
 
-    print("Ground state calculated energy (eV):")
-    print(round(grenrgys, 3))
-    print()
+        for line in lines:
+            # Get the energy
+            if "s.c.f. calculation      :" in line:
+                grenrgys = float(line.split()[-2])
 
-    return grenrgys
+        if grenrgys == None:
+            raise ValueError("No ground state energy found.")
 
+        print("Ground state calculated energy (eV):")
+        print(round(grenrgys, 3))
+        print()
 
-def contains_number(string):
-    """Check if a number is in a string."""
-    for character in string:
-        if character.isdigit():
-            return True
+        return grenrgys
 
+    @staticmethod
+    def contains_number(string):
+        """Check if a number is in a string."""
 
-def read_atoms(calc_path, element, contains_number):
-    """Get the excited state energies."""
-    dir_list = os.listdir(calc_path)
-    energy = "s.c.f. calculation      :"
-    excienrgys = []
+        for character in string:
+            if character.isdigit():
+                return True
 
-    # Read each core hole dir
-    atom_counter = 0
-    for directory in dir_list:
-        if element in directory and contains_number(directory) is True:
-            atom_counter += 1
+    @staticmethod
+    def read_atoms(calc_path, element, contains_number):
+        """Get the excited state energies."""
+        dir_list = os.listdir(calc_path)
+        energy = "s.c.f. calculation      :"
+        excienrgys = []
 
-            with open(
-                calc_path + directory + "/hole/aims.out", "r", encoding="utf-8"
-            ) as out:
-                lines = out.readlines()
+        # Read each core hole dir
+        atom_counter = 0
+        for directory in dir_list:
+            if element in directory and contains_number(directory) is True:
+                atom_counter += 1
 
-            for line in lines:
-                # Get the energy
-                if energy in line:
-                    excienrgys.append(float(line.split()[-2]))
+                with open(
+                    calc_path + directory + "/hole/aims.out", "r", encoding="utf-8"
+                ) as out:
+                    lines = out.readlines()
 
-    # Remove duplicate binding energies from list
-    excienrgys = list(dict.fromkeys(excienrgys))
+                for line in lines:
+                    # Get the energy
+                    if energy in line:
+                        excienrgys.append(float(line.split()[-2]))
 
-    print("Core hole calculated energies (eV):", *excienrgys, sep="\n")
+        # Remove duplicate binding energies from list
+        excienrgys = list(dict.fromkeys(excienrgys))
 
-    return element, excienrgys
+        print("Core hole calculated energies (eV):", *excienrgys, sep="\n")
 
+        return element, excienrgys
 
-def calc_delta_scf(element, grenrgys, excienrgys):
-    """Calculate delta scf and write to a file."""
-    xps = []
+    @staticmethod
+    def calc_delta_scf(element, grenrgys, excienrgys):
+        """Calculate delta scf and write to a file."""
 
-    for i in excienrgys:
-        xps.append(i - grenrgys)
+        xps = []
 
-    print("\nDelta-SCF energies (eV):")
+        for i in excienrgys:
+            xps.append(i - grenrgys)
 
-    for i, be in enumerate(xps):
-        xps[i] = str(round(be, 3))
-        print(xps[i])
+        print("\nDelta-SCF energies (eV):")
 
-    with open(element + "_xps_peaks.txt", "w") as file:
-        file.writelines(xps)
+        for i, be in enumerate(xps):
+            xps[i] = str(round(be, 3))
+            print(xps[i])
 
-    return [float(be) for be in xps]
+        with open(element + "_xps_peaks.txt", "w") as file:
+            file.writelines(xps)
+
+        return [float(be) for be in xps]

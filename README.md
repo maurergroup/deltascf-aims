@@ -1,10 +1,12 @@
 # deltaSCF-aims
+
 An application to test the development of core level spectroscopy simulation methods in FHI-aims
 
 [![Python package](https://github.com/maurergroup/deltascf-aims/actions/workflows/python-package.yml/badge.svg)](https://github.com/maurergroup/deltascf-aims/actions/workflows/python-package.yml)
 [![Dependency Review](https://github.com/maurergroup/deltascf-aims/actions/workflows/dependency-review.yml/badge.svg)](https://github.com/maurergroup/deltascf-aims/actions/workflows/dependency-review.yml)
 
 ## Installation
+
 Setup of a virtual environment is automated using poetry. Ensure poetry is installed with:
 
 ```shell
@@ -28,6 +30,7 @@ poetry install
 It is also necessary to have a compiled FHI-aims binary. The location needs to be specified and is then saved by the application. If you wish to change the binary name/location, simply invoke the app with the `-b` option.
 
 ## Usage
+
 The click library has been used to parse command line arguments. To view all the options, firstly enter the poetry shell and run deltascf with the help flag:
 
 ```shell

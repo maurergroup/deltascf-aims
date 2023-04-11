@@ -1,70 +1,310 @@
+"""Utilities which are used in aims_dscf"""
+
+import glob
+import os
 import sys
 
 from ase.build import molecule
 from ase.calculators.aims import Aims
 from ase.data.pubchem import pubchem_atoms_search
+from ase.io import write
 from click import MissingParameter
+from delta_scf.force_occupation import ForceOccupation as fo
 
 
-def build_geometry(spec_mol):
-    """Check different databases to create a geometry.in"""
+class MainUtils:
+    """Various utilities used in aims_dscf"""
 
-    try:
-        atoms = molecule(spec_mol)
-        print("molecule found in ASE database")
-        return atoms
-    except KeyError:
-        print("molecule not found in ASE database, searching PubChem...")
+    @staticmethod
+    def build_geometry(geometry):
+        """Check different databases to create a geometry.in"""
 
-    try:
-        atoms = pubchem_atoms_search(name=spec_mol)
-        print("molecule found as a PubChem name")
-        return atoms
-    except ValueError:
-        print(f"{spec_mol} not found in PubChem name")
+        try:
+            atoms = molecule(geometry)
+            print("molecule found in ASE database")
+            return atoms
+        except KeyError:
+            print("molecule not found in ASE database, searching PubChem...")
 
-    try:
-        atoms = pubchem_atoms_search(cid=spec_mol)
-        print("molecule found in PubChem CID")
-        return atoms
-    except ValueError:
-        print(f"{spec_mol} not found in PubChem CID")
+        try:
+            atoms = pubchem_atoms_search(name=geometry)
+            print("molecule found as a PubChem name")
+            return atoms
+        except ValueError:
+            print(f"{geometry} not found in PubChem name")
 
-    try:
-        atoms = pubchem_atoms_search(smiles=spec_mol)
-        print("molecule found in PubChem SMILES")
-        return atoms
-    except ValueError:
-        print(f"{spec_mol} not found in PubChem smiles")
-        print(f"{spec_mol} not found in PubChem or ASE database")
-        print("aborting...")
-        sys.exit(1)
+        try:
+            atoms = pubchem_atoms_search(cid=geometry)
+            print("molecule found in PubChem CID")
+            return atoms
+        except ValueError:
+            print(f"{geometry} not found in PubChem CID")
 
+        try:
+            atoms = pubchem_atoms_search(smiles=geometry)
+            print("molecule found in PubChem SMILES")
+            return atoms
+        except ValueError:
+            print(f"{geometry} not found in PubChem smiles")
+            print(f"{geometry} not found in PubChem or ASE database")
+            print("aborting...")
+            sys.exit(1)
 
-def create_calc(procs, binary, species):
-    """Create an ASE calculator object"""
+    @staticmethod
+    def check_args(*args):
+        """Check if required arguments are specified"""
 
-    aims_calc = Aims(
-        xc="pbe",
-        spin="collinear",
-        default_initial_moment=0,
-        aims_command=f"mpirun -n {procs} {binary}",
-        species_dir=f"{species}defaults_2020/tight/",
-    )
+        def_args = locals()
 
-    return aims_calc
+        for arg in def_args["args"]:
+            if arg[1] is None:
+                if arg[0] == "spec_mol":
+                    # Convert to list and back to assign to tuple
+                    arg = list(arg)
+                    arg[0] = "molecule"
+                    arg = tuple(arg)
 
+                raise MissingParameter(param_hint=f"'--{arg[0]}'", param_type="option")
 
-def check_args(*args):
-    """Check if required arguments are specified"""
-    def_args = locals()
+    @staticmethod
+    def check_geom(geom_file):
+        """Check if there are any constrain_relaxation keywords in geometry.in"""
 
-    for arg in def_args["args"]:
-        if arg[1] is None:
-            if arg[0] == "spec_mol":
-                # Convert to list and back to assign to tuple
-                arg = list(arg)
-                arg[0] = "molecule"
-                arg = tuple(arg)
+        lattice_vecs = False
 
-            raise MissingParameter(param_hint=f"'--{arg[0]}'", param_type="option")
+        for line in geom_file:
+            if "constrain_relaxation" in line:
+                print("'constrain_relaxation' keyword found in geometry.in")
+                print("Ensure that no atoms are fixed in the geometry.in file")
+                print(
+                    "The geometry of the structure should have already been relaxed before any SP calculations"
+                )
+                print("Aborting...")
+                sys.exit(1)
+
+            if "lattice_vector" in line:
+                lattice_vecs = True
+
+        return lattice_vecs
+
+    @staticmethod
+    def convert_opts_to_dict(opts, pbc):
+        """Convert the control options from a tuple to a dictionary"""
+
+        opts_dict = {}
+
+        for opt in opts:
+            spl = opt.split(sep="=")
+
+            opts_dict[spl[0]] = spl[1]
+
+        # Also add k_grid if given
+        if pbc is not None:
+            opts_dict.update({"k_grid": pbc})
+
+        return opts_dict
+
+    @staticmethod
+    def create_calc(procs, binary, species):
+        """Create an ASE calculator object"""
+
+        # Choose some sane defaults
+        aims_calc = Aims(
+            xc="pbe",
+            spin="collinear",
+            default_initial_moment=0,
+            aims_command=f"mpirun -n {procs} {binary}",
+            species_dir=f"{species}defaults_2020/tight/",
+        )
+
+        return aims_calc
+
+    @staticmethod
+    def print_ks_states(run_loc):
+        """Print the KS states for the different spin states"""
+
+        # Parse the output file
+        with open(f"{run_loc}/ground/aims.out", "r") as aims:
+            lines = aims.readlines()
+
+        su_eigs_start_line = None
+        sd_eigs_start_line = None
+
+        for num, content in enumerate(lines):
+            if "Spin-up eigenvalues" in content:
+                su_eigs_start_line = num
+            if "Spin-down eigenvalues" in content:
+                sd_eigs_start_line = num
+
+        # Check that KS states were found
+        if su_eigs_start_line is None:
+            print("No spin-up KS states found")
+            print("Did you run a spin polarised calculation?")
+            sys.exit(1)
+
+        if sd_eigs_start_line is None:
+            print("No spin-down KS states found")
+            print("Did you run a spin polarised calculation?")
+            sys.exit(1)
+
+        su_eigs = []
+        sd_eigs = []
+
+        # Save the KS states into lists
+        for num, content in enumerate(lines[su_eigs_start_line + 2 :]):
+            spl = content.split()
+
+            if len(spl) != 0:
+                su_eigs.append(content)
+            else:
+                break
+
+        for num, content in enumerate(lines[sd_eigs_start_line + 2 :]):
+            spl = content.split()
+
+            if len(spl) != 0:
+                sd_eigs.append(content)
+            else:
+                break
+
+        # Print the KS states
+        print("Spin-up KS eigenvalues:\n")
+        print(*su_eigs, sep="")
+
+        print("Spin-down KS eigenvalues:\n")
+        print(*sd_eigs, sep="")
+
+    @staticmethod
+    def write_control(run_loc, control_opts, calc_type, atoms, int_grid, defaults):
+        """Write a control.in file"""
+
+        if calc_type == "ground":
+            # Firstly create the control file
+            os.system(f"touch {run_loc}/ground/control.in")
+
+            # Use the static method from ForceOccupation
+            lines = fo.change_control_keywords(
+                f"{run_loc}/ground/control.in", control_opts
+            )
+
+            with open(f"{run_loc}/ground/control.in", "w") as control:
+                control.writelines(lines)
+
+            # Then add the basis set
+            elements = list(dict.fromkeys(atoms.get_chemical_symbols()))
+
+            for el in elements:
+                basis_set = glob.glob(
+                    f"{defaults}defaults_2020/{int_grid}/*{el}_default"
+                )[0]
+                os.system(f"cat {basis_set} >> {run_loc}/ground/control.in")
+
+    @staticmethod
+    def ground_calc(
+        run_loc,
+        geom_inp,
+        control_inp,
+        atoms,
+        basis_set,
+        species,
+        calc,
+        ase,
+        control_opts,
+        nprocs,
+        binary,
+        hpc,
+    ):
+        """Run a ground state calculation"""
+
+        # Ensure that aims always runs with the following environment variables:
+        os.system("export OMP_NUM_THREADS=1")
+        os.system("export MKL_NUM_THREADS=1")
+
+        # Create the ground directory if it doesn't already exist
+        os.system(f"mkdir -p {run_loc}/ground")
+
+        # Write the geometry file if the system is specified through CLI
+        if geom_inp is None and control_inp is not None:
+            write(f"{run_loc}/geometry.in", atoms, format="aims")
+
+        # Copy the geometry.in and control.in files to the ground directory
+        if control_inp is not None:
+            os.system(f"mv {control_inp} {run_loc}/ground")
+
+        if geom_inp is not None:
+            os.system(f"mv {geom_inp} {run_loc}/ground")
+
+        if os.path.isfile(f"{run_loc}/ground/aims.out") == False:
+            # Run the ground state calculation
+
+            if ase:
+                # Change the defaults if any are specified by the user
+                # Update with all control options from the calculator
+                calc.set(**control_opts)
+
+                control_opts = calc.parameters
+
+                if not hpc:
+                    print("running calculation...")
+                    atoms.get_potential_energy()
+                    # Move files to ground directory
+                    os.system(
+                        f"mv geometry.in control.in aims.out parameters.ase {run_loc}/ground/"
+                    )
+
+                    print("ground calculation completed successfully\n")
+
+                else:
+                    # Prevent species dir from being written
+                    control_opts.pop("species_dir")
+
+                    print("writing geometry.in file...")
+                    write(f"{run_loc}ground/geometry.in", images=atoms, format="aims")
+
+                    print("writing control.in file...")
+                    MainUtils.write_control(
+                        run_loc, control_opts, "ground", atoms, basis_set, species
+                    )
+
+            elif not hpc:  # Don't use ASE
+                print("running calculation...")
+                os.system(
+                    f"cd {run_loc}/ground && mpirun -n {nprocs} {binary} > aims.out"
+                )
+                print("ground calculation completed successfully\n")
+
+            # Print the KS states from aims.out so it is easier to specify the
+            # KS states for the hole calculation
+            if not hpc:
+                MainUtils.print_ks_states(run_loc)
+
+        else:
+            print("aims.out file found in ground calculation directory")
+            print("skipping calculation...")
+
+    @staticmethod
+    def get_element_symbols(geom, spec_at_constr):
+        """Find the element symbols from specified atom indices in a geometry file."""
+
+        with open(geom, "r") as geom:
+            lines = geom.readlines()
+
+        atom_lines = []
+
+        # Copy only the lines which specify atom coors into a new list
+        for line in lines:
+            spl = line.split()
+            if len(line) > 0 and "atom" == spl[0]:
+                atom_lines.append(line)
+
+        element_symbols = []
+
+        # Get the element symbols from the atom coors
+        # Uniquely add each element symbol
+        for atom in spec_at_constr:
+            element = atom_lines[atom].split()[-1]
+
+            if element not in element_symbols:
+                element_symbols.append(element)
+
+        return element_symbols
