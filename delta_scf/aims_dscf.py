@@ -439,6 +439,11 @@ def projector(ctx, run_type, occ_type, pbc, l_vecs, ks_range, control_opts):
     # Check if the lattice vectors and k_grid have been provided
     if found_lattice_vecs or l_vecs is not None:
         if pbc is None:
+            print(
+                "WARNING: -p/--pbc argument not given, attempting to use"
+                " k_grid from previous calculation"
+            )
+
             # Try to parse the k-grid if other calculations have been run
             try:
                 pbc_list = []
@@ -448,11 +453,6 @@ def projector(ctx, run_type, occ_type, pbc, l_vecs, ks_range, control_opts):
                             if "k_grid" in line:
                                 pbc_list.append(line.split()[1:])
 
-                                print(
-                                    "WARNING: -p/--pbc argument not given, using"
-                                    " k_grid from previous calculation"
-                                )
-
                 # If different k_grids have been used for different calculations, then
                 # enforce the user to provide the k_grid
                 if not pbc_list.count(pbc_list[0]) == len(pbc_list):
@@ -460,6 +460,9 @@ def projector(ctx, run_type, occ_type, pbc, l_vecs, ks_range, control_opts):
                         "\nERROR: 'k_grid' keyword found in "
                         "control.in but -p/--pbc option has not been provided"
                     )
+                else:
+                    pbc_list = tuple([int(i) for i in pbc_list[0]])
+                    control_opts["k_grid"] = pbc_list
 
             except FileNotFoundError:
                 raise click.MissingParameter(

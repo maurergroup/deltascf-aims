@@ -164,30 +164,18 @@ class ForceOccupation:
 
             # Break when basis set definitions start
             if (
-                "################################################################################"
-                in line
+                "############################################################"
+                "####################" in line
             ):
                 break
 
-            # Try first adding the dictionary key as a float, then an int, then a string
+            # Add the dictionary value as a string
             if len(spl) > 1 and "#" not in spl[0]:
                 if len(spl[1:]) > 1:
-                    try:
-                        opts[spl[0]] = [int(i) for i in spl[1:]]
-                    except ValueError:
-                        try:
-                            opts[spl[0]] = [float(i) for i in spl[1:]]
-                        except ValueError:
-                            opts[spl[0]] = " ".join(spl[1:])
+                    opts[spl[0]] = " ".join(spl[1:])
 
                 else:
-                    try:
-                        opts[spl[0]] = int(spl[1])
-                    except ValueError:
-                        try:
-                            opts[spl[0]] = float(spl[1])
-                        except ValueError:
-                            opts[spl[0]] = spl[1]
+                    opts[spl[0]] = spl[1]
 
         return opts
 
