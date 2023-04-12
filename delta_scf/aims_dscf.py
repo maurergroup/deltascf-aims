@@ -513,6 +513,12 @@ def projector(ctx, run_type, occ_type, pbc, l_vecs, ks_range, control_opts):
                 "ERROR: the -h/--hpc flag is only supported for the 'hole' run type"
             )
 
+        if len(spec_at_constr) == 0 and len(constr_atoms) == 0:
+            raise click.BadParameter(
+                "ERROR: no atoms have been specified to constrain, please use the "
+                "-a/--constr_atoms or -s/--spec_at_constr options"
+            )
+
         # Check required arguments are given in main()
         mu.check_args(("ks_range", ks_range), ("constr_atoms", constr_atoms))
 
@@ -532,6 +538,12 @@ def projector(ctx, run_type, occ_type, pbc, l_vecs, ks_range, control_opts):
         if hpc:
             raise click.BadParameter(
                 "ERROR: the -h/--hpc flag is only supported for the 'hole' run type"
+            )
+
+        if len(spec_at_constr) == 0 and len(constr_atoms) == 0:
+            raise click.BadParameter(
+                "ERROR: no atoms have been specified to constrain, please use the "
+                "-a/--constr_atoms or -s/--spec_at_constr options"
             )
 
         # Catch for if init_1 hasn't been run
@@ -568,8 +580,11 @@ def projector(ctx, run_type, occ_type, pbc, l_vecs, ks_range, control_opts):
         spec_run_info = " 2>/dev/null"
 
     if run_type == "hole":
-        # TODO Check required arguments are given in main()
-        mu.check_args(("constr_atoms", constr_atoms))
+        if len(spec_at_constr) == 0 and len(constr_atoms) == 0:
+            raise click.BadParameter(
+                "ERROR: no atoms have been specified to constrain, please use the "
+                "-a/--constr_atoms or -s/--spec_at_constr options"
+            )
 
         # Add molecule identifier to hole geometry.in
         if hpc:
@@ -796,6 +811,12 @@ def basis(
             ("l_qn", l_qn),
             ("m_qn", m_qn),
         )
+
+        if len(spec_at_constr) == 0 and len(constr_atoms) == 0:
+            raise click.BadParameter(
+                "ERROR: no atoms have been specified to constrain, please use the "
+                "-a/--constr_atoms or -s/--spec_at_constr options"
+            )
 
         # Ensure that aims always runs with the following environment variables:
         os.system("export OMP_NUM_THREADS=1")
