@@ -645,11 +645,6 @@ def projector(ctx, run_type, occ_type, pbc, l_vecs, ks_range, control_opts):
                 ) as control_file:
                     control_file.writelines(control_content)
 
-            with open(
-                f"{run_loc}{constr_atoms}{i}/hole/control.in", "w"
-            ) as control_file:
-                control_file.writelines(control_content)
-
             # Copy the restart files to hole from init_2
             os.path.isfile(
                 glob.glob(f"{run_loc}/{constr_atoms}{i}/init_2/*restart*")[0]

@@ -426,8 +426,8 @@ class Projector(ForceOccupation):
         if occ_type == "force_occupation_projector":
             ks_method = "serial"
         if occ_type == "deltascf_projector":
-            # ks_method = "parallel"
-            ks_method = "serial"
+            ks_method = "parallel"
+            # ks_method = "serial"
 
         # Loop over each element to constrain
         for el in self.element_symbols:
@@ -498,8 +498,8 @@ class Projector(ForceOccupation):
         if occ_type == "force_occupation_projector":
             ks_method = "serial"
         if occ_type == "deltascf_projector":
-            # ks_method = "parallel"
-            ks_method = "serial"
+            ks_method = "parallel"
+            # ks_method = "serial"
 
         # Loop over each element to constrain
         for el in self.element_symbols:
