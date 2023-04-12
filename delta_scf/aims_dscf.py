@@ -561,19 +561,20 @@ def projector(ctx, run_type, occ_type, pbc, l_vecs, ks_range, control_opts):
                 )
                 raise FileNotFoundError
 
-            # Add any additional control options to the init_2 control file
-            parsed_control_opts = fo.get_control_keywords(
-                f"{run_loc}{constr_atoms}{i}/init_2/control.in"
-            )
-            control_opts = fo.mod_keywords(control_opts, parsed_control_opts)
-            control_content = fo.change_control_keywords(
-                f"{run_loc}{constr_atoms}{i}/init_2/control.in", control_opts
-            )
+            if len(control_opts) > 0:
+                # Add any additional control options to the init_2 control file
+                parsed_control_opts = fo.get_control_keywords(
+                    f"{run_loc}{constr_atoms}{i}/init_2/control.in"
+                )
+                control_opts = fo.mod_keywords(control_opts, parsed_control_opts)
+                control_content = fo.change_control_keywords(
+                    f"{run_loc}{constr_atoms}{i}/init_2/control.in", control_opts
+                )
 
-            with open(
-                f"{run_loc}{constr_atoms}{i}/init_2/control.in", "w"
-            ) as control_file:
-                control_file.writelines(control_content)
+                with open(
+                    f"{run_loc}{constr_atoms}{i}/init_2/control.in", "w"
+                ) as control_file:
+                    control_file.writelines(control_content)
 
             # Copy the restart files to init_2 from init_1
             os.path.isfile(glob.glob(f"{run_loc}{constr_atoms}{i}/init_1/*restart*")[0])
@@ -626,14 +627,20 @@ def projector(ctx, run_type, occ_type, pbc, l_vecs, ks_range, control_opts):
                 )
                 raise FileNotFoundError
 
-            # Add any additional control options to the hole control file
-            parsed_control_opts = fo.get_control_keywords(
-                f"{run_loc}{constr_atoms}{i}/hole/control.in"
-            )
-            control_opts = fo.mod_keywords(control_opts, parsed_control_opts)
-            control_content = fo.change_control_keywords(
-                f"{run_loc}{constr_atoms}{i}/hole/control.in", control_opts
-            )
+            if len(control_opts) > 0:
+                # Add any additional control options to the hole control file
+                parsed_control_opts = fo.get_control_keywords(
+                    f"{run_loc}{constr_atoms}{i}/hole/control.in"
+                )
+                control_opts = fo.mod_keywords(control_opts, parsed_control_opts)
+                control_content = fo.change_control_keywords(
+                    f"{run_loc}{constr_atoms}{i}/hole/control.in", control_opts
+                )
+
+                with open(
+                    f"{run_loc}{constr_atoms}{i}/hole/control.in", "w"
+                ) as control_file:
+                    control_file.writelines(control_content)
 
             with open(
                 f"{run_loc}{constr_atoms}{i}/hole/control.in", "w"
