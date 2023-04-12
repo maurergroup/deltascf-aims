@@ -448,6 +448,11 @@ def projector(ctx, run_type, occ_type, pbc, l_vecs, ks_range, control_opts):
                             if "k_grid" in line:
                                 pbc_list.append(line.split()[1:])
 
+                                print(
+                                    "WARNING: -p/--pbc argument not given, using"
+                                    " k_grid from previous calculation"
+                                )
+
                 # If different k_grids have been used for different calculations, then
                 # enforce the user to provide the k_grid
                 if not pbc_list.count(pbc_list[0]) == len(pbc_list):
