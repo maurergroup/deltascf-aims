@@ -48,10 +48,18 @@ class CalcDeltaSCF:
             if element in directory and contains_number(directory) is True:
                 atom_counter += 1
 
-                with open(
-                    calc_path + directory + "/hole/aims.out", "r", encoding="utf-8"
-                ) as out:
-                    lines = out.readlines()
+                # Try reading output file from basis, then projector file structure
+                try:
+                    with open(
+                        calc_path + directory + "/aims.out", "r", encoding="utf-8"
+                    ) as out:
+                        lines = out.readlines()
+
+                except FileNotFoundError:
+                    with open(
+                        calc_path + directory + "/hole/aims.out", "r", encoding="utf-8"
+                    ) as out:
+                        lines = out.readlines()
 
                 for line in lines:
                     # Get the energy

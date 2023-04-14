@@ -96,14 +96,6 @@ from delta_scf.plot import Plot
     help="occupation value of the core hole",
 )
 @click.option(
-    "-u",
-    "--spin",
-    type=int,
-    default=0,
-    show_default=True,
-    help="set the multiplicity of the system",
-)
-@click.option(
     "-a",
     "--n_atoms",
     type=click.IntRange(1),
@@ -151,7 +143,6 @@ def main(
     constr_atom,
     spec_at_constr,
     occupation,
-    spin,
     n_atoms,
     basis_set,
     graph,
@@ -286,7 +277,6 @@ def main(
         ctx.obj["CONSTR_ATOM"] = constr_atom
         ctx.obj["SPEC_AT_CONSTR"] = spec_at_constr
         ctx.obj["OCC"] = occupation
-        ctx.obj["SPIN"] = spin
         ctx.obj["N_ATOMS"] = n_atoms  # TODO
         ctx.obj["BASIS_SET"] = basis_set
         ctx.obj["GRAPH"] = graph
@@ -388,6 +378,14 @@ def process(ctx):
     help="provide the lattice vectors in a 3x3 matrix",
 )
 @click.option(
+    "-u",
+    "--spin",
+    type=int,
+    default=0,
+    show_default=True,
+    help="set the spin of the system",
+)
+@click.option(
     "-k",
     "--ks_range",
     nargs=2,
@@ -402,7 +400,7 @@ def process(ctx):
     help="provide additional options to be used in 'control.in' in a key=value format",
 )
 @click.pass_context
-def projector(ctx, run_type, occ_type, pbc, l_vecs, ks_range, control_opts):
+def projector(ctx, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts):
     """Force occupation of the Kohn-Sham states."""
 
     run_loc = ctx.obj["RUN_LOC"]
@@ -421,7 +419,6 @@ def projector(ctx, run_type, occ_type, pbc, l_vecs, ks_range, control_opts):
     spec_mol = ctx.obj["SPEC_MOL"]
     species = ctx.obj["SPECIES"]
     occ = ctx.obj["OCC"]
-    spin = ctx.obj["SPIN"]
 
     # Used later to redirect STDERR to /dev/null to prevent printing not converged errors
     spec_run_info = None
@@ -493,6 +490,13 @@ def projector(ctx, run_type, occ_type, pbc, l_vecs, ks_range, control_opts):
         ground_geom = f"{run_loc}/ground/geometry.in"
         ground_control = f"{run_loc}/ground/control.in"
 
+    if len(spec_at_constr) == 0 and constr_atoms is None:
+        raise click.MissingParameter(
+            "No atoms have been specified to constrain, please provide either"
+            " the -c/--constrained_atom or the -s/--specific_atom_constraint arguments",
+            param_type="option",
+        )
+
     # Create a list of element symbols to constrain
     if len(spec_at_constr) > 0:
         element_symbols = mu.get_element_symbols(ground_geom, spec_at_constr)
@@ -528,7 +532,7 @@ def projector(ctx, run_type, occ_type, pbc, l_vecs, ks_range, control_opts):
             )
 
         # Check required arguments are given in main()
-        mu.check_args(("ks_range", ks_range), ("constr_atoms", constr_atoms))
+        mu.check_args(("ks_range", ks_range))
 
         # TODO allow this for multiple constrained atoms using n_atoms
         for atom in element_symbols:
@@ -597,7 +601,7 @@ def projector(ctx, run_type, occ_type, pbc, l_vecs, ks_range, control_opts):
 
         # Add molecule identifier to hole geometry.in
         if hpc:
-            mu.check_args(("ks_range", ks_range), ("constr_atoms", constr_atoms))
+            mu.check_args(("ks_range", ks_range))
 
             # Setup files required for the initialisation and hole calculations
             proj = Projector(fo)
@@ -661,8 +665,6 @@ def projector(ctx, run_type, occ_type, pbc, l_vecs, ks_range, control_opts):
         and os.path.isfile(f"{run_loc}/{constr_atoms}1/{run_type}/aims.out") == False
         and not hpc
     ):
-        mu.check_args(("constr_atoms", constr_atoms))
-
         # Ensure that aims always runs with the following environment variables:
         os.system("export OMP_NUM_THREADS=1")
         os.system("export MKL_NUM_THREADS=1")
@@ -709,6 +711,14 @@ def projector(ctx, run_type, occ_type, pbc, l_vecs, ks_range, control_opts):
     help="select whether the old or new occupation routine is used",
 )
 @click.option(
+    "-u",
+    "--multiplicity",
+    type=int,
+    default=1,
+    show_default=True,
+    help="set the multiplicity of the system",
+)
+@click.option(
     "-n",
     "--n_quantum_number",
     "n_qn",
@@ -748,6 +758,7 @@ def basis(
     run_type,
     atom_index,
     occ_type,
+    multiplicity,
     n_qn,
     l_qn,
     m_qn,
@@ -771,7 +782,6 @@ def basis(
     hpc = ctx.obj["HPC"]
     constr_atoms = ctx.obj["CONSTR_ATOM"]
     spec_at_constr = ctx.obj["SPEC_AT_CONSTR"]
-    spin = ctx.obj["SPIN"]
     occ = ctx.obj["OCC"]
 
     # Raise a warning if no additional control options have been specified
@@ -809,12 +819,18 @@ def basis(
     else:  # run_type == 'hole'
         ground_geom = f"{run_loc}/ground/geometry.in"
 
+    if len(spec_at_constr) == 0 and constr_atoms is None:
+        raise click.MissingParameter(
+            "No atoms have been specified to constrain, please provide either"
+            " the -c/--constrained_atom or the -s/--specific_atom_constraint arguments",
+            param_type="option",
+        )
+
     if (
         run_type == "hole"
-        and os.path.isfile(f"{run_loc}/{constr_atoms}1/hole/aims.out") is False
+        and os.path.isfile(f"{run_loc}/{constr_atoms}1/aims.out") is False
     ):
         mu.check_args(
-            ("constr_atoms", constr_atoms),
             ("atom_index", atom_index),
             ("ks_max", ks_max),
             ("n_qn", n_qn),
@@ -864,7 +880,7 @@ def basis(
         )
 
         basis = Basis(fo)
-        basis.setup_basis(spin, n_qn, l_qn, m_qn, occ, ks_max, occ_type)
+        basis.setup_basis(multiplicity, n_qn, l_qn, m_qn, occ, ks_max, occ_type)
 
         # Add molecule identifier to hole geometry.in
         with open(f"{run_loc}{constr_atoms}1/geometry.in", "r") as hole_geom:

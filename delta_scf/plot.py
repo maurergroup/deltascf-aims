@@ -50,8 +50,14 @@ class Plot:
         y_max = max(plot_y)
 
         # Get the type of molecule
-        with open(f"{run_loc}/{targ_at}1/hole/geometry.in", "r") as hole_geom:
-            lines = hole_geom.readlines()
+        # Enable for both basis and projector file structures
+        try:
+            with open(f"{run_loc}/{targ_at}1/geometry.in", "r") as hole_geom:
+                lines = hole_geom.readlines()
+
+        except FileNotFoundError:
+            with open(f"{run_loc}/{targ_at}1/hole/geometry.in", "r") as hole_geom:
+                lines = hole_geom.readlines()
 
         molecule = lines[4].split()[-1]
 
