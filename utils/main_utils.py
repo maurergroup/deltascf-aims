@@ -133,8 +133,13 @@ class MainUtils:
         for num, content in enumerate(lines):
             if "Spin-up eigenvalues" in content:
                 su_eigs_start_line = num
+                if "K-point:" in lines[num + 1]:
+                    su_eigs_start_line += 1
+
             if "Spin-down eigenvalues" in content:
                 sd_eigs_start_line = num
+                if "K-point:" in lines[num + 1]:
+                    sd_eigs_start_line += 1
 
         # Check that KS states were found
         if su_eigs_start_line is None:
@@ -259,7 +264,7 @@ class MainUtils:
                     control_opts.pop("species_dir")
 
                     print("writing geometry.in file...")
-                    write(f"{run_loc}ground/geometry.in", images=atoms, format="aims")
+                    write(f"{run_loc}/ground/geometry.in", images=atoms, format="aims")
 
                     print("writing control.in file...")
                     MainUtils.write_control(

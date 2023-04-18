@@ -30,7 +30,7 @@ class ForceOccupation:
         if "k_grid" in ad_cont_opts.keys():
             ad_cont_opts["k_grid"] = " ".join(map(str, ad_cont_opts["k_grid"]))
 
-        self.new_control = f"{self.run_loc}ground/control.in.new"
+        self.new_control = f"{self.run_loc}/ground/control.in.new"
         self.atom_specifier = []
 
         # Find the root directory of the package
@@ -164,30 +164,18 @@ class ForceOccupation:
 
             # Break when basis set definitions start
             if (
-                "################################################################################"
-                in line
+                "############################################################"
+                "####################" in line
             ):
                 break
 
-            # Try first adding the dictionary key as a float, then an int, then a string
+            # Add the dictionary value as a string
             if len(spl) > 1 and "#" not in spl[0]:
                 if len(spl[1:]) > 1:
-                    try:
-                        opts[spl[0]] = [int(i) for i in spl[1:]]
-                    except ValueError:
-                        try:
-                            opts[spl[0]] = [float(i) for i in spl[1:]]
-                        except ValueError:
-                            opts[spl[0]] = " ".join(spl[1:])
+                    opts[spl[0]] = " ".join(spl[1:])
 
                 else:
-                    try:
-                        opts[spl[0]] = int(spl[1])
-                    except ValueError:
-                        try:
-                            opts[spl[0]] = float(spl[1])
-                        except ValueError:
-                            opts[spl[0]] = spl[1]
+                    opts[spl[0]] = spl[1]
 
         return opts
 
@@ -372,17 +360,17 @@ class Projector(ForceOccupation):
             for i in range(len(self.atom_specifier)):
                 i += 1
 
-                i1_control = f"{self.run_loc}{el}{i}/init_1/control.in"
-                i1_geometry = f"{self.run_loc}{el}{i}/init_1/geometry.in"
+                i1_control = f"{self.run_loc}/{el}{i}/init_1/control.in"
+                i1_geometry = f"{self.run_loc}/{el}{i}/init_1/geometry.in"
 
                 # Create new directory and control file for init_1 calc
-                os.makedirs(f"{self.run_loc}{el}{i}/init_1", exist_ok=True)
+                os.makedirs(f"{self.run_loc}/{el}{i}/init_1", exist_ok=True)
                 shutil.copyfile(
                     self.new_control,
                     i1_control,
                 )
                 # Create new geometry file for init_1 calc
-                shutil.copyfile(f"{self.run_loc}ground/geometry.in", i1_geometry)
+                shutil.copyfile(f"{self.run_loc}/ground/geometry.in", i1_geometry)
 
                 # Change geometry file
                 with open(i1_geometry, "r") as read_geom:
@@ -438,8 +426,8 @@ class Projector(ForceOccupation):
         if occ_type == "force_occupation_projector":
             ks_method = "serial"
         if occ_type == "deltascf_projector":
-            # ks_method = "parallel"
-            ks_method = "serial"
+            ks_method = "parallel"
+            # ks_method = "serial"
 
         # Loop over each element to constrain
         for el in self.element_symbols:
@@ -462,14 +450,14 @@ class Projector(ForceOccupation):
 
                 i += 1
 
-                i2_control = f"{self.run_loc}{el}{i}/init_2/control.in"
+                i2_control = f"{self.run_loc}/{el}{i}/init_2/control.in"
 
                 # Create new directory for init_2 calc
-                os.makedirs(f"{self.run_loc}{el}{i}/init_2", exist_ok=True)
+                os.makedirs(f"{self.run_loc}/{el}{i}/init_2", exist_ok=True)
                 shutil.copyfile(self.new_control, i2_control)
                 shutil.copyfile(
-                    f"{self.run_loc}{el}{i}/init_1/geometry.in",
-                    f"{self.run_loc}{el}{i}/init_2/geometry.in",
+                    f"{self.run_loc}/{el}{i}/init_1/geometry.in",
+                    f"{self.run_loc}/{el}{i}/init_2/geometry.in",
                 )
 
                 # Change control file
@@ -510,8 +498,8 @@ class Projector(ForceOccupation):
         if occ_type == "force_occupation_projector":
             ks_method = "serial"
         if occ_type == "deltascf_projector":
-            # ks_method = "parallel"
-            ks_method = "serial"
+            ks_method = "parallel"
+            # ks_method = "serial"
 
         # Loop over each element to constrain
         for el in self.element_symbols:
@@ -536,13 +524,13 @@ class Projector(ForceOccupation):
                 i += 1
 
                 # Location of the hole control file
-                h_control = f"{self.run_loc}{el}{i}/hole/control.in"
+                h_control = f"{self.run_loc}/{el}{i}/hole/control.in"
 
                 # Create new directory for hole calc
-                os.makedirs(f"{self.run_loc}{el}{i}/hole", exist_ok=True)
+                os.makedirs(f"{self.run_loc}/{el}{i}/hole", exist_ok=True)
                 shutil.copyfile(
-                    f"{self.run_loc}{el}{i}/init_1/geometry.in",
-                    f"{self.run_loc}{el}{i}/hole/geometry.in",
+                    f"{self.run_loc}/{el}{i}/init_1/geometry.in",
+                    f"{self.run_loc}/{el}{i}/hole/geometry.in",
                 )
                 shutil.copyfile(self.new_control, h_control)
 
@@ -575,7 +563,7 @@ class Basis(ForceOccupation):
         """Inherit all the variables from an instance of the parent class"""
         vars(self).update(vars(parent_instance))
 
-    def setup_basis(self, spin, n_qn, l_qn, m_qn, occ_no, ks_max, occ_type):
+    def setup_basis(self, multiplicity, n_qn, l_qn, m_qn, occ_no, ks_max, occ_type):
         """Write new directories and control files for basis calculations."""
 
         # The new basis method should utilise ks method parallel
@@ -595,7 +583,7 @@ class Basis(ForceOccupation):
                     "spin": "collinear",
                     "default_initial_moment": 0,
                     "charge": 1.0,
-                    occ_type: f"{self.atom_specifier[i]} {spin} atomic {n_qn} {l_qn} {m_qn} {occ_no} {ks_max}",
+                    occ_type: f"{self.atom_specifier[i]} {multiplicity} atomic {n_qn} {l_qn} {m_qn} {occ_no} {ks_max}",
                     "KS_method": ks_method,
                 }
 
