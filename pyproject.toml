@@ -16,7 +16,7 @@ matplotlib = "^3.6.2"
 pytest = "^7.2.1"
 
 [tool.poetry.scripts]
-deltascf = 'delta_scf.cli:main'
+deltascf = 'delta_scf.cli:cli'
 
 
 [build-system]

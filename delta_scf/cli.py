@@ -3,7 +3,7 @@
 import click
 from utils.custom_click import MutuallyExclusive as me
 
-from delta_scf.aims_dscf import basis, main, projector
+from delta_scf.aims_dscf import basis_wrapper, main, projector_wrapper
 
 
 @click.group()
@@ -121,7 +121,7 @@ from delta_scf.aims_dscf import basis, main, projector
     "-d", "--debug", is_flag=True, help="for developer use: print debug information"
 )
 @click.pass_context
-def main(
+def cli(
     ctx,
     hpc,
     geometry_input,
@@ -177,7 +177,7 @@ def main(
     )
 
 
-@main.command()
+@cli.command()
 @click.option(
     "-r",
     "--run_type",
@@ -234,10 +234,12 @@ def main(
 def projector(ctx, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts):
     """Calculate DSCF values and plot the simulated XPS spectra."""
 
-    projector(ctx, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts)
+    projector_wrapper(
+        ctx, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts
+    )
 
 
-@main.command()
+@cli.command()
 @click.option(
     "-r",
     "--run_type",
@@ -313,7 +315,7 @@ def basis(
 ):
     """Force occupation of the basis states."""
 
-    basis(
+    basis_wrapper(
         ctx,
         run_type,
         atom_index,
@@ -328,4 +330,4 @@ def basis(
 
 
 if __name__ == "__main__":
-    main()
+    cli()
