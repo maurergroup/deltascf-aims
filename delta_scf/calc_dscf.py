@@ -43,18 +43,19 @@ class CalcDeltaSCF:
         excienrgys = []
 
         # Read each core hole dir
-        atom_counter = 0
         for directory in dir_list:
             if element in directory and contains_number(directory) is True:
-                atom_counter += 1
 
                 # Try reading output file from basis, then projector file structure
-                try:
-                    with open(f"{calc_path}{directory}/aims.out", "r") as out:
+                if os.path.exists(f"{calc_path}{directory}/aims.out"):
+                    with open(
+                        f"{calc_path}{directory}/aims.out", "r", errors="ignore"
+                    ) as out:
                         lines = out.readlines()
-
-                except FileNotFoundError:
-                    with open(f"{calc_path}{directory}/hole/aims.out", "r") as out:
+                else:
+                    with open(
+                        f"{calc_path}{directory}/hole/aims.out", "r", errors="ignore"
+                    ) as out:
                         lines = out.readlines()
 
                 for line in lines:
