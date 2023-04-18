@@ -264,7 +264,7 @@ class MainUtils:
                     control_opts.pop("species_dir")
 
                     print("writing geometry.in file...")
-                    write(f"{run_loc}ground/geometry.in", images=atoms, format="aims")
+                    write(f"{run_loc}/ground/geometry.in", images=atoms, format="aims")
 
                     print("writing control.in file...")
                     MainUtils.write_control(

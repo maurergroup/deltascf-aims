@@ -30,7 +30,7 @@ class ForceOccupation:
         if "k_grid" in ad_cont_opts.keys():
             ad_cont_opts["k_grid"] = " ".join(map(str, ad_cont_opts["k_grid"]))
 
-        self.new_control = f"{self.run_loc}ground/control.in.new"
+        self.new_control = f"{self.run_loc}/ground/control.in.new"
         self.atom_specifier = []
 
         # Find the root directory of the package
@@ -360,17 +360,17 @@ class Projector(ForceOccupation):
             for i in range(len(self.atom_specifier)):
                 i += 1
 
-                i1_control = f"{self.run_loc}{el}{i}/init_1/control.in"
-                i1_geometry = f"{self.run_loc}{el}{i}/init_1/geometry.in"
+                i1_control = f"{self.run_loc}/{el}{i}/init_1/control.in"
+                i1_geometry = f"{self.run_loc}/{el}{i}/init_1/geometry.in"
 
                 # Create new directory and control file for init_1 calc
-                os.makedirs(f"{self.run_loc}{el}{i}/init_1", exist_ok=True)
+                os.makedirs(f"{self.run_loc}/{el}{i}/init_1", exist_ok=True)
                 shutil.copyfile(
                     self.new_control,
                     i1_control,
                 )
                 # Create new geometry file for init_1 calc
-                shutil.copyfile(f"{self.run_loc}ground/geometry.in", i1_geometry)
+                shutil.copyfile(f"{self.run_loc}/ground/geometry.in", i1_geometry)
 
                 # Change geometry file
                 with open(i1_geometry, "r") as read_geom:
@@ -450,14 +450,14 @@ class Projector(ForceOccupation):
 
                 i += 1
 
-                i2_control = f"{self.run_loc}{el}{i}/init_2/control.in"
+                i2_control = f"{self.run_loc}/{el}{i}/init_2/control.in"
 
                 # Create new directory for init_2 calc
-                os.makedirs(f"{self.run_loc}{el}{i}/init_2", exist_ok=True)
+                os.makedirs(f"{self.run_loc}/{el}{i}/init_2", exist_ok=True)
                 shutil.copyfile(self.new_control, i2_control)
                 shutil.copyfile(
-                    f"{self.run_loc}{el}{i}/init_1/geometry.in",
-                    f"{self.run_loc}{el}{i}/init_2/geometry.in",
+                    f"{self.run_loc}/{el}{i}/init_1/geometry.in",
+                    f"{self.run_loc}/{el}{i}/init_2/geometry.in",
                 )
 
                 # Change control file
@@ -524,13 +524,13 @@ class Projector(ForceOccupation):
                 i += 1
 
                 # Location of the hole control file
-                h_control = f"{self.run_loc}{el}{i}/hole/control.in"
+                h_control = f"{self.run_loc}/{el}{i}/hole/control.in"
 
                 # Create new directory for hole calc
-                os.makedirs(f"{self.run_loc}{el}{i}/hole", exist_ok=True)
+                os.makedirs(f"{self.run_loc}/{el}{i}/hole", exist_ok=True)
                 shutil.copyfile(
-                    f"{self.run_loc}{el}{i}/init_1/geometry.in",
-                    f"{self.run_loc}{el}{i}/hole/geometry.in",
+                    f"{self.run_loc}/{el}{i}/init_1/geometry.in",
+                    f"{self.run_loc}/{el}{i}/hole/geometry.in",
                 )
                 shutil.copyfile(self.new_control, h_control)
 

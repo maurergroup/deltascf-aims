@@ -562,7 +562,7 @@ def projector(ctx, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts
         for i in range(len(atom_specifier)):
             i += 1
 
-            if len(glob.glob(f"{run_loc}{constr_atoms}{i}/init_1/*restart*")) < 1:
+            if len(glob.glob(f"{run_loc}/{constr_atoms}{i}/init_1/*restart*")) < 1:
                 print(
                     'init_1 restart files not found, please ensure "init_1" has been run'
                 )
@@ -571,22 +571,24 @@ def projector(ctx, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts
             if len(control_opts) > 0:
                 # Add any additional control options to the init_2 control file
                 parsed_control_opts = fo.get_control_keywords(
-                    f"{run_loc}{constr_atoms}{i}/init_2/control.in"
+                    f"{run_loc}/{constr_atoms}{i}/init_2/control.in"
                 )
                 control_opts = fo.mod_keywords(control_opts, parsed_control_opts)
                 control_content = fo.change_control_keywords(
-                    f"{run_loc}{constr_atoms}{i}/init_2/control.in", control_opts
+                    f"{run_loc}/{constr_atoms}{i}/init_2/control.in", control_opts
                 )
 
                 with open(
-                    f"{run_loc}{constr_atoms}{i}/init_2/control.in", "w"
+                    f"{run_loc}/{constr_atoms}{i}/init_2/control.in", "w"
                 ) as control_file:
                     control_file.writelines(control_content)
 
             # Copy the restart files to init_2 from init_1
-            os.path.isfile(glob.glob(f"{run_loc}{constr_atoms}{i}/init_1/*restart*")[0])
+            os.path.isfile(
+                glob.glob(f"{run_loc}/{constr_atoms}{i}/init_1/*restart*")[0]
+            )
             os.system(
-                f"cp {run_loc}{constr_atoms}{i}/init_1/*restart* {run_loc}{constr_atoms}{i}/init_2/"
+                f"cp {run_loc}/{constr_atoms}{i}/init_1/*restart* {run_loc}/{constr_atoms}{i}/init_2/"
             )
 
         # Prevent SCF not converged errors from printing
@@ -637,15 +639,15 @@ def projector(ctx, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts
             if len(control_opts) > 0:
                 # Add any additional control options to the hole control file
                 parsed_control_opts = fo.get_control_keywords(
-                    f"{run_loc}{constr_atoms}{i}/hole/control.in"
+                    f"{run_loc}/{constr_atoms}{i}/hole/control.in"
                 )
                 control_opts = fo.mod_keywords(control_opts, parsed_control_opts)
                 control_content = fo.change_control_keywords(
-                    f"{run_loc}{constr_atoms}{i}/hole/control.in", control_opts
+                    f"{run_loc}/{constr_atoms}{i}/hole/control.in", control_opts
                 )
 
                 with open(
-                    f"{run_loc}{constr_atoms}{i}/hole/control.in", "w"
+                    f"{run_loc}/{constr_atoms}{i}/hole/control.in", "w"
                 ) as control_file:
                     control_file.writelines(control_content)
 
