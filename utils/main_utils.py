@@ -133,8 +133,13 @@ class MainUtils:
         for num, content in enumerate(lines):
             if "Spin-up eigenvalues" in content:
                 su_eigs_start_line = num
+                if "K-point:" in lines[num + 1]:
+                    su_eigs_start_line += 1
+
             if "Spin-down eigenvalues" in content:
                 sd_eigs_start_line = num
+                if "K-point:" in lines[num + 1]:
+                    sd_eigs_start_line += 1
 
         # Check that KS states were found
         if su_eigs_start_line is None:
