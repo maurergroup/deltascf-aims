@@ -46,7 +46,7 @@ def main(
     if len(spec_at_constr) > 0:
         if not geometry_input:
             raise click.MissingParameter(
-                param_hint="'--geometry_input'", param_type="option"
+                param_hint="-e/--geometry_input", param_type="option"
             )
 
     # Use ASE unless both a custom geometry.in and control.in are specified
@@ -80,7 +80,8 @@ def main(
                 )
             except FileNotFoundError:
                 raise click.MissingParameter(
-                    param_hint="'--molecule' or '--geometry_input'", param_type="option"
+                    param_hint="-m/--molecule or -e/--geometry_input",
+                    param_type="option",
                 )
 
     elif "--help" not in sys.argv and ase:
@@ -217,7 +218,9 @@ def process(ctx):
             )
 
 
-def projector(ctx, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts):
+def projector_wrapper(
+    ctx, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts
+):
     """Force occupation of the Kohn-Sham states."""
 
     run_loc = ctx.obj["RUN_LOC"]
@@ -271,18 +274,14 @@ def projector(ctx, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts
                 # enforce the user to provide the k_grid
                 if not pbc_list.count(pbc_list[0]) == len(pbc_list):
                     raise click.MissingParameter(
-                        "\nERROR: 'k_grid' keyword found in "
-                        "control.in but -p/--pbc option has not been provided"
+                        param_hint="-p/--pbc", param_type="option"
                     )
                 else:
                     pbc_list = tuple([int(i) for i in pbc_list[0]])
                     control_opts["k_grid"] = pbc_list
 
-            except FileNotFoundError:
-                raise click.MissingParameter(
-                    "\nERROR: 'lattice_vector' keyword found in "
-                    "geometry.in but -p/--pbc option has not provided been"
-                )
+            except IndexError:
+                raise click.MissingParameter(param_hint="-p/--pbc", param_type="option")
 
     if run_type == "ground":
         mu.ground_calc(
@@ -309,8 +308,7 @@ def projector(ctx, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts
 
     if len(spec_at_constr) == 0 and constr_atoms is None:
         raise click.MissingParameter(
-            "No atoms have been specified to constrain, please provide either"
-            " the -c/--constrained_atom or the -s/--specific_atom_constraint arguments",
+            param_hint="-c/--constrained_atom or -s/--specific_atom_constraint",
             param_type="option",
         )
 
@@ -339,12 +337,12 @@ def projector(ctx, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts
     if run_type == "init_1":
         if hpc:
             raise click.BadParameter(
-                "ERROR: the -h/--hpc flag is only supported for the 'hole' run type"
+                "the -h/--hpc flag is only supported for the 'hole' run type"
             )
 
         if len(spec_at_constr) == 0 and len(constr_atoms) == 0:
             raise click.BadParameter(
-                "ERROR: no atoms have been specified to constrain, please use the "
+                "no atoms have been specified to constrain, please use "
                 "-a/--constr_atoms or -s/--spec_at_constr options"
             )
 
@@ -366,12 +364,12 @@ def projector(ctx, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts
     if run_type == "init_2":
         if hpc:
             raise click.BadParameter(
-                "ERROR: the -h/--hpc flag is only supported for the 'hole' run type"
+                "the -h/--hpc flag is only supported for the 'hole' run type"
             )
 
         if len(spec_at_constr) == 0 and len(constr_atoms) == 0:
             raise click.BadParameter(
-                "ERROR: no atoms have been specified to constrain, please use the "
+                "no atoms have been specified to constrain, please use "
                 "-a/--constr_atoms or -s/--spec_at_constr options"
             )
 
@@ -414,7 +412,7 @@ def projector(ctx, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts
     if run_type == "hole":
         if len(spec_at_constr) == 0 and len(constr_atoms) == 0:
             raise click.BadParameter(
-                "ERROR: no atoms have been specified to constrain, please use the "
+                "no atoms have been specified to constrain, please use the "
                 "-a/--constr_atoms or -s/--spec_at_constr options"
             )
 
@@ -510,7 +508,7 @@ def projector(ctx, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts
     process(ctx)
 
 
-def basis(
+def basis_wrapper(
     ctx,
     run_type,
     atom_index,
@@ -597,7 +595,7 @@ def basis(
 
         if len(spec_at_constr) == 0 and len(constr_atoms) == 0:
             raise click.BadParameter(
-                "ERROR: no atoms have been specified to constrain, please use the "
+                "no atoms have been specified to constrain, please use the "
                 "-a/--constr_atoms or -s/--spec_at_constr options"
             )
 
