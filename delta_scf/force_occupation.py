@@ -563,7 +563,7 @@ class Basis(ForceOccupation):
         """Inherit all the variables from an instance of the parent class"""
         vars(self).update(vars(parent_instance))
 
-    def setup_basis(self, multiplicity, n_qn, l_qn, m_qn, occ_no, ks_max, occ_type):
+    def setup_basis(self, spin, n_qn, l_qn, m_qn, occ_no, ks_max, occ_type):
         """Write new directories and control files for basis calculations."""
 
         # The new basis method should utilise ks method parallel
@@ -583,7 +583,7 @@ class Basis(ForceOccupation):
                     "spin": "collinear",
                     "default_initial_moment": 0,
                     "charge": 1.0,
-                    occ_type: f"{self.atom_specifier[i]} {multiplicity} atomic {n_qn} {l_qn} {m_qn} {occ_no} {ks_max}",
+                    occ_type: f"{self.atom_specifier[i]} {spin} atomic {n_qn} {l_qn} {m_qn} {occ_no} {ks_max}",
                     "KS_method": ks_method,
                 }
 
