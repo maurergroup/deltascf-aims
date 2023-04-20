@@ -180,29 +180,31 @@ class MainUtils:
         print(*sd_eigs, sep="")
 
     @staticmethod
-    def write_control(run_loc, control_opts, calc_type, atoms, int_grid, defaults):
+    def write_control(run_loc, control_opts, atoms, int_grid, defaults):
         """Write a control.in file"""
 
-        if calc_type == "ground":
-            # Firstly create the control file
-            os.system(f"touch {run_loc}/ground/control.in")
+        # Firstly create the control file
+        os.system(f"touch {run_loc}/ground/control.in")
 
-            # Use the static method from ForceOccupation
-            lines = fo.change_control_keywords(
-                f"{run_loc}/ground/control.in", control_opts
-            )
+        # Convert any keys given as tuples to strings
+        for i in control_opts.items():
+            if type(i[1]) == tuple:
+                control_opts[i[0]] = " ".join(str(j) for j in i[1])
 
-            with open(f"{run_loc}/ground/control.in", "w") as control:
-                control.writelines(lines)
+        # Use the static method from ForceOccupation
+        lines = fo.change_control_keywords(f"{run_loc}/ground/control.in", control_opts)
 
-            # Then add the basis set
-            elements = list(dict.fromkeys(atoms.get_chemical_symbols()))
+        with open(f"{run_loc}/ground/control.in", "w") as control:
+            control.writelines(lines)
 
-            for el in elements:
-                basis_set = glob.glob(
-                    f"{defaults}defaults_2020/{int_grid}/*{el}_default"
-                )[0]
-                os.system(f"cat {basis_set} >> {run_loc}/ground/control.in")
+        # Then add the basis set
+        elements = list(dict.fromkeys(atoms.get_chemical_symbols()))
+
+        for el in elements:
+            basis_set = glob.glob(f"{defaults}defaults_2020/{int_grid}/*{el}_default")[
+                0
+            ]
+            os.system(f"cat {basis_set} >> {run_loc}/ground/control.in")
 
     @staticmethod
     def ground_calc(
@@ -268,7 +270,7 @@ class MainUtils:
 
                     print("writing control.in file...")
                     MainUtils.write_control(
-                        run_loc, control_opts, "ground", atoms, basis_set, species
+                        run_loc, control_opts, atoms, basis_set, species
                     )
 
             elif not hpc:  # Don't use ASE
