@@ -77,7 +77,7 @@ class ForceOccupation:
                 if atom not in self.elements:
                     raise ValueError("invalid element specified")
 
-            self.atom_specifier = spec_at_constr
+            self.atom_specifier = list(spec_at_constr)
 
         print("specified atom indices:", self.atom_specifier)
 
@@ -357,7 +357,9 @@ class Projector(ForceOccupation):
                 write_control.writelines(new_basis_content)
 
             # Loop over each individual atom to constrain
-            for i in range(len(self.atom_specifier)):
+            for i in range(
+                len(self.atom_specifier)
+            ):  # TODO: fix this for individual atom constraints
                 i += 1
 
                 i1_control = f"{self.run_loc}/{el}{i}/init_1/control.in"
