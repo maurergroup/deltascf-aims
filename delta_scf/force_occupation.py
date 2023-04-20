@@ -357,9 +357,8 @@ class Projector(ForceOccupation):
                 write_control.writelines(new_basis_content)
 
             # Loop over each individual atom to constrain
-            for i in range(
-                len(self.atom_specifier)
-            ):  # TODO: fix this for individual atom constraints
+            for i in self.atom_specifier:
+                # TODO: fix this for individual atom constraints
                 i += 1
 
                 i1_control = f"{self.run_loc}/{el}{i}/init_1/control.in"
@@ -434,7 +433,7 @@ class Projector(ForceOccupation):
         # Loop over each element to constrain
         for el in self.element_symbols:
             # Loop over each individual atom to constrain
-            for i in range(len(self.atom_specifier)):
+            for i in self.atom_specifier:
                 opts = {
                     "xc": "pbe",
                     "spin": "collinear",
@@ -506,7 +505,7 @@ class Projector(ForceOccupation):
         # Loop over each element to constrain
         for el in self.element_symbols:
             # Loop over each individual atom to constrain
-            for i in range(len(self.atom_specifier)):
+            for i in self.atom_specifier:
                 opts = {
                     "xc": "pbe",
                     "spin": "collinear",
