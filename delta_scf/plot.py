@@ -52,11 +52,11 @@ class Plot:
         # Get the type of molecule
         # Enable for both basis and projector file structures
         try:
-            with open(f"{run_loc}/{targ_at}1/geometry.in", "r") as hole_geom:
+            with open(glob.glob(f"{run_loc}/{targ_at}*/geometry.in")[0], "r") as hole_geom:
                 lines = hole_geom.readlines()
 
         except FileNotFoundError:
-            with open(f"{run_loc}/{targ_at}1/hole/geometry.in", "r") as hole_geom:
+            with open(glob.glob(f"{run_loc}/{targ_at}*/hole/geometry.in")[0], "r") as hole_geom:
                 lines = hole_geom.readlines()
 
         molecule = lines[4].split()[-1]

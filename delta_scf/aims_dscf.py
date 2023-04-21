@@ -314,12 +314,13 @@ def projector_wrapper(
 
     # Create a list of element symbols to constrain
     if len(spec_at_constr) > 0:
-        element_symbols = mu.get_element_symbols(ground_geom, spec_at_constr)
+        element_symbols = mu.get_element_symbols(ground_geom, spec_at_constr)[0]
+        constr_atoms = element_symbols
     else:
         element_symbols = constr_atoms
 
     # Makes following code simpler if everything is assumed to be a list
-    if type(constr_atoms) is not list:
+    if type(constr_atoms) is not list and constr_atoms is not None:
         list_constr_atoms = list(constr_atoms)
     else:
         list_constr_atoms = constr_atoms
@@ -416,9 +417,11 @@ def projector_wrapper(
                 "-a/--constr_atoms or -s/--spec_at_constr options"
             )
 
-        # Add molecule identifier to hole geometry.in
         if hpc:
             mu.check_args(("ks_range", ks_range))
+
+            for atom in element_symbols:
+                fo.get_electronic_structure(atom)
 
             # Setup files required for the initialisation and hole calculations
             proj = Projector(fo)
@@ -426,12 +429,13 @@ def projector_wrapper(
             proj.setup_init_2(ks_range[0], ks_range[1], occ, occ_type, spin)
             proj.setup_hole(ks_range[0], ks_range[1], occ, occ_type, spin)
 
-        with open(f"{run_loc}/{constr_atoms}1/hole/geometry.in", "r") as hole_geom:
+        # Add molecule identifier to hole geometry.in
+        with open(glob.glob(f"{run_loc}/{constr_atoms}*/hole/geometry.in")[0], "r") as hole_geom:
             lines = hole_geom.readlines()
 
         lines.insert(4, f"# {spec_mol}\n")
 
-        with open(f"{run_loc}/{constr_atoms}1/hole/geometry.in", "w") as hole_geom:
+        with open(glob.glob(f"{run_loc}/{constr_atoms}*/hole/geometry.in")[0], "w") as hole_geom:
             hole_geom.writelines(lines)
 
         if hpc:
@@ -616,8 +620,11 @@ def basis_wrapper(
             element_symbols = constr_atoms
 
         # Makes following code simpler if everything is assumed to be a list
-        if type(constr_atoms) is not list:
+        if type(constr_atoms) is not list and constr_atoms is not None:
             list_constr_atoms = list(constr_atoms)
+        elif spec_at_constr is not None:
+            constr_atoms = spec_at_constr
+            list_constr_atoms = constr_atoms
         else:
             list_constr_atoms = constr_atoms
 
