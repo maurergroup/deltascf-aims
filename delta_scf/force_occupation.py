@@ -188,7 +188,6 @@ class ForceOccupation:
         if el_ad_basis != "" and basis_def_start != 0:
             insert_point = basis_def_start + basis_set_length - 8
             content.insert(insert_point, f"{el_ad_basis}\n")
-            print(content)
             return content
 
         else:
@@ -668,14 +667,8 @@ class Basis(ForceOccupation):
                 # Change control file
                 content = self.change_control_keywords(control, opts)
 
-                print(*content, sep="")
-                print("\n%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%")
-                print("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%\n")
-
                 # Add additional core-hole basis functions
                 content = self.add_additional_basis(content, el)
-
-                print(*content, sep="")
 
                 # Write the data to the file
                 with open(control, "w") as write_control:
