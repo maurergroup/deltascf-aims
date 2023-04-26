@@ -210,7 +210,7 @@ def process(ctx):
                 spec.writelines(dat)
 
             # Move the spectrum to the run location
-            os.system(f'mv {element}_xps_spectrum.txt ./{ctx.obj["RUN_LOC"]}/')
+            os.system(f'mv {element}_xps_spectrum.txt {ctx.obj["RUN_LOC"]}/')
 
             print("\nplotting spectrum and calculating MABE...")
             Plot.sim_xps_spectrum(
@@ -430,12 +430,16 @@ def projector_wrapper(
             proj.setup_hole(ks_range[0], ks_range[1], occ, occ_type, spin)
 
         # Add molecule identifier to hole geometry.in
-        with open(glob.glob(f"{run_loc}/{constr_atoms}*/hole/geometry.in")[0], "r") as hole_geom:
+        with open(
+            glob.glob(f"{run_loc}/{constr_atoms}*/hole/geometry.in")[0], "r"
+        ) as hole_geom:
             lines = hole_geom.readlines()
 
         lines.insert(4, f"# {spec_mol}\n")
 
-        with open(glob.glob(f"{run_loc}/{constr_atoms}*/hole/geometry.in")[0], "w") as hole_geom:
+        with open(
+            glob.glob(f"{run_loc}/{constr_atoms}*/hole/geometry.in")[0], "w"
+        ) as hole_geom:
             hole_geom.writelines(lines)
 
         if hpc:
@@ -554,9 +558,6 @@ def basis_wrapper(
     control_opts = mu.convert_opts_to_dict(control_opts, None)
 
     if run_type == "ground":
-        # Convert control options to a dictionary
-        control_opts = mu.convert_opts_to_dict(control_opts, None)
-
         mu.ground_calc(
             run_loc,
             geom,
@@ -634,6 +635,7 @@ def basis_wrapper(
             run_loc,
             ground_geom,
             control_opts,
+            f"{species}/defaults_2020/{basis_set}",
         )
 
         # Get atom indices from the ground state geometry file
@@ -661,15 +663,15 @@ def basis_wrapper(
             if len(control_opts) > 0:
                 # Add any additional control options to the hole control file
                 parsed_control_opts = fo.get_control_keywords(
-                    f"{run_loc}{constr_atoms}{i}/control.in"
+                    f"{run_loc}/{constr_atoms}{i}/control.in"
                 )
                 control_opts = fo.mod_keywords(control_opts, parsed_control_opts)
                 control_content = fo.change_control_keywords(
-                    f"{run_loc}{constr_atoms}{i}/control.in", control_opts
+                    f"{run_loc}/{constr_atoms}{i}/control.in", control_opts
                 )
 
                 with open(
-                    f"{run_loc}{constr_atoms}{i}/control.in", "w"
+                    f"{run_loc}/{constr_atoms}{i}/control.in", "w"
                 ) as control_file:
                     control_file.writelines(control_content)
 

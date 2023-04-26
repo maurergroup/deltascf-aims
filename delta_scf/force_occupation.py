@@ -12,20 +12,15 @@ import yaml
 class ForceOccupation:
     """Manipulate FHIaims input files to setup basis and projector calculations."""
 
-    def __init__(
-        self,
-        element_symbols,
-        run_loc,
-        geometry,
-        ad_cont_opts,
-    ):
+    def __init__(self, element_symbols, run_loc, geometry, ad_cont_opts, species):
         self.element_symbols = element_symbols
         self.run_loc = run_loc
         self.geometry = geometry
         self.ad_cont_opts = ad_cont_opts
+        self.species = species
 
         # Convert k_grid key to a string from a tuple
-        # Writing the options for a hole calculation doesn't uses ASE, so it must be
+        # Writing the options for a hole calculation doesn't use ASE, so it must be
         # converted to a string here
         if "k_grid" in ad_cont_opts.keys():
             ad_cont_opts["k_grid"] = " ".join(map(str, ad_cont_opts["k_grid"]))
@@ -34,10 +29,10 @@ class ForceOccupation:
         self.atom_specifier = []
 
         # Find the root directory of the package
-        current_path = os.path.dirname(os.path.realpath(__file__))
+        self.current_path = os.path.dirname(os.path.realpath(__file__))
 
         # All supported elements
-        with open(f"{current_path}/elements.yml", "r") as elements:
+        with open(f"{self.current_path}/elements.yml", "r") as elements:
             self.elements = yaml.load(elements, Loader=yaml.SafeLoader)
 
     def read_ground_inp(self, constr_atoms, spec_at_constr, geometry_path):
@@ -87,6 +82,7 @@ class ForceOccupation:
         """Get valence electronic structure of target atom."""
         # Adapted from scipython.com question P2.5.12
 
+        # Get the atomic number
         self.atom_index = self.elements.index(str(atom)) + 1
 
         # Letters identifying subshells
@@ -149,6 +145,59 @@ class ForceOccupation:
         output = list(s_config.split(".").pop(-1))
         self.valence = f"    valence      {output[0]}  {output[1]}   {output[2]}.1\n"
 
+    def add_additional_basis(self, content, target_atom):
+        """Add an additional basis set for the core hole calculation."""
+
+        # Get the additional basis set
+        with open(f"{self.current_path}/add_basis_functions.yml", "r") as f:
+            ad_basis = yaml.safe_load(f)
+
+        try:
+            el_ad_basis = ad_basis[target_atom]
+        except KeyError:
+            print(
+                f"Warning: the additional basis set for {target_atom} is not yet supported."
+                " The calculation will continue without the additional core-hole basis set."
+            )
+            el_ad_basis = ""
+            pass
+
+        # As there isn't a consistent file structure for the basis set definitions,
+        # compare the basis set given in the control file to the basis sets defined in
+        # the FHI-aims species_defaults directory to get the number of lines in the
+        # basis set, and then add the additional basis set to the end of the basis set
+        # in the control file
+        basis_def_start = 0
+        for line in content:
+            if "species" in line and target_atom in line:
+                basis_def_start = content.index(line)
+                break
+
+        # Get the atomic number of the target atom
+        atom_index = self.elements.index(str(target_atom)) + 1
+
+        # prefix 0 if atom_index is less than 10
+        if atom_index < 10:
+            atom_index = f"0{atom_index}"
+
+        # Get the number of lines in the basis set
+        with open(f"{self.species}/{atom_index}_{target_atom}_default") as basis_file:
+            basis_set_length = len(basis_file.readlines())
+
+        # Append the additional basis set to the end of the basis set in the control file
+        if el_ad_basis != "" and basis_def_start != 0:
+            insert_point = basis_def_start + basis_set_length - 8
+            content.insert(insert_point, f"{el_ad_basis}\n")
+            print(content)
+            return content
+
+        else:
+            print(
+                "Warning: there was an error with adding the additional basis set for"
+                " the hole calculation."
+            )
+            return content
+
     @staticmethod
     def get_control_keywords(control):
         """Get the keywords in a control.in file"""
@@ -196,7 +245,8 @@ class ForceOccupation:
         with open(control, "r") as read_control:
             content = read_control.readlines()
 
-        divider = "#==============================================================================="
+        divider_1 = "#==============================================================================="
+        divider_2 = "################################################################################"
 
         # Change keyword lines
         for opt in opts:
@@ -209,8 +259,11 @@ class ForceOccupation:
                     content[j] = f"{opt:<34} {opts[opt]}\n"
                     break
 
+                # TODO: fix for non-ase input files
+                # elif divider_2 in line:
+
                 # Marker if ASE was used so keywords will be added in the same place as the others
-                elif divider in line:
+                elif divider_1 in line:
                     ident += 1
                     if ident == 3:
                         content.insert(j, f"{opt:<34} {opts[opt]}\n")
@@ -464,6 +517,9 @@ class Projector(ForceOccupation):
                 # Change control file
                 control_content = self.change_control_keywords(i2_control, opts)
 
+                # Add additional core-hole basis functions
+                control_content = self.add_additional_basis(control_content, el)
+
                 # Add partial charge to the control file
                 _, _, _, control_content = self.add_partial_charge(
                     control_content,
@@ -545,6 +601,9 @@ class Projector(ForceOccupation):
                 # Change control file
                 control_content = self.change_control_keywords(h_control, opts)
 
+                # Add additional core-hole basis functions
+                control_content = self.add_additional_basis(control_content, el)
+
                 # Remove partial charge from the control file
                 _, _, _, control_content = self.add_partial_charge(
                     control_content, el, self.elements.index(el) + 1, self.valence, 0
@@ -608,6 +667,15 @@ class Basis(ForceOccupation):
 
                 # Change control file
                 content = self.change_control_keywords(control, opts)
+
+                print(*content, sep="")
+                print("\n%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%")
+                print("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%\n")
+
+                # Add additional core-hole basis functions
+                content = self.add_additional_basis(content, el)
+
+                print(*content, sep="")
 
                 # Write the data to the file
                 with open(control, "w") as write_control:
