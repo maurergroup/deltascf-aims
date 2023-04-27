@@ -665,9 +665,9 @@ def basis_wrapper(
                 parsed_control_opts = fo.get_control_keywords(
                     f"{run_loc}/{constr_atoms}{i}/control.in"
                 )
-                control_opts = fo.mod_keywords(control_opts, parsed_control_opts)
+                mod_control_opts = fo.mod_keywords(control_opts, parsed_control_opts)
                 control_content = fo.change_control_keywords(
-                    f"{run_loc}/{constr_atoms}{i}/control.in", control_opts
+                    f"{run_loc}/{constr_atoms}{i}/control.in", mod_control_opts
                 )
 
                 with open(
@@ -675,8 +675,7 @@ def basis_wrapper(
                 ) as control_file:
                     control_file.writelines(control_content)
 
-        if not hpc:
-            # Run the hole calculation
+        if not hpc:  # Run the hole calculation
             with click.progressbar(
                 range(len(atom_specifier)), label="calculating basis hole:"
             ) as prog_bar:
