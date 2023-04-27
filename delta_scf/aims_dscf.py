@@ -330,6 +330,7 @@ def projector_wrapper(
         run_loc,
         ground_geom,
         control_opts,
+        f"{species}/defaults_2020/{basis_set}",
     )
 
     # Get atom indices from the ground state geometry file
@@ -389,9 +390,9 @@ def projector_wrapper(
                 parsed_control_opts = fo.get_control_keywords(
                     f"{run_loc}/{constr_atoms}{i}/init_2/control.in"
                 )
-                control_opts = fo.mod_keywords(control_opts, parsed_control_opts)
+                mod_control_opts = fo.mod_keywords(control_opts, parsed_control_opts)
                 control_content = fo.change_control_keywords(
-                    f"{run_loc}/{constr_atoms}{i}/init_2/control.in", control_opts
+                    f"{run_loc}/{constr_atoms}{i}/init_2/control.in", mod_control_opts
                 )
 
                 with open(
@@ -464,9 +465,9 @@ def projector_wrapper(
                 parsed_control_opts = fo.get_control_keywords(
                     f"{run_loc}/{constr_atoms}{i}/hole/control.in"
                 )
-                control_opts = fo.mod_keywords(control_opts, parsed_control_opts)
+                mod_control_opts = fo.mod_keywords(control_opts, parsed_control_opts)
                 control_content = fo.change_control_keywords(
-                    f"{run_loc}/{constr_atoms}{i}/hole/control.in", control_opts
+                    f"{run_loc}/{constr_atoms}{i}/hole/control.in", mod_control_opts
                 )
 
                 with open(
