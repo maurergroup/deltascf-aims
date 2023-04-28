@@ -137,7 +137,7 @@ def main(
 
         # Create the ASE calculator
         if ase:
-            aims_calc = mu.create_calc(nprocs, binary, species)
+            aims_calc = mu.create_calc(nprocs, binary, species, basis_set)
             atoms.calc = aims_calc
             ctx.obj["ATOMS"] = atoms
             ctx.obj["CALC"] = aims_calc

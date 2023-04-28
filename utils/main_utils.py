@@ -105,7 +105,7 @@ class MainUtils:
         return opts_dict
 
     @staticmethod
-    def create_calc(procs, binary, species):
+    def create_calc(procs, binary, species, int_grid):
         """Create an ASE calculator object"""
 
         # Choose some sane defaults
@@ -114,7 +114,7 @@ class MainUtils:
             spin="collinear",
             default_initial_moment=0,
             aims_command=f"mpirun -n {procs} {binary}",
-            species_dir=f"{species}defaults_2020/tight/",
+            species_dir=f"{species}defaults_2020/{int_grid}/",
         )
 
         return aims_calc

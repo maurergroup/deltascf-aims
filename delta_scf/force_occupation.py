@@ -152,8 +152,13 @@ class ForceOccupation:
         with open(f"{self.current_path}/add_basis_functions.yml", "r") as f:
             ad_basis = yaml.safe_load(f)
 
+        if [*target_atom][-1][0] == "1":
+            root_target_atom = "".join([*target_atom][:-1])
+        else:
+            root_target_atom = target_atom
+
         try:
-            el_ad_basis = ad_basis[target_atom]
+            el_ad_basis = ad_basis[root_target_atom]
         except KeyError:
             print(
                 f"Warning: the additional basis set for {target_atom} is not yet supported."
@@ -162,31 +167,45 @@ class ForceOccupation:
             el_ad_basis = ""
             pass
 
-        # As there isn't a consistent file structure for the basis set definitions,
-        # compare the basis set given in the control file to the basis sets defined in
-        # the FHI-aims species_defaults directory to get the number of lines in the
-        # basis set, and then add the additional basis set to the end of the basis set
-        # in the control file
+        # Add the additional basis set before the 5th line of '#'s after the species
+        # and element line defining the start of the basis set. This is the only
+        # consistent marker across all the basis sets after which the additional basis
+        # set can be added.
         basis_def_start = 0
-        for line in content:
+        for i, line in enumerate(content):
             if "species" in line and target_atom in line:
-                basis_def_start = content.index(line)
+                basis_def_start = i
                 break
 
         # Get the atomic number of the target atom
-        atom_index = self.elements.index(str(target_atom)) + 1
+        atom_index = self.elements.index(str(root_target_atom)) + 1
 
         # prefix 0 if atom_index is less than 10
         if atom_index < 10:
             atom_index = f"0{atom_index}"
 
-        # Get the number of lines in the basis set
-        with open(f"{self.species}/{atom_index}_{target_atom}_default") as basis_file:
-            basis_set_length = len(basis_file.readlines())
+        # Find the line which contains the 5th row of '#'s after the species and element
+        div_counter = 0
+        insert_point = 0
+        for i, line in enumerate(content[basis_def_start:]):
+            if (
+                "#######################################################################"
+                "#########"
+            ) in line:
+                if div_counter < 4:
+                    div_counter += 1
+
+                else:
+                    insert_point = i + basis_def_start
+                    break
 
         # Append the additional basis set to the end of the basis set in the control file
-        if el_ad_basis != "" and basis_def_start != 0:
-            insert_point = basis_def_start + basis_set_length - 8
+        if (
+            el_ad_basis != ""
+            and basis_def_start != 0
+            and insert_point != 0
+            and div_counter != 0
+        ):
             content.insert(insert_point, f"{el_ad_basis}\n")
             return content
 
@@ -369,6 +388,8 @@ class Projector(ForceOccupation):
             "spin": "collinear",
             "default_initial_moment": 0,
             "charge": 0.1,
+            "sc_iter_limit": 500,
+            "sc_init_iter": 75,
             "restart_write_only": "restart_file",
             "restart_save_iterations": 5,
         }
@@ -411,7 +432,6 @@ class Projector(ForceOccupation):
             # Loop over each individual atom to constrain
             for i in self.atom_specifier:
                 # TODO: fix this for individual atom constraints
-                i += 1
 
                 i1_control = f"{self.run_loc}/{el}{i}/init_1/control.in"
                 i1_geometry = f"{self.run_loc}/{el}{i}/init_1/geometry.in"
@@ -492,7 +512,7 @@ class Projector(ForceOccupation):
                     "default_initial_moment": 0,
                     "charge": 1.1,
                     "sc_iter_limit": 1,
-                    occ_type: f"{ks_start + i} {spin} {occ} {ks_start} {ks_stop}",
+                    occ_type: f"{ks_start} {spin} {occ} {ks_start} {ks_stop}",
                     "KS_method": ks_method,
                     "restart": "restart_file",
                     "restart_save_iterations": 1,
@@ -500,8 +520,6 @@ class Projector(ForceOccupation):
 
                 # Add or change user-specified keywords to the control file
                 opts = self.mod_keywords(self.ad_cont_opts, opts)
-
-                i += 1
 
                 i2_control = f"{self.run_loc}/{el}{i}/init_2/control.in"
 
@@ -517,7 +535,7 @@ class Projector(ForceOccupation):
                 control_content = self.change_control_keywords(i2_control, opts)
 
                 # Add additional core-hole basis functions
-                control_content = self.add_additional_basis(control_content, el)
+                control_content = self.add_additional_basis(control_content, f"{el}1")
 
                 # Add partial charge to the control file
                 _, _, _, control_content = self.add_partial_charge(
@@ -568,7 +586,7 @@ class Projector(ForceOccupation):
                     "charge": 1.0,
                     "sc_iter_limit": 500,
                     "sc_init_iter": 75,
-                    occ_type: f"{ks_start + i} {spin} {occ} {ks_start} {ks_stop}",
+                    occ_type: f"{ks_start} {spin} {occ} {ks_start} {ks_stop}",
                     "KS_method": ks_method,
                     "restart_read_only": "restart_file",
                     "output": "cube spin_density",
@@ -576,8 +594,6 @@ class Projector(ForceOccupation):
 
                 # Add or change user-specified keywords to the control file
                 opts = self.mod_keywords(self.ad_cont_opts, opts)
-
-                i += 1
 
                 # Location of the hole control file
                 h_control = f"{self.run_loc}/{el}{i}/hole/control.in"
@@ -601,7 +617,7 @@ class Projector(ForceOccupation):
                 control_content = self.change_control_keywords(h_control, opts)
 
                 # Add additional core-hole basis functions
-                control_content = self.add_additional_basis(control_content, el)
+                control_content = self.add_additional_basis(control_content, f"{el}1")
 
                 # Remove partial charge from the control file
                 _, _, _, control_content = self.add_partial_charge(
@@ -642,6 +658,8 @@ class Basis(ForceOccupation):
                     "spin": "collinear",
                     "default_initial_moment": 0,
                     "charge": 1.0,
+                    "sc_iter_limit": 500,
+                    "sc_init_iter": 75,
                     occ_type: f"{self.atom_specifier[i]} {spin} atomic {n_qn} {l_qn} {m_qn} {occ_no} {ks_max}",
                     "KS_method": ks_method,
                 }
@@ -666,9 +684,6 @@ class Basis(ForceOccupation):
 
                 # Change control file
                 content = self.change_control_keywords(control, opts)
-
-                # Add additional core-hole basis functions
-                content = self.add_additional_basis(content, el)
 
                 # Write the data to the file
                 with open(control, "w") as write_control:
