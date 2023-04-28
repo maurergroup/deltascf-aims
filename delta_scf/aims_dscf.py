@@ -431,16 +431,12 @@ def projector_wrapper(
             proj.setup_hole(ks_range[0], ks_range[1], occ, occ_type, spin)
 
         # Add molecule identifier to hole geometry.in
-        with open(
-            glob.glob(f"{run_loc}/{constr_atoms}*/hole/geometry.in")[0], "r"
-        ) as hole_geom:
+        with open(f"{run_loc}/{constr_atoms}1/hole/geometry.in", "r") as hole_geom:
             lines = hole_geom.readlines()
 
         lines.insert(4, f"# {spec_mol}\n")
 
-        with open(
-            glob.glob(f"{run_loc}/{constr_atoms}*/hole/geometry.in")[0], "w"
-        ) as hole_geom:
+        with open(f"{run_loc}/{constr_atoms}1/hole/geometry.in", "w") as hole_geom:
             hole_geom.writelines(lines)
 
         if hpc:

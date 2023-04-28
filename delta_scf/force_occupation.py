@@ -467,6 +467,9 @@ class Projector(ForceOccupation):
                 # Change control file
                 control_content = self.change_control_keywords(i1_control, opts)
 
+                # Add additional core-hole basis functions
+                control_content = self.add_additional_basis(control_content, f"{el}1")
+
                 (
                     self.n_index,
                     self.v_index,
