@@ -137,7 +137,7 @@ def main(
 
         # Create the ASE calculator
         if ase:
-            aims_calc = mu.create_calc(nprocs, binary, species)
+            aims_calc = mu.create_calc(nprocs, binary, species, basis_set)
             atoms.calc = aims_calc
             ctx.obj["ATOMS"] = atoms
             ctx.obj["CALC"] = aims_calc
@@ -210,7 +210,7 @@ def process(ctx):
                 spec.writelines(dat)
 
             # Move the spectrum to the run location
-            os.system(f'mv {element}_xps_spectrum.txt ./{ctx.obj["RUN_LOC"]}/')
+            os.system(f'mv {element}_xps_spectrum.txt {ctx.obj["RUN_LOC"]}/')
 
             print("\nplotting spectrum and calculating MABE...")
             Plot.sim_xps_spectrum(
@@ -314,12 +314,13 @@ def projector_wrapper(
 
     # Create a list of element symbols to constrain
     if len(spec_at_constr) > 0:
-        element_symbols = mu.get_element_symbols(ground_geom, spec_at_constr)
+        element_symbols = mu.get_element_symbols(ground_geom, spec_at_constr)[0]
+        constr_atoms = element_symbols
     else:
         element_symbols = constr_atoms
 
     # Makes following code simpler if everything is assumed to be a list
-    if type(constr_atoms) is not list:
+    if type(constr_atoms) is not list and constr_atoms is not None:
         list_constr_atoms = list(constr_atoms)
     else:
         list_constr_atoms = constr_atoms
@@ -329,6 +330,7 @@ def projector_wrapper(
         run_loc,
         ground_geom,
         control_opts,
+        f"{species}/defaults_2020/{basis_set}",
     )
 
     # Get atom indices from the ground state geometry file
@@ -388,9 +390,9 @@ def projector_wrapper(
                 parsed_control_opts = fo.get_control_keywords(
                     f"{run_loc}/{constr_atoms}{i}/init_2/control.in"
                 )
-                control_opts = fo.mod_keywords(control_opts, parsed_control_opts)
+                mod_control_opts = fo.mod_keywords(control_opts, parsed_control_opts)
                 control_content = fo.change_control_keywords(
-                    f"{run_loc}/{constr_atoms}{i}/init_2/control.in", control_opts
+                    f"{run_loc}/{constr_atoms}{i}/init_2/control.in", mod_control_opts
                 )
 
                 with open(
@@ -416,9 +418,11 @@ def projector_wrapper(
                 "-a/--constr_atoms or -s/--spec_at_constr options"
             )
 
-        # Add molecule identifier to hole geometry.in
         if hpc:
             mu.check_args(("ks_range", ks_range))
+
+            for atom in element_symbols:
+                fo.get_electronic_structure(atom)
 
             # Setup files required for the initialisation and hole calculations
             proj = Projector(fo)
@@ -426,6 +430,7 @@ def projector_wrapper(
             proj.setup_init_2(ks_range[0], ks_range[1], occ, occ_type, spin)
             proj.setup_hole(ks_range[0], ks_range[1], occ, occ_type, spin)
 
+        # Add molecule identifier to hole geometry.in
         with open(f"{run_loc}/{constr_atoms}1/hole/geometry.in", "r") as hole_geom:
             lines = hole_geom.readlines()
 
@@ -456,9 +461,9 @@ def projector_wrapper(
                 parsed_control_opts = fo.get_control_keywords(
                     f"{run_loc}/{constr_atoms}{i}/hole/control.in"
                 )
-                control_opts = fo.mod_keywords(control_opts, parsed_control_opts)
+                mod_control_opts = fo.mod_keywords(control_opts, parsed_control_opts)
                 control_content = fo.change_control_keywords(
-                    f"{run_loc}/{constr_atoms}{i}/hole/control.in", control_opts
+                    f"{run_loc}/{constr_atoms}{i}/hole/control.in", mod_control_opts
                 )
 
                 with open(
@@ -550,9 +555,6 @@ def basis_wrapper(
     control_opts = mu.convert_opts_to_dict(control_opts, None)
 
     if run_type == "ground":
-        # Convert control options to a dictionary
-        control_opts = mu.convert_opts_to_dict(control_opts, None)
-
         mu.ground_calc(
             run_loc,
             geom,
@@ -616,8 +618,11 @@ def basis_wrapper(
             element_symbols = constr_atoms
 
         # Makes following code simpler if everything is assumed to be a list
-        if type(constr_atoms) is not list:
+        if type(constr_atoms) is not list and constr_atoms is not None:
             list_constr_atoms = list(constr_atoms)
+        elif spec_at_constr is not None:
+            constr_atoms = spec_at_constr
+            list_constr_atoms = constr_atoms
         else:
             list_constr_atoms = constr_atoms
 
@@ -627,6 +632,7 @@ def basis_wrapper(
             run_loc,
             ground_geom,
             control_opts,
+            f"{species}/defaults_2020/{basis_set}",
         )
 
         # Get atom indices from the ground state geometry file
@@ -654,20 +660,19 @@ def basis_wrapper(
             if len(control_opts) > 0:
                 # Add any additional control options to the hole control file
                 parsed_control_opts = fo.get_control_keywords(
-                    f"{run_loc}{constr_atoms}{i}/control.in"
+                    f"{run_loc}/{constr_atoms}{i}/control.in"
                 )
-                control_opts = fo.mod_keywords(control_opts, parsed_control_opts)
+                mod_control_opts = fo.mod_keywords(control_opts, parsed_control_opts)
                 control_content = fo.change_control_keywords(
-                    f"{run_loc}{constr_atoms}{i}/control.in", control_opts
+                    f"{run_loc}/{constr_atoms}{i}/control.in", mod_control_opts
                 )
 
                 with open(
-                    f"{run_loc}{constr_atoms}{i}/control.in", "w"
+                    f"{run_loc}/{constr_atoms}{i}/control.in", "w"
                 ) as control_file:
                     control_file.writelines(control_content)
 
-        if not hpc:
-            # Run the hole calculation
+        if not hpc:  # Run the hole calculation
             with click.progressbar(
                 range(len(atom_specifier)), label="calculating basis hole:"
             ) as prog_bar:

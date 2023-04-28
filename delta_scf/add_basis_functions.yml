@@ -1,0 +1,81 @@
+---
+Li: |
+  # Additional basis functions for atom with a core hole
+       hydro 1 s 4.0
+       hydro 1 s 6.0
+       hydro 2 s 5.0
+
+Be: |
+  # Additional basis functions for atom with a core hole
+       hydro 1 s 5.0
+       hydro 1 s 7.0
+       hydro 2 s 6.0
+
+B: |
+  # Additional basis functions for atom with a core hole
+       hydro 1 s 9.0
+       hydro 1 s 7.0
+       hydro 1 s 3.0
+       hydro 2 s 5.0
+       hydro 2 p 6.0
+
+C: |
+  # Additional basis functions for atom with a core hole
+       hydro 1 s 10.0
+       hydro 1 s 8.0
+       hydro 1 s 4.0
+       hydro 2 s 6.0
+
+N: |
+  # Additional basis functions for atom with a core hole
+       hydro 1 s 11.0
+       hydro 1 s 9.0
+       hydro 1 s 5.0
+       hydro 2 s 8.0
+       hydro 2 s 10.0
+       hydro 2 p 6.5
+       hydro 3 s 6.2
+       hydro 3 p 6.2
+
+O: |
+  # Additional basis functions for atom with a core hole
+       hydro 1 s 12.0
+       hydro 1 s 10.0
+       hydro 1 s 6.0
+       hydro 2 s 10.0
+       hydro 2 p 8.0
+       hydro 2 p 6.0
+       hydro 3 d 8.0
+
+Na: |
+  # Additional basis functions for atom with a core hole
+       hydro 1 s 15.0
+       hydro 1 s 13.0
+       hydro 1 s 9.0
+       hydro 2 s 13.5
+       hydro 2 s 11.5
+       hydro 2 p 10.5
+       hydro 2 p 8.5
+       hydro 3 d 7.0
+       hydro 3 p 8.0
+
+Mg: |
+  # Additional basis functions for atom with a core hole
+       hydro 1 s 16.0
+       hydro 1 s 14.0
+       hydro 1 s 10.0
+       hydro 2 s 14.5
+       hydro 2 s 12.5
+       hydro 2 p 11.5
+       hydro 2 p 9.5
+       hydro 3 d 8.0
+       hydro 3 p 9.0
+
+Si: |
+  # Additional basis functions for atom with a core hole
+       hydro 2 p 15.0
+       hydro 2 p 12.0
+       hydro 2 p 5.0
+       hydro 2 s 14.0
+       hydro 1 s 16.0
+       hydro 1 s 9.0

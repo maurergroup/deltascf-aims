@@ -209,12 +209,12 @@ def cli(
     help="provide the lattice vectors in a 3x3 matrix",
 )
 @click.option(
-    "-u",
+    "-s",
     "--spin",
-    type=int,
-    default=0,
+    type=click.Choice(["1", "2"]),
+    default="1",
     show_default=True,
-    help="set the spin of the system",
+    help="set the spin channel of the constraint",
 )
 @click.option(
     "-k",
@@ -259,12 +259,12 @@ def projector(ctx, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts
     help="select whether the old or new occupation routine is used",
 )
 @click.option(
-    "-u",
-    "--multiplicity",
-    type=int,
-    default=1,
+    "-s",
+    "--spin",
+    type=click.Choice(["1", "2"]),
+    default="1",
     show_default=True,
-    help="set the multiplicity of the system",
+    help="set the spin channel for the constraint",
 )
 @click.option(
     "-n",
@@ -306,7 +306,7 @@ def basis(
     run_type,
     atom_index,
     occ_type,
-    multiplicity,
+    spin,
     n_qn,
     l_qn,
     m_qn,
@@ -320,7 +320,7 @@ def basis(
         run_type,
         atom_index,
         occ_type,
-        multiplicity,
+        spin,
         n_qn,
         l_qn,
         m_qn,
