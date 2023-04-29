@@ -488,22 +488,16 @@ class Projector(ForceOccupation):
 
         print("init_1 files written successfully")
 
-    def setup_init_2(
-        self,
-        ks_start,
-        ks_stop,
-        occ,
-        occ_type,
-        spin,
-    ):
+    def setup_init_2(self, ks_start, ks_stop, occ, occ_type, spin, pbc):
         """Write new directories and control files for the second initialisation calculation."""
 
         ks_method = ""
         if occ_type == "force_occupation_projector":
             ks_method = "serial"
-        if occ_type == "deltascf_projector":
+        if occ_type == "deltascf_projector" and pbc is None:
             ks_method = "parallel"
-            # ks_method = "serial"
+        if occ_type == "deltascf_projector" and pbc is not None:
+            ks_method = "serial"
 
         # Loop over each element to constrain
         for el in self.element_symbols:
@@ -554,14 +548,7 @@ class Projector(ForceOccupation):
 
         print("init_2 files written successfully")
 
-    def setup_hole(
-        self,
-        ks_start,
-        ks_stop,
-        occ,
-        occ_type,
-        spin,
-    ):
+    def setup_hole(self, ks_start, ks_stop, occ, occ_type, spin, pbc):
         """Write new hole directories and control files for the hole calculation."""
 
         # Calculate original valence state
@@ -574,9 +561,10 @@ class Projector(ForceOccupation):
         ks_method = ""
         if occ_type == "force_occupation_projector":
             ks_method = "serial"
-        if occ_type == "deltascf_projector":
+        if occ_type == "deltascf_projector" and pbc is None:
             ks_method = "parallel"
-            # ks_method = "serial"
+        if occ_type == "deltascf_projector" and pbc is not None:
+            ks_method = "serial"
 
         # Loop over each element to constrain
         for el in self.element_symbols:

@@ -358,8 +358,8 @@ def projector_wrapper(
         # Setup files required for the initialisation and hole calculations
         proj = Projector(fo)
         proj.setup_init_1(basis_set, species, ground_control)
-        proj.setup_init_2(ks_range[0], ks_range[1], occ, occ_type, spin)
-        proj.setup_hole(ks_range[0], ks_range[1], occ, occ_type, spin)
+        proj.setup_init_2(ks_range[0], ks_range[1], occ, occ_type, spin, pbc)
+        proj.setup_hole(ks_range[0], ks_range[1], occ, occ_type, spin, pbc)
 
     spec_run_info = ""
 
@@ -427,8 +427,8 @@ def projector_wrapper(
             # Setup files required for the initialisation and hole calculations
             proj = Projector(fo)
             proj.setup_init_1(basis_set, species, ground_control)
-            proj.setup_init_2(ks_range[0], ks_range[1], occ, occ_type, spin)
-            proj.setup_hole(ks_range[0], ks_range[1], occ, occ_type, spin)
+            proj.setup_init_2(ks_range[0], ks_range[1], occ, occ_type, spin, pbc)
+            proj.setup_hole(ks_range[0], ks_range[1], occ, occ_type, spin, pbc)
 
         # Add molecule identifier to hole geometry.in
         with open(f"{run_loc}/{constr_atoms}1/hole/geometry.in", "r") as hole_geom:
