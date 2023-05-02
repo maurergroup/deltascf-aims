@@ -64,6 +64,7 @@ from delta_scf.aims_dscf import basis_wrapper, main, projector_wrapper
     cls=me,
     mutually_exclusive=["spec_at_constr"],
     type=str,
+    # multiple=True,  # TODO: allow for multiple atoms to be constrained
     help="atom to constrain; constrain all atoms of this element",
 )
 @click.option(
