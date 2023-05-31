@@ -297,6 +297,7 @@ def projector_wrapper(
             calc,
             ase,
             control_opts,
+            constr_atoms,
             nprocs,
             binary,
             hpc,

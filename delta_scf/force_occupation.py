@@ -145,11 +145,17 @@ class ForceOccupation:
         output = list(s_config.split(".").pop(-1))
         self.valence = f"    valence      {output[0]}  {output[1]}   {output[2]}.1\n"
 
-    def add_additional_basis(self, content, target_atom):
+    @staticmethod
+    def add_additional_basis(current_path, elements, content, target_atom):
         """Add an additional basis set for the core hole calculation."""
 
+        # Check the additional functions haven't already been added to control
+        for line in content:
+            if "# Additional basis functions for atom with a core hole" in line:
+                return
+
         # Get the additional basis set
-        with open(f"{self.current_path}/add_basis_functions.yml", "r") as f:
+        with open(f"{current_path}/add_basis_functions.yml", "r") as f:
             ad_basis = yaml.safe_load(f)
 
         if [*target_atom][-1][0] == "1":
@@ -178,7 +184,7 @@ class ForceOccupation:
                 break
 
         # Get the atomic number of the target atom
-        atom_index = self.elements.index(str(root_target_atom)) + 1
+        atom_index = elements.index(str(root_target_atom)) + 1
 
         # prefix 0 if atom_index is less than 10
         if atom_index < 10:
@@ -468,7 +474,9 @@ class Projector(ForceOccupation):
                 control_content = self.change_control_keywords(i1_control, opts)
 
                 # Add additional core-hole basis functions
-                control_content = self.add_additional_basis(control_content, f"{el}1")
+                control_content = self.add_additional_basis(
+                    self.current_path, self.elements, control_content, f"{el}1"
+                )
 
                 (
                     self.n_index,
@@ -532,7 +540,9 @@ class Projector(ForceOccupation):
                 control_content = self.change_control_keywords(i2_control, opts)
 
                 # Add additional core-hole basis functions
-                control_content = self.add_additional_basis(control_content, f"{el}1")
+                control_content = self.add_additional_basis(
+                    self.current_path, self.elements, control_content, f"{el}1"
+                )
 
                 # Add partial charge to the control file
                 _, _, _, control_content = self.add_partial_charge(
@@ -608,7 +618,9 @@ class Projector(ForceOccupation):
                 control_content = self.change_control_keywords(h_control, opts)
 
                 # Add additional core-hole basis functions
-                control_content = self.add_additional_basis(control_content, f"{el}1")
+                control_content = self.add_additional_basis(
+                    self.current_path, self.elements, control_content, f"{el}1"
+                )
 
                 # Remove partial charge from the control file
                 _, _, _, control_content = self.add_partial_charge(

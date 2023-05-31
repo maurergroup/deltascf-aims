@@ -4,6 +4,7 @@ import glob
 import os
 import sys
 
+import yaml
 from ase.build import molecule
 from ase.calculators.aims import Aims
 from ase.data.pubchem import pubchem_atoms_search
@@ -114,7 +115,7 @@ class MainUtils:
             spin="collinear",
             default_initial_moment=0,
             aims_command=f"mpirun -n {procs} {binary}",
-            species_dir=f"{species}defaults_2020/{int_grid}/",
+            species_dir=f"{species}/defaults_2020/{int_grid}/",
         )
 
         return aims_calc
@@ -217,6 +218,7 @@ class MainUtils:
         calc,
         ase,
         control_opts,
+        constr_atom,
         nprocs,
         binary,
         hpc,
@@ -250,6 +252,30 @@ class MainUtils:
                 calc.set(**control_opts)
 
                 control_opts = calc.parameters
+
+                # Add additional basis functions
+                basis_file = glob.glob(
+                    f"{species}defaults_2020/{basis_set}/*{constr_atom}_default"
+                )[0]
+                current_path = os.path.dirname(os.path.realpath(__file__))
+
+                with open(basis_file, "r") as basis_functions:
+                    control_content = basis_functions.readlines()
+
+                with open(f"{current_path}/elements.yml", "r") as elements:
+                    elements = yaml.load(elements, Loader=yaml.SafeLoader)
+
+                new_content = fo.add_additional_basis(
+                    current_path, elements, control_content, constr_atom
+                )
+
+                if new_content is not None:
+                    with open(basis_file, "w") as basis_functions:
+                        basis_functions.writelines(new_content)
+                else:
+                    print(f"There was an error adding the additional basis functions")
+                    print("aborting...")
+                    sys.exit(1)
 
                 if not hpc:
                     print("running calculation...")
