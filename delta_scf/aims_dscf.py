@@ -90,6 +90,14 @@ def main(
         if geometry_input is not None:
             atoms = read(geometry_input.name)
 
+    # Get the constrained atom element
+    # TODO: support for multiple constrained atoms
+    if constr_atom is None:
+        for atom in atoms:
+            if atom.index in spec_at_constr:
+                constr_atom = atom.symbol
+                break
+
     # Check if a binary has been specified
     if "--help" not in sys.argv:
         current_path = os.path.dirname(os.path.realpath(__file__))

@@ -155,8 +155,12 @@ class ForceOccupation:
                 return
 
         # Get the additional basis set
-        with open(f"{current_path}/add_basis_functions.yml", "r") as f:
-            ad_basis = yaml.safe_load(f)
+        if "utils" in current_path.split("/"):
+            with open(f"{current_path}/../delta_scf/add_basis_functions.yml", "r") as f:
+                ad_basis = yaml.safe_load(f)
+        else:
+            with open(f"{current_path}/add_basis_functions.yml", "r") as f:
+                ad_basis = yaml.safe_load(f)
 
         if [*target_atom][-1][0] == "1":
             root_target_atom = "".join([*target_atom][:-1])
@@ -190,14 +194,26 @@ class ForceOccupation:
         if atom_index < 10:
             atom_index = f"0{atom_index}"
 
-        # Find the line which contains the 5th row of '#'s after the species and element
+        # Append a separator to the end of the file
+        # This helps with adding the additional basis set in the correct positions for
+        # some basis sets.
+        separator = (
+            "#######################################################################"
+            "#########"
+        )
+        content.append(separator + "\n")
+
+        # Find the line which contains the appropriate row of '#'s after the species and element
         div_counter = 0
         insert_point = 0
         for i, line in enumerate(content[basis_def_start:]):
-            if (
-                "#######################################################################"
-                "#########"
-            ) in line:
+            if separator in line:
+                if "species" in line and target_atom in line:
+                    break
+
+                if div_counter == 3:
+                    insert_point = i + basis_def_start
+
                 if div_counter < 4:
                     div_counter += 1
 
@@ -217,8 +233,7 @@ class ForceOccupation:
 
         else:
             print(
-                "Warning: there was an error with adding the additional basis set for"
-                " the hole calculation."
+                "Warning: there was an error with adding the additional basis functions"
             )
             return content
 
