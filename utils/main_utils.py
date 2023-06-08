@@ -283,7 +283,7 @@ class MainUtils:
             chem_symbols = list(set(atoms.get_chemical_symbols()))
 
             for atom in chem_symbols:
-                if atom is not constr_atom:
+                if atom != constr_atom:
                     os.system(
                         f"cp {species}/defaults_2020/{basis_set}/*{atom}_default "
                         f"{species}/ch_basis_sets/{basis_set}/"

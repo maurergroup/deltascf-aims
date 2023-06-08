@@ -147,10 +147,10 @@ def main(
         if ase:
             aims_calc = mu.create_calc(nprocs, binary, species, basis_set)
             atoms.calc = aims_calc
-            ctx.obj["ATOMS"] = atoms
             ctx.obj["CALC"] = aims_calc
 
         # User specified context objects
+        ctx.obj["ATOMS"] = atoms
         ctx.obj["SPEC_MOL"] = spec_mol
         ctx.obj["BINARY"] = binary
         ctx.obj["RUN_LOC"] = run_location
@@ -239,7 +239,6 @@ def projector_wrapper(
     control_inp = ctx.obj["CONTROL_INP"]
     atoms = ctx.obj["ATOMS"]
     found_lattice_vecs = ctx.obj["LATTICE_VECS"]
-    calc = ctx.obj["CALC"]
     basis_set = ctx.obj["BASIS_SET"]
     ase = ctx.obj["ASE"]
     nprocs = ctx.obj["NPROCS"]
@@ -251,11 +250,16 @@ def projector_wrapper(
     species = ctx.obj["SPECIES"]
     occ = ctx.obj["OCC"]
 
+    if ase:
+        calc = ctx.obj["CALC"]
+    else:
+        calc = None
+
     # Used later to redirect STDERR to /dev/null to prevent printing not converged errors
     spec_run_info = None
 
     # Raise a warning if no additional control options have been specified
-    if len(control_opts) < 1:
+    if len(control_opts) < 1 and control_inp is None:
         print(
             "\nWarning: no control options provided, using default options "
             "which can be found in the 'control.in' file"
@@ -553,7 +557,6 @@ def basis_wrapper(
     spec_mol = ctx.obj["SPEC_MOL"]
     atoms = ctx.obj["ATOMS"]
     ase = ctx.obj["ASE"]
-    calc = ctx.obj["CALC"]
     species = ctx.obj["SPECIES"]
     basis_set = ctx.obj["BASIS_SET"]
     nprocs = ctx.obj["NPROCS"]
@@ -563,8 +566,13 @@ def basis_wrapper(
     spec_at_constr = ctx.obj["SPEC_AT_CONSTR"]
     occ = ctx.obj["OCC"]
 
+    if ase:
+        calc = ctx.obj["CALC"]
+    else:
+        calc = None
+
     # Raise a warning if no additional control options have been specified
-    if len(control_opts) < 1:
+    if len(control_opts) < 1 and control is None:
         print(
             "\nWarning: no control options provided, using default options "
             "which can be found in the 'control.in' file"
@@ -584,6 +592,7 @@ def basis_wrapper(
             calc,
             ase,
             control_opts,
+            constr_atoms,
             nprocs,
             binary,
             hpc,
