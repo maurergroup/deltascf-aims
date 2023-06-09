@@ -4,6 +4,7 @@ import glob
 import os
 import sys
 
+import yaml
 from ase.build import molecule
 from ase.calculators.aims import Aims
 from ase.data.pubchem import pubchem_atoms_search
@@ -114,7 +115,7 @@ class MainUtils:
             spin="collinear",
             default_initial_moment=0,
             aims_command=f"mpirun -n {procs} {binary}",
-            species_dir=f"{species}defaults_2020/{int_grid}/",
+            species_dir=f"{species}/defaults_2020/{int_grid}/",
         )
 
         return aims_calc
@@ -198,10 +199,10 @@ class MainUtils:
             control.writelines(lines)
 
         # Then add the basis set
-        elements = list(dict.fromkeys(atoms.get_chemical_symbols()))
+        elements = list(set(atoms.get_chemical_symbols()))
 
         for el in elements:
-            basis_set = glob.glob(f"{defaults}defaults_2020/{int_grid}/*{el}_default")[
+            basis_set = glob.glob(f"{defaults}/ch_basis_sets/{int_grid}/*{el}_default")[
                 0
             ]
             os.system(f"cat {basis_set} >> {run_loc}/ground/control.in")
@@ -217,6 +218,7 @@ class MainUtils:
         calc,
         ase,
         control_opts,
+        constr_atom,
         nprocs,
         binary,
         hpc,
@@ -244,11 +246,53 @@ class MainUtils:
         if os.path.isfile(f"{run_loc}/ground/aims.out") == False:
             # Run the ground state calculation
 
+            # Add additional basis functions
+            basis_file = glob.glob(
+                f"{species}/defaults_2020/{basis_set}/*{constr_atom}_default"
+            )[0]
+            current_path = os.path.dirname(os.path.realpath(__file__))
+
+            with open(basis_file, "r") as basis_functions:
+                control_content = basis_functions.readlines()
+
+            with open(f"{current_path}/../delta_scf/elements.yml", "r") as elements:
+                elements = yaml.load(elements, Loader=yaml.SafeLoader)
+
+            new_content = fo.add_additional_basis(
+                current_path, elements, control_content, constr_atom
+            )
+
+            # Create a new directory for modified basis sets
+            new_dir = f"{species}/ch_basis_sets/{basis_set}/"
+
+            if os.path.exists(new_dir):
+                os.system(f"rm {new_dir}/*")
+            else:
+                os.system(f"mkdir -p {species}/ch_basis_sets/{basis_set}/")
+
+            os.system(f"cp {basis_file} {species}/ch_basis_sets/{basis_set}/")
+            new_basis_file = glob.glob(
+                f"{species}/ch_basis_sets/{basis_set}/*{constr_atom}_default"
+            )[0]
+
+            if new_content is not None:
+                with open(new_basis_file, "w") as basis_functions:
+                    basis_functions.writelines(new_content)
+
+            # Copy atoms from the original basis set directory to the new one
+            chem_symbols = list(set(atoms.get_chemical_symbols()))
+
+            for atom in chem_symbols:
+                if atom != constr_atom:
+                    os.system(
+                        f"cp {species}/defaults_2020/{basis_set}/*{atom}_default "
+                        f"{species}/ch_basis_sets/{basis_set}/"
+                    )
+
             if ase:
                 # Change the defaults if any are specified by the user
                 # Update with all control options from the calculator
                 calc.set(**control_opts)
-
                 control_opts = calc.parameters
 
                 if not hpc:

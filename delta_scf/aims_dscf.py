@@ -90,6 +90,14 @@ def main(
         if geometry_input is not None:
             atoms = read(geometry_input.name)
 
+    # Get the constrained atom element
+    # TODO: support for multiple constrained atoms
+    if constr_atom is None:
+        for atom in atoms:
+            if atom.index in spec_at_constr:
+                constr_atom = atom.symbol
+                break
+
     # Check if a binary has been specified
     if "--help" not in sys.argv:
         current_path = os.path.dirname(os.path.realpath(__file__))
@@ -139,10 +147,10 @@ def main(
         if ase:
             aims_calc = mu.create_calc(nprocs, binary, species, basis_set)
             atoms.calc = aims_calc
-            ctx.obj["ATOMS"] = atoms
             ctx.obj["CALC"] = aims_calc
 
         # User specified context objects
+        ctx.obj["ATOMS"] = atoms
         ctx.obj["SPEC_MOL"] = spec_mol
         ctx.obj["BINARY"] = binary
         ctx.obj["RUN_LOC"] = run_location
@@ -214,7 +222,10 @@ def process(ctx):
 
             print("\nplotting spectrum and calculating MABE...")
             Plot.sim_xps_spectrum(
-                ctx.obj["RUN_LOC"], ctx.obj["CONSTR_ATOM"], ctx.obj["GMP"]
+                ctx.obj["RUN_LOC"],
+                ctx.obj["CONSTR_ATOM"],
+                ctx.obj["AT_SPEC"][0],
+                ctx.obj["GMP"],
             )
 
 
@@ -228,7 +239,6 @@ def projector_wrapper(
     control_inp = ctx.obj["CONTROL_INP"]
     atoms = ctx.obj["ATOMS"]
     found_lattice_vecs = ctx.obj["LATTICE_VECS"]
-    calc = ctx.obj["CALC"]
     basis_set = ctx.obj["BASIS_SET"]
     ase = ctx.obj["ASE"]
     nprocs = ctx.obj["NPROCS"]
@@ -240,13 +250,18 @@ def projector_wrapper(
     species = ctx.obj["SPECIES"]
     occ = ctx.obj["OCC"]
 
+    if ase:
+        calc = ctx.obj["CALC"]
+    else:
+        calc = None
+
     # Used later to redirect STDERR to /dev/null to prevent printing not converged errors
     spec_run_info = None
 
     # Raise a warning if no additional control options have been specified
-    if len(control_opts) < 1:
+    if len(control_opts) < 1 and control_inp is None:
         print(
-            "\nWARNING: no control options provided, using default options "
+            "\nWarning: no control options provided, using default options "
             "which can be found in the 'control.in' file"
         )
 
@@ -257,7 +272,7 @@ def projector_wrapper(
     if found_lattice_vecs or l_vecs is not None:
         if pbc is None:
             print(
-                "WARNING: -p/--pbc argument not given, attempting to use"
+                "Warning: -p/--pbc argument not given, attempting to use"
                 " k_grid from previous calculation"
             )
 
@@ -294,6 +309,7 @@ def projector_wrapper(
             calc,
             ase,
             control_opts,
+            constr_atoms,
             nprocs,
             binary,
             hpc,
@@ -312,18 +328,16 @@ def projector_wrapper(
             param_type="option",
         )
 
+    # Convert constr_atoms to a list
+    if type(constr_atoms) is not list:
+        constr_atoms = [constr_atoms]
+
     # Create a list of element symbols to constrain
     if len(spec_at_constr) > 0:
         element_symbols = mu.get_element_symbols(ground_geom, spec_at_constr)[0]
         constr_atoms = element_symbols
     else:
         element_symbols = constr_atoms
-
-    # Makes following code simpler if everything is assumed to be a list
-    if type(constr_atoms) is not list and constr_atoms is not None:
-        list_constr_atoms = list(constr_atoms)
-    else:
-        list_constr_atoms = constr_atoms
 
     fo = ForceOccupation(
         element_symbols,
@@ -334,7 +348,7 @@ def projector_wrapper(
     )
 
     # Get atom indices from the ground state geometry file
-    atom_specifier = fo.read_ground_inp(list_constr_atoms, spec_at_constr, ground_geom)
+    atom_specifier = fo.read_ground_inp(constr_atoms, spec_at_constr, ground_geom)
 
     if run_type == "init_1":
         if hpc:
@@ -345,7 +359,7 @@ def projector_wrapper(
         if len(spec_at_constr) == 0 and len(constr_atoms) == 0:
             raise click.BadParameter(
                 "no atoms have been specified to constrain, please use "
-                "-a/--constr_atoms or -s/--spec_at_constr options"
+                "-c/--constr_atoms or -s/--spec_at_constr options"
             )
 
         # Check required arguments are given in main()
@@ -358,8 +372,8 @@ def projector_wrapper(
         # Setup files required for the initialisation and hole calculations
         proj = Projector(fo)
         proj.setup_init_1(basis_set, species, ground_control)
-        proj.setup_init_2(ks_range[0], ks_range[1], occ, occ_type, spin)
-        proj.setup_hole(ks_range[0], ks_range[1], occ, occ_type, spin)
+        proj.setup_init_2(ks_range[0], ks_range[1], occ, occ_type, spin, pbc)
+        proj.setup_hole(ks_range[0], ks_range[1], occ, occ_type, spin, pbc)
 
     spec_run_info = ""
 
@@ -372,14 +386,14 @@ def projector_wrapper(
         if len(spec_at_constr) == 0 and len(constr_atoms) == 0:
             raise click.BadParameter(
                 "no atoms have been specified to constrain, please use "
-                "-a/--constr_atoms or -s/--spec_at_constr options"
+                "-c/--constr_atoms or -s/--spec_at_constr options"
             )
 
         # Catch for if init_1 hasn't been run
         for i in range(len(atom_specifier)):
             i += 1
 
-            if len(glob.glob(f"{run_loc}/{constr_atoms}{i}/init_1/*restart*")) < 1:
+            if len(glob.glob(f"{run_loc}/{constr_atoms[0]}{i}/init_1/*restart*")) < 1:
                 print(
                     'init_1 restart files not found, please ensure "init_1" has been run'
                 )
@@ -388,24 +402,25 @@ def projector_wrapper(
             if len(control_opts) > 0:
                 # Add any additional control options to the init_2 control file
                 parsed_control_opts = fo.get_control_keywords(
-                    f"{run_loc}/{constr_atoms}{i}/init_2/control.in"
+                    f"{run_loc}/{constr_atoms[0]}{i}/init_2/control.in"
                 )
                 mod_control_opts = fo.mod_keywords(control_opts, parsed_control_opts)
                 control_content = fo.change_control_keywords(
-                    f"{run_loc}/{constr_atoms}{i}/init_2/control.in", mod_control_opts
+                    f"{run_loc}/{constr_atoms[0]}{i}/init_2/control.in",
+                    mod_control_opts,
                 )
 
                 with open(
-                    f"{run_loc}/{constr_atoms}{i}/init_2/control.in", "w"
+                    f"{run_loc}/{constr_atoms[0]}{i}/init_2/control.in", "w"
                 ) as control_file:
                     control_file.writelines(control_content)
 
             # Copy the restart files to init_2 from init_1
             os.path.isfile(
-                glob.glob(f"{run_loc}/{constr_atoms}{i}/init_1/*restart*")[0]
+                glob.glob(f"{run_loc}/{constr_atoms[0]}{i}/init_1/*restart*")[0]
             )
             os.system(
-                f"cp {run_loc}/{constr_atoms}{i}/init_1/*restart* {run_loc}/{constr_atoms}{i}/init_2/"
+                f"cp {run_loc}/{constr_atoms[0]}{i}/init_1/*restart* {run_loc}/{constr_atoms[0]}{i}/init_2/"
             )
 
         # Prevent SCF not converged errors from printing
@@ -415,7 +430,7 @@ def projector_wrapper(
         if len(spec_at_constr) == 0 and len(constr_atoms) == 0:
             raise click.BadParameter(
                 "no atoms have been specified to constrain, please use the "
-                "-a/--constr_atoms or -s/--spec_at_constr options"
+                "-c/--constr_atoms or -s/--spec_at_constr options"
             )
 
         if hpc:
@@ -427,16 +442,20 @@ def projector_wrapper(
             # Setup files required for the initialisation and hole calculations
             proj = Projector(fo)
             proj.setup_init_1(basis_set, species, ground_control)
-            proj.setup_init_2(ks_range[0], ks_range[1], occ, occ_type, spin)
-            proj.setup_hole(ks_range[0], ks_range[1], occ, occ_type, spin)
+            proj.setup_init_2(ks_range[0], ks_range[1], occ, occ_type, spin, pbc)
+            proj.setup_hole(ks_range[0], ks_range[1], occ, occ_type, spin, pbc)
 
         # Add molecule identifier to hole geometry.in
-        with open(f"{run_loc}/{constr_atoms}1/hole/geometry.in", "r") as hole_geom:
+        with open(
+            f"{run_loc}/{constr_atoms[0]}{atom_specifier[0]}/hole/geometry.in", "r"
+        ) as hole_geom:
             lines = hole_geom.readlines()
 
         lines.insert(4, f"# {spec_mol}\n")
 
-        with open(f"{run_loc}/{constr_atoms}1/hole/geometry.in", "w") as hole_geom:
+        with open(
+            f"{run_loc}/{constr_atoms[0]}{atom_specifier[0]}/hole/geometry.in", "w"
+        ) as hole_geom:
             hole_geom.writelines(lines)
 
         if hpc:
@@ -447,7 +466,7 @@ def projector_wrapper(
             i += 1
             if (
                 os.path.isfile(
-                    glob.glob(f"{run_loc}/{constr_atoms}{i}/init_2/*restart*")[0]
+                    glob.glob(f"{run_loc}/{constr_atoms[0]}{i}/init_2/*restart*")[0]
                 )
                 is False
             ):
@@ -459,24 +478,24 @@ def projector_wrapper(
             if len(control_opts) > 0:
                 # Add any additional control options to the hole control file
                 parsed_control_opts = fo.get_control_keywords(
-                    f"{run_loc}/{constr_atoms}{i}/hole/control.in"
+                    f"{run_loc}/{constr_atoms[0]}{i}/hole/control.in"
                 )
                 mod_control_opts = fo.mod_keywords(control_opts, parsed_control_opts)
                 control_content = fo.change_control_keywords(
-                    f"{run_loc}/{constr_atoms}{i}/hole/control.in", mod_control_opts
+                    f"{run_loc}/{constr_atoms[0]}{i}/hole/control.in", mod_control_opts
                 )
 
                 with open(
-                    f"{run_loc}/{constr_atoms}{i}/hole/control.in", "w"
+                    f"{run_loc}/{constr_atoms[0]}{i}/hole/control.in", "w"
                 ) as control_file:
                     control_file.writelines(control_content)
 
             # Copy the restart files to hole from init_2
             os.path.isfile(
-                glob.glob(f"{run_loc}/{constr_atoms}{i}/init_2/*restart*")[0]
+                glob.glob(f"{run_loc}/{constr_atoms[0]}{i}/init_2/*restart*")[0]
             )
             os.system(
-                f"cp {run_loc}/{constr_atoms}{i}/init_2/*restart* {run_loc}/{constr_atoms}{i}/hole/"
+                f"cp {run_loc}/{constr_atoms[0]}{i}/init_2/*restart* {run_loc}/{constr_atoms[0]}{i}/hole/"
             )
 
         spec_run_info = ""
@@ -484,7 +503,10 @@ def projector_wrapper(
     # Run the calculation with a nice progress bar if not already run
     if (
         run_type != "ground"
-        and os.path.isfile(f"{run_loc}/{constr_atoms}1/{run_type}/aims.out") == False
+        and os.path.isfile(
+            f"{run_loc}/{constr_atoms[0]}{atom_specifier[0]}/{run_type}/aims.out"
+        )
+        == False
         and not hpc
     ):
         # Ensure that aims always runs with the following environment variables:
@@ -497,7 +519,7 @@ def projector_wrapper(
             for i in bar:
                 i += 1
                 os.system(
-                    f"cd ./{run_loc}/{constr_atoms}{i}/{run_type} && mpirun -n {nprocs} "
+                    f"cd ./{run_loc}/{constr_atoms[0]}{i}/{run_type} && mpirun -n {nprocs} "
                     f"{binary} > aims.out{spec_run_info}"
                 )
 
@@ -506,8 +528,9 @@ def projector_wrapper(
     elif run_type != "ground" and not hpc:
         print(f"{run_type} calculations already completed, skipping calculation...")
 
-    # This needs to be passed to process()
+    # These need to be passed to process()
     ctx.obj["RUN_TYPE"] = run_type
+    ctx.obj["AT_SPEC"] = atom_specifier
 
     # Compute the dscf energies and plot if option provided
     process(ctx)
@@ -534,7 +557,6 @@ def basis_wrapper(
     spec_mol = ctx.obj["SPEC_MOL"]
     atoms = ctx.obj["ATOMS"]
     ase = ctx.obj["ASE"]
-    calc = ctx.obj["CALC"]
     species = ctx.obj["SPECIES"]
     basis_set = ctx.obj["BASIS_SET"]
     nprocs = ctx.obj["NPROCS"]
@@ -544,10 +566,15 @@ def basis_wrapper(
     spec_at_constr = ctx.obj["SPEC_AT_CONSTR"]
     occ = ctx.obj["OCC"]
 
+    if ase:
+        calc = ctx.obj["CALC"]
+    else:
+        calc = None
+
     # Raise a warning if no additional control options have been specified
-    if len(control_opts) < 1:
+    if len(control_opts) < 1 and control is None:
         print(
-            "\nWARNING: no control options provided, using default options "
+            "\nWarning: no control options provided, using default options "
             "which can be found in the 'control.in' file"
         )
 
@@ -565,6 +592,7 @@ def basis_wrapper(
             calc,
             ase,
             control_opts,
+            constr_atoms,
             nprocs,
             binary,
             hpc,
@@ -583,10 +611,7 @@ def basis_wrapper(
             param_type="option",
         )
 
-    if (
-        run_type == "hole"
-        and os.path.isfile(f"{run_loc}/{constr_atoms}1/aims.out") is False
-    ):
+    if run_type == "hole":
         mu.check_args(
             ("atom_index", atom_index),
             ("ks_max", ks_max),
@@ -598,7 +623,7 @@ def basis_wrapper(
         if len(spec_at_constr) == 0 and len(constr_atoms) == 0:
             raise click.BadParameter(
                 "no atoms have been specified to constrain, please use the "
-                "-a/--constr_atoms or -s/--spec_at_constr options"
+                "-c/--constr_atoms or -s/--spec_at_constr options"
             )
 
         # Ensure that aims always runs with the following environment variables:
@@ -611,20 +636,16 @@ def basis_wrapper(
                 "run"
             )
 
+        # Convert constr_atoms to a list
+        if type(constr_atoms) is not list:
+            constr_atoms = [constr_atoms]
+
         # Create a list of element symbols to constrain
         if len(spec_at_constr) > 0:
-            element_symbols = mu.get_element_symbols(ground_geom, spec_at_constr)
+            element_symbols = mu.get_element_symbols(ground_geom, spec_at_constr)[0]
+            constr_atoms = element_symbols
         else:
             element_symbols = constr_atoms
-
-        # Makes following code simpler if everything is assumed to be a list
-        if type(constr_atoms) is not list and constr_atoms is not None:
-            list_constr_atoms = list(constr_atoms)
-        elif spec_at_constr is not None:
-            constr_atoms = spec_at_constr
-            list_constr_atoms = constr_atoms
-        else:
-            list_constr_atoms = constr_atoms
 
         # Create the directories required for the hole calculation
         fo = ForceOccupation(
@@ -636,20 +657,28 @@ def basis_wrapper(
         )
 
         # Get atom indices from the ground state geometry file
-        atom_specifier = fo.read_ground_inp(
-            list_constr_atoms, spec_at_constr, ground_geom
-        )
+        atom_specifier = fo.read_ground_inp(constr_atoms, spec_at_constr, ground_geom)
+
+        if (
+            os.path.isfile(f"{run_loc}/{constr_atoms[0]}{atom_specifier[0]}/aims.out")
+            is True
+        ):
+            print("hole calculations already completed, skipping calculation...")
 
         basis = Basis(fo)
         basis.setup_basis(multiplicity, n_qn, l_qn, m_qn, occ, ks_max, occ_type)
 
         # Add molecule identifier to hole geometry.in
-        with open(f"{run_loc}{constr_atoms}1/geometry.in", "r") as hole_geom:
+        with open(
+            f"{run_loc}{constr_atoms[0]}{atom_specifier[0]}/geometry.in", "r"
+        ) as hole_geom:
             lines = hole_geom.readlines()
 
         lines.insert(4, f"# {spec_mol}\n")
 
-        with open(f"{run_loc}/{constr_atoms}1/geometry.in", "w") as hole_geom:
+        with open(
+            f"{run_loc}/{constr_atoms[0]}{atom_specifier[0]}/geometry.in", "w"
+        ) as hole_geom:
             hole_geom.writelines(lines)
 
         # TODO allow multiple constraints using n_atoms
@@ -660,15 +689,15 @@ def basis_wrapper(
             if len(control_opts) > 0:
                 # Add any additional control options to the hole control file
                 parsed_control_opts = fo.get_control_keywords(
-                    f"{run_loc}/{constr_atoms}{i}/control.in"
+                    f"{run_loc}/{constr_atoms[0]}{i}/control.in"
                 )
                 mod_control_opts = fo.mod_keywords(control_opts, parsed_control_opts)
                 control_content = fo.change_control_keywords(
-                    f"{run_loc}/{constr_atoms}{i}/control.in", mod_control_opts
+                    f"{run_loc}/{constr_atoms[0]}{i}/control.in", mod_control_opts
                 )
 
                 with open(
-                    f"{run_loc}/{constr_atoms}{i}/control.in", "w"
+                    f"{run_loc}/{constr_atoms[0]}{i}/control.in", "w"
                 ) as control_file:
                     control_file.writelines(control_content)
 
@@ -679,15 +708,13 @@ def basis_wrapper(
                 for i in prog_bar:
                     i += 1
                     os.system(
-                        f"cd {run_loc}/{constr_atoms}{i} && mpirun -n "
+                        f"cd {run_loc}/{constr_atoms[0]}{i} && mpirun -n "
                         f"{nprocs} {binary} > aims.out"
                     )
 
-    elif os.path.isfile(f"{run_loc}/{constr_atoms}1/aims.out") is True:
-        print("hole calculations already completed, skipping calculation...")
-
-    # This needs to be passed to process()
-    ctx.obj["RUN_TYPE"] = run_type
+        # These need to be passed to process()
+        ctx.obj["RUN_TYPE"] = run_type
+        ctx.obj["AT_SPEC"] = atom_specifier
 
     # Compute the dscf energies and plot if option provided
     process(ctx)

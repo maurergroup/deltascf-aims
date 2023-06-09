@@ -145,12 +145,22 @@ class ForceOccupation:
         output = list(s_config.split(".").pop(-1))
         self.valence = f"    valence      {output[0]}  {output[1]}   {output[2]}.1\n"
 
-    def add_additional_basis(self, content, target_atom):
+    @staticmethod
+    def add_additional_basis(current_path, elements, content, target_atom):
         """Add an additional basis set for the core hole calculation."""
 
+        # Check the additional functions haven't already been added to control
+        for line in content:
+            if "# Additional basis functions for atom with a core hole" in line:
+                return
+
         # Get the additional basis set
-        with open(f"{self.current_path}/add_basis_functions.yml", "r") as f:
-            ad_basis = yaml.safe_load(f)
+        if "utils" in current_path.split("/"):
+            with open(f"{current_path}/../delta_scf/add_basis_functions.yml", "r") as f:
+                ad_basis = yaml.safe_load(f)
+        else:
+            with open(f"{current_path}/add_basis_functions.yml", "r") as f:
+                ad_basis = yaml.safe_load(f)
 
         if [*target_atom][-1][0] == "1":
             root_target_atom = "".join([*target_atom][:-1])
@@ -178,20 +188,32 @@ class ForceOccupation:
                 break
 
         # Get the atomic number of the target atom
-        atom_index = self.elements.index(str(root_target_atom)) + 1
+        atom_index = elements.index(str(root_target_atom)) + 1
 
         # prefix 0 if atom_index is less than 10
         if atom_index < 10:
             atom_index = f"0{atom_index}"
 
-        # Find the line which contains the 5th row of '#'s after the species and element
+        # Append a separator to the end of the file
+        # This helps with adding the additional basis set in the correct positions for
+        # some basis sets.
+        separator = (
+            "#######################################################################"
+            "#########"
+        )
+        content.append(separator + "\n")
+
+        # Find the line which contains the appropriate row of '#'s after the species and element
         div_counter = 0
         insert_point = 0
         for i, line in enumerate(content[basis_def_start:]):
-            if (
-                "#######################################################################"
-                "#########"
-            ) in line:
+            if separator in line:
+                if "species" in line and target_atom in line:
+                    break
+
+                if div_counter == 3:
+                    insert_point = i + basis_def_start
+
                 if div_counter < 4:
                     div_counter += 1
 
@@ -211,8 +233,7 @@ class ForceOccupation:
 
         else:
             print(
-                "Warning: there was an error with adding the additional basis set for"
-                " the hole calculation."
+                "Warning: there was an error with adding the additional basis functions"
             )
             return content
 
@@ -468,7 +489,9 @@ class Projector(ForceOccupation):
                 control_content = self.change_control_keywords(i1_control, opts)
 
                 # Add additional core-hole basis functions
-                control_content = self.add_additional_basis(control_content, f"{el}1")
+                control_content = self.add_additional_basis(
+                    self.current_path, self.elements, control_content, f"{el}1"
+                )
 
                 (
                     self.n_index,
@@ -488,22 +511,16 @@ class Projector(ForceOccupation):
 
         print("init_1 files written successfully")
 
-    def setup_init_2(
-        self,
-        ks_start,
-        ks_stop,
-        occ,
-        occ_type,
-        spin,
-    ):
+    def setup_init_2(self, ks_start, ks_stop, occ, occ_type, spin, pbc):
         """Write new directories and control files for the second initialisation calculation."""
 
         ks_method = ""
         if occ_type == "force_occupation_projector":
             ks_method = "serial"
-        if occ_type == "deltascf_projector":
+        if occ_type == "deltascf_projector" and pbc is None:
             ks_method = "parallel"
-            # ks_method = "serial"
+        if occ_type == "deltascf_projector" and pbc is not None:
+            ks_method = "serial"
 
         # Loop over each element to constrain
         for el in self.element_symbols:
@@ -538,7 +555,9 @@ class Projector(ForceOccupation):
                 control_content = self.change_control_keywords(i2_control, opts)
 
                 # Add additional core-hole basis functions
-                control_content = self.add_additional_basis(control_content, f"{el}1")
+                control_content = self.add_additional_basis(
+                    self.current_path, self.elements, control_content, f"{el}1"
+                )
 
                 # Add partial charge to the control file
                 _, _, _, control_content = self.add_partial_charge(
@@ -554,14 +573,7 @@ class Projector(ForceOccupation):
 
         print("init_2 files written successfully")
 
-    def setup_hole(
-        self,
-        ks_start,
-        ks_stop,
-        occ,
-        occ_type,
-        spin,
-    ):
+    def setup_hole(self, ks_start, ks_stop, occ, occ_type, spin, pbc):
         """Write new hole directories and control files for the hole calculation."""
 
         # Calculate original valence state
@@ -574,9 +586,10 @@ class Projector(ForceOccupation):
         ks_method = ""
         if occ_type == "force_occupation_projector":
             ks_method = "serial"
-        if occ_type == "deltascf_projector":
+        if occ_type == "deltascf_projector" and pbc is None:
             ks_method = "parallel"
-            # ks_method = "serial"
+        if occ_type == "deltascf_projector" and pbc is not None:
+            ks_method = "serial"
 
         # Loop over each element to constrain
         for el in self.element_symbols:
@@ -620,7 +633,9 @@ class Projector(ForceOccupation):
                 control_content = self.change_control_keywords(h_control, opts)
 
                 # Add additional core-hole basis functions
-                control_content = self.add_additional_basis(control_content, f"{el}1")
+                control_content = self.add_additional_basis(
+                    self.current_path, self.elements, control_content, f"{el}1"
+                )
 
                 # Remove partial charge from the control file
                 _, _, _, control_content = self.add_partial_charge(

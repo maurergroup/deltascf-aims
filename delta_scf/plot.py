@@ -1,4 +1,3 @@
-import glob
 import math
 
 import matplotlib.pyplot as plt
@@ -9,7 +8,7 @@ class Plot:
     """Plot the XPS spectrum"""
 
     @staticmethod
-    def sim_xps_spectrum(run_loc, targ_at, gmp):
+    def sim_xps_spectrum(run_loc, targ_at, at_spec, gmp):
         x_axis_aims = np.loadtxt(f"{run_loc}/{targ_at}_xps_spectrum.txt", usecols=(0))
         y_axis_aims = np.loadtxt(f"{run_loc}/{targ_at}_xps_spectrum.txt", usecols=(1))
 
@@ -53,11 +52,13 @@ class Plot:
         # Get the type of molecule
         # Enable for both basis and projector file structures
         try:
-            with open(f"{run_loc}/{targ_at}1/geometry.in", "r") as hole_geom:
+            with open(f"{run_loc}/{targ_at}{at_spec}/geometry.in", "r") as hole_geom:
                 lines = hole_geom.readlines()
 
         except FileNotFoundError:
-            with open(f"{run_loc}/{targ_at}1/hole/geometry.in", "r") as hole_geom:
+            with open(
+                f"{run_loc}/{targ_at}{at_spec}/hole/geometry.in", "r"
+            ) as hole_geom:
                 lines = hole_geom.readlines()
 
         molecule = lines[4].split()[-1]
