@@ -52,19 +52,24 @@ def main(
     # Use ASE unless both a custom geometry.in and control.in are specified
     # Also don't use ASE if a control.in is specified
     ase = True
+    found_lattice_vecs = False
     if geometry_input is not None:
         found_lattice_vecs = mu.check_geom(geometry_input)
         ctx.obj["GEOM_INP"] = geometry_input.name
-        ctx.obj["LATTICE_VECS"] = found_lattice_vecs
     else:
         ctx.obj["GEOM_INP"] = None
         ctx.obj["LATTICE_VECS"] = None
 
+    found_k_grid = False
     if control_input is not None:
         ase = False
+        found_k_grid = mu.check_control(control_input)
         ctx.obj["CONTROL_INP"] = control_input.name
     else:
         ctx.obj["CONTROL_INP"] = None
+
+    if found_lattice_vecs or found_k_grid:
+        ctx.obj["LATTICE_VECS"] = True
 
     # Find the structure if not given
     # Build the structure if given
@@ -201,15 +206,12 @@ def process(
             spec.writelines(data)
 
         # Move the spectrum to the run location
-        os.system(f'mv {element}_xps_spectrum.txt {ctx.obj["RUN_LOC"]}/')
+        if ctx.obj["RUN_LOC"] != "./":
+            os.system(f'mv {element}_xps_spectrum.txt {ctx.obj["RUN_LOC"]}/')
 
         print("\nplotting spectrum and calculating MABE...")
         Plot.sim_xps_spectrum(
-            xps,
-            ctx.obj["RUN_LOC"],
-            ctx.obj["CONSTR_ATOM"],
-            ctx.obj["AT_SPEC"][0],
-            ctx.obj["GMP"],
+            xps, ctx.obj["RUN_LOC"], ctx.obj["CONSTR_ATOM"], ctx.obj["AT_SPEC"][0], gmp
         )
 
 
@@ -258,7 +260,7 @@ def projector_wrapper(
         if pbc is None:
             print(
                 "Warning: -p/--pbc argument not given, attempting to use"
-                " k_grid from previous calculation"
+                " k_grid from control file or previous calculation"
             )
 
             # Try to parse the k-grid if other calculations have been run
@@ -358,8 +360,12 @@ def projector_wrapper(
         # Setup files required for the initialisation and hole calculations
         proj = Projector(fo)
         proj.setup_init_1(basis_set, species, ground_control)
-        proj.setup_init_2(ks_range[0], ks_range[1], occ, occ_type, spin, pbc)
-        proj.setup_hole(ks_range[0], ks_range[1], occ, occ_type, spin, pbc)
+        proj.setup_init_2(
+            ks_range[0], ks_range[1], occ, occ_type, spin, found_lattice_vecs
+        )
+        proj.setup_hole(
+            ks_range[0], ks_range[1], occ, occ_type, spin, found_lattice_vecs
+        )
 
     spec_run_info = ""
 
@@ -375,17 +381,17 @@ def projector_wrapper(
                 "-c/--constr_atoms or -s/--spec_at_constr options"
             )
 
-        # Catch for if init_1 hasn't been run
         for i in range(len(atom_specifier)):
             i += 1
 
+            # Catch for if init_1 hasn't been run
             if len(glob.glob(f"{run_loc}/{constr_atoms[0]}{i}/init_1/*restart*")) < 1:
                 print(
                     'init_1 restart files not found, please ensure "init_1" has been run'
                 )
                 raise FileNotFoundError
 
-            if len(control_opts) > 0:
+            if len(control_opts) > 0 or control_inp:
                 # Add any additional control options to the init_2 control file
                 parsed_control_opts = fo.get_control_keywords(
                     f"{run_loc}/{constr_atoms[0]}{i}/init_2/control.in"
@@ -461,7 +467,7 @@ def projector_wrapper(
                 )
                 raise FileNotFoundError
 
-            if len(control_opts) > 0:
+            if len(control_opts) > 0 or control_inp:
                 # Add any additional control options to the hole control file
                 parsed_control_opts = fo.get_control_keywords(
                     f"{run_loc}/{constr_atoms[0]}{i}/hole/control.in"
@@ -511,7 +517,7 @@ def projector_wrapper(
 
         else:
             with click.progressbar(
-                range(len(atom_specifier)), label="calculating basis hole:"
+                range(len(atom_specifier)), label=f"calculating {run_type}:"
             ) as prog_bar:
                 for i in prog_bar:
                     i += 1
@@ -687,7 +693,7 @@ def basis_wrapper(
         for i in range(len(atom_specifier)):
             i += 1
 
-            if len(control_opts) > 0:
+            if len(control_opts) > 0 or control:
                 # Add any additional control options to the hole control file
                 parsed_control_opts = fo.get_control_keywords(
                     f"{run_loc}/{constr_atoms[0]}{i}/control.in"
