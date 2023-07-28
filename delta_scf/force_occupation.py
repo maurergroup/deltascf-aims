@@ -293,7 +293,7 @@ class ForceOccupation:
             content = read_control.readlines()
 
         divider_1 = "#==============================================================================="
-        # divider_2 = "################################################################################"
+        divider_2 = "################################################################################"
 
         # Change keyword lines
         for opt in opts:
@@ -302,23 +302,32 @@ class ForceOccupation:
             for j, line in enumerate(content):
                 spl = line.split()
 
+                # print(opts)
+                # print(opts[opt])
+                # print(opt)
+
                 if opt in spl:
                     content[j] = f"{opt:<34} {opts[opt]}\n"
                     break
 
-                # TODO: fix for non-ase input files
-                # elif divider_2 in line:
-
-                # Marker if ASE was used so keywords will be added in the same place as the others
+                # Marker if ASE was used so keywords will be added in the same
+                # place as the others
                 elif divider_1 in line:
                     ident += 1
                     if ident == 3:
                         content.insert(j, f"{opt:<34} {opts[opt]}\n")
                         break
 
-            # For when a non-ASE input file is used
-            if ident == 0:
-                content.append(f"{opt:<34} {opts[opt]}\n")
+                # Marker for non-ASE input files so keywords will be added
+                # before the basis set definitions
+                elif divider_2 in line:
+                    ident += 1
+                    content.insert(j - 1, f"{opt:<34} {opts[opt]}\n")
+                    break
+
+            # Ensure keywords are added in all other instances
+            # if ident == 0:
+            #     content.insert(0, f"{opt:<34} {opts[opt]}\n")
 
         return content
 
@@ -413,9 +422,9 @@ class Projector(ForceOccupation):
 
         # Default control file options
         opts = {
-            "xc": "pbe",
-            "spin": "collinear",
-            "default_initial_moment": 0,
+            # "xc": "pbe",
+            # "spin": "collinear",
+            # "default_initial_moment": 0,
             "charge": 0.1,
             "sc_iter_limit": 500,
             "sc_init_iter": 75,
@@ -525,9 +534,9 @@ class Projector(ForceOccupation):
         ks_method = ""
         if occ_type == "force_occupation_projector":
             ks_method = "serial"
-        if occ_type == "deltascf_projector" and pbc is None:
+        if occ_type == "deltascf_projector" and pbc is False:
             ks_method = "parallel"
-        if occ_type == "deltascf_projector" and pbc is not None:
+        if occ_type == "deltascf_projector" and pbc is True:
             ks_method = "serial"
 
         # Loop over each element to constrain
@@ -535,9 +544,9 @@ class Projector(ForceOccupation):
             # Loop over each individual atom to constrain
             for i in self.atom_specifier:
                 opts = {
-                    "xc": "pbe",
-                    "spin": "collinear",
-                    "default_initial_moment": 0,
+                    # "xc": "pbe",
+                    # "spin": "collinear",
+                    # "default_initial_moment": 0,
                     "charge": 1.1,
                     "sc_iter_limit": 1,
                     occ_type: f"{ks_start} {spin} {occ} {ks_start} {ks_stop}",
@@ -594,9 +603,9 @@ class Projector(ForceOccupation):
         ks_method = ""
         if occ_type == "force_occupation_projector":
             ks_method = "serial"
-        if occ_type == "deltascf_projector" and pbc is None:
+        if occ_type == "deltascf_projector" and pbc is False:
             ks_method = "parallel"
-        if occ_type == "deltascf_projector" and pbc is not None:
+        if occ_type == "deltascf_projector" and pbc is True:
             ks_method = "serial"
 
         # Loop over each element to constrain
@@ -604,9 +613,9 @@ class Projector(ForceOccupation):
             # Loop over each individual atom to constrain
             for i in self.atom_specifier:
                 opts = {
-                    "xc": "pbe",
-                    "spin": "collinear",
-                    "default_initial_moment": 0,
+                    # "xc": "pbe",
+                    # "spin": "collinear",
+                    # "default_initial_moment": 0,
                     "charge": 1.0,
                     "sc_iter_limit": 500,
                     "sc_init_iter": 75,
@@ -680,9 +689,9 @@ class Basis(ForceOccupation):
             for i in range(len(self.atom_specifier)):
                 # Default control file options
                 opts = {
-                    "xc": "pbe",
-                    "spin": "collinear",
-                    "default_initial_moment": 0,
+                    # "xc": "pbe",
+                    # "spin": "collinear",
+                    # "default_initial_moment": 0,
                     "charge": 1.0,
                     "sc_iter_limit": 500,
                     "sc_init_iter": 75,

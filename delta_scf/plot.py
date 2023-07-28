@@ -84,7 +84,9 @@ class Plot:
         plt.xlim(x_max, x_min)  # Reverse to match experimental XPS conventions
         plt.xticks(np.arange(x_min, x_max, 1))
         plt.legend(loc="upper right")
-        plt.title(f"XPS spectrum of {molecule}")
+
+        if molecule != "None":
+            plt.title(f"XPS spectrum of {molecule}")
 
         plt.savefig(f"{run_loc}/xps_spectrum.pdf")
         plt.savefig(f"{run_loc}/xps_spectrum.png")

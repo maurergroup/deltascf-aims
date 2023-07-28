@@ -74,6 +74,9 @@ class MainUtils:
         lattice_vecs = False
 
         for line in geom_file:
+            if "lattice_vector" in line:
+                lattice_vecs = True
+
             if "constrain_relaxation" in line:
                 print("'constrain_relaxation' keyword found in geometry.in")
                 print("Ensure that no atoms are fixed in the geometry.in file")
@@ -83,10 +86,19 @@ class MainUtils:
                 print("Aborting...")
                 sys.exit(1)
 
-            if "lattice_vector" in line:
-                lattice_vecs = True
-
         return lattice_vecs
+
+    @staticmethod
+    def check_control(control_file):
+        """Check if there is a k_grid in the control.in"""
+
+        k_grid = False
+
+        for line in control_file:
+            if "k_grid" in line:
+                k_grid = True
+
+        return k_grid
 
     @staticmethod
     def convert_opts_to_dict(opts, pbc):
