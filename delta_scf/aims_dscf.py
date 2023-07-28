@@ -406,8 +406,7 @@ def projector_wrapper(
                 glob.glob(f"{run_loc}/{constr_atoms[0]}{i}/init_1/*restart*")[0]
             )
             os.system(
-                f"cp {run_loc}/{constr_atoms[0]}{i}/init_1/*restart* {run_loc}/"
-                "{constr_atoms[0]}{i}/init_2/"
+                f"cp {run_loc}/{constr_atoms[0]}{i}/init_1/*restart* {run_loc}/{constr_atoms[0]}{i}/init_2/"
             )
 
         # Prevent SCF not converged errors from printing
@@ -482,8 +481,7 @@ def projector_wrapper(
                 glob.glob(f"{run_loc}/{constr_atoms[0]}{i}/init_2/*restart*")[0]
             )
             os.system(
-                f"cp {run_loc}/{constr_atoms[0]}{i}/init_2/*restart* {run_loc}/"
-                "{constr_atoms[0]}{i}/hole/"
+                f"cp {run_loc}/{constr_atoms[0]}{i}/init_2/*restart* {run_loc}/{constr_atoms[0]}{i}/hole/"
             )
 
         spec_run_info = ""
