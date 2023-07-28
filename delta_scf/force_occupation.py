@@ -143,6 +143,14 @@ class ForceOccupation:
             s_config = s_config.replace(*noble_gas_config)
 
         output = list(s_config.split(".").pop(-1))
+
+        # Correct transition metal atoms where the s orbital is filled before d
+        if output[1] == "d":
+            if output[2] == "4" or output[2] == "9":
+                output[0] = str(int(output[0]) + 1)
+                output[1] = "s"
+                output[2] = "1"
+
         self.valence = f"    valence      {output[0]}  {output[1]}   {output[2]}.1\n"
 
     @staticmethod
@@ -285,7 +293,7 @@ class ForceOccupation:
             content = read_control.readlines()
 
         divider_1 = "#==============================================================================="
-        divider_2 = "################################################################################"
+        # divider_2 = "################################################################################"
 
         # Change keyword lines
         for opt in opts:

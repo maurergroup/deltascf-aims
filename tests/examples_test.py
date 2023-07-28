@@ -14,13 +14,13 @@ def binary_check():
         except IndexError:
             bin_path = ""
 
-    if Path(bin_path).is_file() == True:
+    if Path(bin_path).is_file() is True:
         bin_exists = True
     else:
         warnings.warn("Binary not found in aims_bin_loc.txt")
         bin_exists = False
 
-    assert bin_exists == True
+    assert bin_exists is True
 
 
 def water_ground():

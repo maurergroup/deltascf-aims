@@ -3,7 +3,7 @@
 import click
 from utils.custom_click import MutuallyExclusive as me
 
-from delta_scf.aims_dscf import basis_wrapper, main, projector_wrapper
+from delta_scf.aims_dscf import basis_wrapper, main, process, projector_wrapper
 
 
 @click.group()
@@ -103,12 +103,11 @@ from delta_scf.aims_dscf import basis_wrapper, main, projector_wrapper
 )
 @click.option("-g", "--graph", is_flag=True, help="print out the simulated XPS spectra")
 @click.option(
-    "--graph_min_percent",
-    default=0.003,
-    show_default=True,
-    type=float,
-    help="specify a value to customise the minimum plotting intensity of the simulated"
-    " XPS spectra as a percentage of the maximum intensity",
+    "-p",
+    "--print_output",
+    is_flag=True,
+    help="print the live output of the calculation",
+    # TODO
 )
 @click.option(
     "-n",
@@ -136,7 +135,7 @@ def cli(
     n_atoms,
     basis_set,
     graph,
-    graph_min_percent,
+    print_output,
     nprocs,
     debug,
 ):
@@ -172,7 +171,7 @@ def cli(
         n_atoms,
         basis_set,
         graph,
-        graph_min_percent,
+        print_output,
         nprocs,
         debug,
     )
@@ -233,7 +232,7 @@ def cli(
 )
 @click.pass_context
 def projector(ctx, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts):
-    """Calculate DSCF values and plot the simulated XPS spectra."""
+    """Directly force occupation of the Kohn-Sham states."""
 
     projector_wrapper(
         ctx, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts
@@ -314,7 +313,7 @@ def basis(
     ks_max,
     control_opts,
 ):
-    """Force occupation of the basis states."""
+    """Force occupation of Kohn-Sham states through basis functions."""
 
     basis_wrapper(
         ctx,
@@ -328,6 +327,72 @@ def basis(
         ks_max,
         control_opts,
     )
+
+
+@cli.command()
+@click.option(
+    "-A",
+    "--intensity",
+    default=1,
+    type=float,
+    show_default=True,
+    help="Set as 1 for all subpeaks if they are non-degenerate",
+)
+@click.option(
+    "-s",
+    "--asym",
+    is_flag=True,
+    default=False,
+    show_default=True,
+    help="Simulate the XPS spectrum with asymmetry",
+)
+@click.option(
+    "-a",
+    "--asym_param",
+    "a",
+    default=0.2,
+    type=float,
+    show_default=True,
+    help="Define the asymmetry parameter",
+)
+@click.option(
+    "-b",
+    "--asym_trans_param",
+    "b",
+    default=0.0,
+    type=float,
+    show_default=True,
+    help="Define the asymmetry translation parameter",
+)
+@click.option(
+    "-m",
+    "--gl_ratio",
+    default=0.5,
+    type=click.FloatRange(min=0, max=1, clamp=True),
+    show_default=True,
+    help="Set the mixing parameter for the Gaussian-Lorentzian functions",
+)
+@click.option(
+    "-o",
+    "--omega",
+    default=0.35,
+    type=click.FloatRange(min=0, max=1, clamp=True),
+    show_default=True,
+    help="Full width at half maximum value",
+)
+@click.option(
+    "-g",
+    "--gmp",
+    default=0.003,
+    type=click.FloatRange(min=0, max_open=True),
+    show_default=True,
+    help="Global minimum percentage",
+)
+@click.pass_context
+def plot(ctx, intensity, asym, a, b, gl_ratio, omega, gmp):
+    """Plot the simulated XPS spectra."""
+
+    process(ctx, intensity, asym, a, b, gl_ratio, omega, gmp)
 
 
 if __name__ == "__main__":

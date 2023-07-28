@@ -222,12 +222,15 @@ class MainUtils:
         nprocs,
         binary,
         hpc,
+        print_output,
     ):
         """Run a ground state calculation"""
 
         # Ensure that aims always runs with the following environment variables:
         os.system("export OMP_NUM_THREADS=1")
         os.system("export MKL_NUM_THREADS=1")
+        os.system("export MKL_DYNAMIC=FALSE")
+        os.system("ulimit -s unlimited")
 
         # Create the ground directory if it doesn't already exist
         os.system(f"mkdir -p {run_loc}/ground")
@@ -238,12 +241,12 @@ class MainUtils:
 
         # Copy the geometry.in and control.in files to the ground directory
         if control_inp is not None:
-            os.system(f"mv {control_inp} {run_loc}/ground")
+            os.system(f"cp {control_inp} {run_loc}/ground")
 
         if geom_inp is not None:
-            os.system(f"mv {geom_inp} {run_loc}/ground")
+            os.system(f"cp {geom_inp} {run_loc}/ground")
 
-        if os.path.isfile(f"{run_loc}/ground/aims.out") == False:
+        if os.path.isfile(f"{run_loc}/ground/aims.out") is False:
             # Run the ground state calculation
 
             # Add additional basis functions
@@ -299,11 +302,10 @@ class MainUtils:
                     print("running calculation...")
                     atoms.get_potential_energy()
                     # Move files to ground directory
-                    os.system(
-                        f"mv geometry.in control.in aims.out parameters.ase {run_loc}/ground/"
-                    )
+                    os.system(f"cp geometry.in control.in {run_loc}/ground/")
+                    os.system(f"mv aims.out parameters.ase {run_loc}/ground/")
 
-                    print("ground calculation completed successfully\n")
+                    # print("ground calculation completed successfully\n")
 
                 else:
                     # Prevent species dir from being written
@@ -319,10 +321,18 @@ class MainUtils:
 
             elif not hpc:  # Don't use ASE
                 print("running calculation...")
-                os.system(
-                    f"cd {run_loc}/ground && mpirun -n {nprocs} {binary} > aims.out"
-                )
-                print("ground calculation completed successfully\n")
+
+                if print_output:  # Show live output of calculation
+                    os.system(
+                        f"cd {run_loc}/ground && mpirun -n {nprocs} {binary} | tee aims.out"
+                    )
+
+                else:
+                    os.system(
+                        f"cd {run_loc}/ground && mpirun -n {nprocs} {binary} > aims.out"
+                    )
+
+                # print("ground calculation completed successfully\n")
 
             # Print the KS states from aims.out so it is easier to specify the
             # KS states for the hole calculation

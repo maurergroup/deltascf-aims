@@ -12,8 +12,8 @@ from utils.main_utils import MainUtils as mu
 
 from delta_scf.calc_dscf import CalcDeltaSCF as cds
 from delta_scf.force_occupation import Basis, ForceOccupation, Projector
-from delta_scf.peak_broaden import dos_binning
 from delta_scf.plot import Plot
+from delta_scf.schmid_pseudo_voigt import broaden
 
 
 def main(
@@ -30,7 +30,7 @@ def main(
     n_atoms,
     basis_set,
     graph,
-    graph_min_percent,
+    print_output,
     nprocs,
     debug,
 ):
@@ -160,7 +160,7 @@ def main(
         ctx.obj["N_ATOMS"] = n_atoms  # TODO
         ctx.obj["BASIS_SET"] = basis_set
         ctx.obj["GRAPH"] = graph
-        ctx.obj["GMP"] = graph_min_percent
+        ctx.obj["PRINT"] = print_output
         ctx.obj["NPROCS"] = nprocs
         ctx.obj["DEBUG"] = debug
         ctx.obj["HPC"] = hpc
@@ -170,63 +170,47 @@ def main(
         ctx.obj["ASE"] = ase
 
 
-def process(ctx):
+def process(
+    ctx, intensity=1, asym=False, a=0.2, b=0.0, gl_ratio=0.5, omega=0.35, gmp=0.003
+):
     """Calculate DSCF values and plot the simulated XPS spectra."""
 
-    # Calculate the delta scf energy and plot
-    if ctx.obj["RUN_TYPE"] == "hole":
-        grenrgys = cds.read_ground(ctx.obj["RUN_LOC"])
-        element, excienrgys = cds.read_atoms(
-            ctx.obj["RUN_LOC"], ctx.obj["CONSTR_ATOM"], cds.contains_number
+    # Calculate the delta scf energies
+    grenrgys = cds.read_ground(ctx.obj["RUN_LOC"])
+    element, excienrgys = cds.read_atoms(
+        ctx.obj["RUN_LOC"], ctx.obj["CONSTR_ATOM"], cds.contains_number
+    )
+    xps = cds.calc_delta_scf(element, grenrgys, excienrgys)
+
+    if ctx.obj["RUN_LOC"] != "./":
+        os.system(f"mv {element}_xps_peaks.txt {ctx.obj['RUN_LOC']}")
+
+    if ctx.obj["GRAPH"]:
+        # Apply the peak broadening
+        peaks, domain = broaden(0, 1000, intensity, gl_ratio, xps, omega, asym, a, b)
+
+        # Write out the spectrum to a text file
+        # Include bin width of 0.01 eV
+        data = []
+        bin_val = 0.00
+        for i, peak in enumerate(peaks):
+            data.append(f"{str(bin_val)} {str(peak)}\n")
+            bin_val += 0.01
+
+        with open(f"{element}_xps_spectrum.txt", "w") as spec:
+            spec.writelines(data)
+
+        # Move the spectrum to the run location
+        os.system(f'mv {element}_xps_spectrum.txt {ctx.obj["RUN_LOC"]}/')
+
+        print("\nplotting spectrum and calculating MABE...")
+        Plot.sim_xps_spectrum(
+            xps,
+            ctx.obj["RUN_LOC"],
+            ctx.obj["CONSTR_ATOM"],
+            ctx.obj["AT_SPEC"][0],
+            ctx.obj["GMP"],
         )
-        xps = cds.calc_delta_scf(element, grenrgys, excienrgys)
-
-        if ctx.obj["RUN_LOC"] != "./":
-            os.system(f"mv {element}_xps_peaks.txt {ctx.obj['RUN_LOC']}")
-
-        if ctx.obj["GRAPH"]:
-            # Define parameters for broadening
-            xstart = 1
-            xstop = 1000
-            broad = 0.7
-            firstpeak = 285.0
-            ewid1 = firstpeak + 1.0
-            ewid2 = firstpeak + 2.0
-            mix1 = 0.3
-            mix2 = 0.3
-
-            # Apply the broadening
-            x, y = dos_binning(
-                xps,
-                broadening=broad,
-                mix1=mix1,
-                mix2=mix2,
-                start=xstart,
-                stop=xstop,
-                coeffs=None,
-                broadening2=broad,
-                ewid1=ewid1,
-                ewid2=ewid2,
-            )
-
-            # Write out the spectrum to a text file
-            dat = []
-            for xi, yi in zip(x, y):
-                dat.append(f"{str(xi)} {str(yi)}\n")
-
-            with open(f"{element}_xps_spectrum.txt", "w") as spec:
-                spec.writelines(dat)
-
-            # Move the spectrum to the run location
-            os.system(f'mv {element}_xps_spectrum.txt {ctx.obj["RUN_LOC"]}/')
-
-            print("\nplotting spectrum and calculating MABE...")
-            Plot.sim_xps_spectrum(
-                ctx.obj["RUN_LOC"],
-                ctx.obj["CONSTR_ATOM"],
-                ctx.obj["AT_SPEC"][0],
-                ctx.obj["GMP"],
-            )
 
 
 def projector_wrapper(
@@ -249,6 +233,7 @@ def projector_wrapper(
     spec_mol = ctx.obj["SPEC_MOL"]
     species = ctx.obj["SPECIES"]
     occ = ctx.obj["OCC"]
+    print_output = ctx.obj["PRINT"]
 
     if ase:
         calc = ctx.obj["CALC"]
@@ -313,6 +298,7 @@ def projector_wrapper(
             nprocs,
             binary,
             hpc,
+            print_output,
         )
 
         # Ground must be run separately to hole calculations
@@ -420,7 +406,8 @@ def projector_wrapper(
                 glob.glob(f"{run_loc}/{constr_atoms[0]}{i}/init_1/*restart*")[0]
             )
             os.system(
-                f"cp {run_loc}/{constr_atoms[0]}{i}/init_1/*restart* {run_loc}/{constr_atoms[0]}{i}/init_2/"
+                f"cp {run_loc}/{constr_atoms[0]}{i}/init_1/*restart* {run_loc}/"
+                "{constr_atoms[0]}{i}/init_2/"
             )
 
         # Prevent SCF not converged errors from printing
@@ -495,7 +482,8 @@ def projector_wrapper(
                 glob.glob(f"{run_loc}/{constr_atoms[0]}{i}/init_2/*restart*")[0]
             )
             os.system(
-                f"cp {run_loc}/{constr_atoms[0]}{i}/init_2/*restart* {run_loc}/{constr_atoms[0]}{i}/hole/"
+                f"cp {run_loc}/{constr_atoms[0]}{i}/init_2/*restart* {run_loc}/"
+                "{constr_atoms[0]}{i}/hole/"
             )
 
         spec_run_info = ""
@@ -506,24 +494,35 @@ def projector_wrapper(
         and os.path.isfile(
             f"{run_loc}/{constr_atoms[0]}{atom_specifier[0]}/{run_type}/aims.out"
         )
-        == False
+        is False
         and not hpc
     ):
         # Ensure that aims always runs with the following environment variables:
         os.system("export OMP_NUM_THREADS=1")
         os.system("export MKL_NUM_THREADS=1")
+        os.system("export MKL_DYNAMIC=FALSE")
+        os.system("ulimit -s unlimited")
 
-        with click.progressbar(
-            range(len(atom_specifier)), label=f"calculating {run_type}:"
-        ) as bar:
-            for i in bar:
+        if print_output:  # Print live output of calculation
+            for i in range(len(atom_specifier)):
                 i += 1
                 os.system(
-                    f"cd ./{run_loc}/{constr_atoms[0]}{i}/{run_type} && mpirun -n {nprocs} "
-                    f"{binary} > aims.out{spec_run_info}"
+                    f"cd {run_loc}/{constr_atoms[0]}{i}/{run_type} && mpirun -n "
+                    f"{nprocs} {binary} | tee aims.out {spec_run_info}"
                 )
 
-        print(f"{run_type} calculations completed successfully")
+        else:
+            with click.progressbar(
+                range(len(atom_specifier)), label="calculating basis hole:"
+            ) as prog_bar:
+                for i in prog_bar:
+                    i += 1
+                    os.system(
+                        f"cd {run_loc}/{constr_atoms[0]}{i}/{run_type} && mpirun -n "
+                        f"{nprocs} {binary} > aims.out {spec_run_info}"
+                    )
+
+        # print(f"{run_type} calculations completed successfully")
 
     elif run_type != "ground" and not hpc:
         print(f"{run_type} calculations already completed, skipping calculation...")
@@ -533,7 +532,8 @@ def projector_wrapper(
     ctx.obj["AT_SPEC"] = atom_specifier
 
     # Compute the dscf energies and plot if option provided
-    process(ctx)
+    if run_type == "hole":
+        process(ctx)
 
 
 def basis_wrapper(
@@ -565,6 +565,7 @@ def basis_wrapper(
     constr_atoms = ctx.obj["CONSTR_ATOM"]
     spec_at_constr = ctx.obj["SPEC_AT_CONSTR"]
     occ = ctx.obj["OCC"]
+    print_output = ctx.obj["PRINT"]
 
     if ase:
         calc = ctx.obj["CALC"]
@@ -629,8 +630,10 @@ def basis_wrapper(
         # Ensure that aims always runs with the following environment variables:
         os.system("export OMP_NUM_THREADS=1")
         os.system("export MKL_NUM_THREADS=1")
+        os.system("export MKL_DYNAMIC=FALSE")
+        os.system("ulimit -s unlimited")
 
-        if os.path.isfile(f"{run_loc}/ground/aims.out") == False:
+        if os.path.isfile(f"{run_loc}/ground/aims.out") is False:
             raise FileNotFoundError(
                 "\nERROR: ground aims.out not found, please ensure the ground calculation has been "
                 "run"
@@ -702,19 +705,29 @@ def basis_wrapper(
                     control_file.writelines(control_content)
 
         if not hpc:  # Run the hole calculation
-            with click.progressbar(
-                range(len(atom_specifier)), label="calculating basis hole:"
-            ) as prog_bar:
-                for i in prog_bar:
+            if print_output:  # Print live output of calculation
+                for i in range(len(atom_specifier)):
                     i += 1
                     os.system(
                         f"cd {run_loc}/{constr_atoms[0]}{i} && mpirun -n "
-                        f"{nprocs} {binary} > aims.out"
+                        f"{nprocs} {binary} | tee aims.out"
                     )
+
+            else:
+                with click.progressbar(
+                    range(len(atom_specifier)), label="calculating basis hole:"
+                ) as prog_bar:
+                    for i in prog_bar:
+                        i += 1
+                        os.system(
+                            f"cd {run_loc}/{constr_atoms[0]}{i} && mpirun -n "
+                            f"{nprocs} {binary} > aims.out"
+                        )
 
         # These need to be passed to process()
         ctx.obj["RUN_TYPE"] = run_type
         ctx.obj["AT_SPEC"] = atom_specifier
 
     # Compute the dscf energies and plot if option provided
-    process(ctx)
+    if run_type == "hole":
+        process(ctx)

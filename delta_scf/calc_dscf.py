@@ -18,7 +18,7 @@ class CalcDeltaSCF:
             if "s.c.f. calculation      :" in line:
                 grenrgys = float(line.split()[-2])
 
-        if grenrgys == None:
+        if grenrgys is None:
             raise ValueError("No ground state energy found.")
 
         print("Ground state calculated energy (eV):")
@@ -45,7 +45,6 @@ class CalcDeltaSCF:
         # Read each core hole dir
         for directory in dir_list:
             if element in directory and contains_number(directory) is True:
-
                 # Try reading output file from basis, then projector file structure
                 if os.path.exists(f"{calc_path}{directory}/aims.out"):
                     with open(

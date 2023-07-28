@@ -8,7 +8,7 @@ class Plot:
     """Plot the XPS spectrum"""
 
     @staticmethod
-    def sim_xps_spectrum(run_loc, targ_at, at_spec, gmp):
+    def sim_xps_spectrum(xps, run_loc, targ_at, at_spec, gmp):
         x_axis_aims = np.loadtxt(f"{run_loc}/{targ_at}_xps_spectrum.txt", usecols=(0))
         y_axis_aims = np.loadtxt(f"{run_loc}/{targ_at}_xps_spectrum.txt", usecols=(1))
 
@@ -62,6 +62,21 @@ class Plot:
                 lines = hole_geom.readlines()
 
         molecule = lines[4].split()[-1]
+
+        # Plot the individual binding energies
+        first_dirac = True
+        for peak in xps:
+            # Include the peak in the legend if first call
+            if first_dirac is True:
+                plt.axvline(
+                    x=peak,
+                    c="#9467bd",
+                    ymax=0.25,
+                    label="Individual binding energies",
+                )
+                first_dirac = False
+            else:
+                plt.axvline(x=peak, c="#9467bd", ymax=0.25)
 
         # Plot the spectrum
         plt.plot(plot_x, plot_y, label="Simulated XPS spectrum")
