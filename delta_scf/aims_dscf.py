@@ -68,7 +68,7 @@ def main(
     else:
         ctx.obj["CONTROL_INP"] = None
 
-    if found_lattice_vecs or found_k_grid:
+    if not found_lattice_vecs or found_k_grid:
         ctx.obj["LATTICE_VECS"] = True
 
     # Find the structure if not given
@@ -259,7 +259,7 @@ def projector_wrapper(
     if found_lattice_vecs or l_vecs is not None:
         if pbc is None:
             print(
-                "Warning: -p/--pbc argument not given, attempting to use"
+                "-p/--pbc argument not given, attempting to use"
                 " k_grid from control file or previous calculation"
             )
 
@@ -601,6 +601,7 @@ def basis_wrapper(
             nprocs,
             binary,
             hpc,
+            print_output,
         )
 
         # Ground must be run separately to hole calculations

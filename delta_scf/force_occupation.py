@@ -430,6 +430,7 @@ class Projector(ForceOccupation):
             "sc_init_iter": 75,
             "restart_write_only": "restart_file",
             "restart_save_iterations": 5,
+            "force_single_restartfile": ".true.",
         }
 
         # Add or change user-specified keywords to the control file
@@ -553,6 +554,7 @@ class Projector(ForceOccupation):
                     "KS_method": ks_method,
                     "restart": "restart_file",
                     "restart_save_iterations": 1,
+                    "force_single_restartfile": ".true.",
                 }
 
                 # Add or change user-specified keywords to the control file
@@ -622,6 +624,7 @@ class Projector(ForceOccupation):
                     occ_type: f"{ks_start} {spin} {occ} {ks_start} {ks_stop}",
                     "KS_method": ks_method,
                     "restart_read_only": "restart_file",
+                    "force_single_restartfile": ".true.",
                     "output": "cube spin_density",
                 }
 
