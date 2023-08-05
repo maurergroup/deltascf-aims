@@ -2,6 +2,7 @@
 
 import click
 from utils.custom_click import MutuallyExclusive as me
+from utils.custom_click import MutuallyInclusive as mi
 
 from delta_scf.aims_dscf import basis_wrapper, main, process, projector_wrapper
 
@@ -350,6 +351,8 @@ def basis(
     "-a",
     "--asym_param",
     "a",
+    cls=mi,
+    mutually_inclusive=["--asym"],
     default=0.2,
     type=float,
     show_default=True,
@@ -359,6 +362,8 @@ def basis(
     "-b",
     "--asym_trans_param",
     "b",
+    cls=mi,
+    mutually_inclusive=["--asym"],
     default=0.0,
     type=float,
     show_default=True,

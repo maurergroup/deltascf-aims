@@ -61,7 +61,12 @@ class Plot:
             ) as hole_geom:
                 lines = hole_geom.readlines()
 
-        molecule = lines[4].split()[-1]
+        try:
+            molecule = lines[4].split()[-1]
+        except IndexError:
+            # If, for example, a custom geometry was used and no molecular
+            # specification was made
+            molecule = "custom geometry"
 
         # Plot the individual binding energies
         first_dirac = True

@@ -209,6 +209,10 @@ def process(
         if ctx.obj["RUN_LOC"] != "./":
             os.system(f'mv {element}_xps_spectrum.txt {ctx.obj["RUN_LOC"]}/')
 
+        # Set at spec if called outside of projector or basis
+        if "AT_SPEC" not in ctx.obj:
+            ctx.obj["AT_SPEC"] = [1]
+
         print("\nplotting spectrum and calculating MABE...")
         Plot.sim_xps_spectrum(
             xps, ctx.obj["RUN_LOC"], ctx.obj["CONSTR_ATOM"], ctx.obj["AT_SPEC"][0], gmp
