@@ -63,7 +63,7 @@ def main(
     found_k_grid = False
     if control_input is not None:
         ase = False
-        found_k_grid = mu.check_control(control_input)
+        found_k_grid = mu.check_control_k_grid(control_input)
         ctx.obj["CONTROL_INP"] = control_input.name
     else:
         ctx.obj["CONTROL_INP"] = None
@@ -303,6 +303,7 @@ def projector_wrapper(
             geom_inp,
             control_inp,
             atoms,
+            l_vecs,
             basis_set,
             species,
             calc,

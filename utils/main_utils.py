@@ -89,7 +89,7 @@ class MainUtils:
         return lattice_vecs
 
     @staticmethod
-    def check_control(control_file):
+    def check_control_k_grid(control_file):
         """Check if there is a k_grid in the control.in"""
 
         k_grid = False
@@ -225,6 +225,7 @@ class MainUtils:
         geom_inp,
         control_inp,
         atoms,
+        l_vecs,
         basis_set,
         species,
         calc,
@@ -258,9 +259,8 @@ class MainUtils:
         if geom_inp is not None:
             os.system(f"cp {geom_inp} {run_loc}/ground")
 
+        # Run the ground state calculation
         if os.path.isfile(f"{run_loc}/ground/aims.out") is False:
-            # Run the ground state calculation
-
             # Add additional basis functions
             basis_file = glob.glob(
                 f"{species}/defaults_2020/{basis_set}/*{constr_atom}_default"
@@ -309,6 +309,10 @@ class MainUtils:
                 # Update with all control options from the calculator
                 calc.set(**control_opts)
                 control_opts = calc.parameters
+
+                # Add the lattice vectors if periodic
+                if l_vecs is not None:
+                    atoms.set_pbc(l_vecs)
 
                 if not hpc:
                     print("running calculation...")

@@ -205,8 +205,8 @@ def cli(
     "-l",
     "--lattice_vectors",
     "l_vecs",
-    nargs=1,
-    type=list,
+    # nargs=3,
+    # type=list,
     help="provide the lattice vectors in a 3x3 matrix",
 )
 @click.option(
