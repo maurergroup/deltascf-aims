@@ -453,16 +453,13 @@ class Projector(ForceOccupation):
             with open(self.new_control, "r") as read_control:
                 new_basis_content = read_control.readlines()
 
-            found_target_atom = False
-
             for j, line in enumerate(new_basis_content):
                 spl = line.split()
 
                 if len(spl) > 1:
                     if "species" == spl[0] and el == spl[1]:
-                        if found_target_atom is False:
-                            new_basis_content[j] = f"  species        {el}1\n"
-                            found_target_atom = True
+                        new_basis_content[j] = f"  species        {el}1\n"
+                        break
 
             # Write it to intermediate control file
             with open(self.new_control, "w") as write_control:
@@ -676,7 +673,9 @@ class Basis(ForceOccupation):
         """Inherit all the variables from an instance of the parent class"""
         vars(self).update(vars(parent_instance))
 
-    def setup_basis(self, spin, n_qn, l_qn, m_qn, occ_no, ks_max, occ_type):
+    def setup_basis(
+        self, spin, n_qn, l_qn, m_qn, occ_no, ks_max, occ_type, basis_set, defaults
+    ):
         """Write new directories and control files for basis calculations."""
 
         # The new basis method should utilise ks method parallel
@@ -708,6 +707,7 @@ class Basis(ForceOccupation):
                 i += 1
 
                 control = f"{self.run_loc}/{el}{i}/control.in"
+                geometry = f"{self.run_loc}/{el}{i}/geometry.in"
 
                 # Create new directories and .in files for each constrained atom
                 os.makedirs(f"{self.run_loc}/{el}{i}/", exist_ok=True)
@@ -717,14 +717,64 @@ class Basis(ForceOccupation):
                 )
                 shutil.copyfile(
                     f"{self.run_loc}/ground/geometry.in",
-                    f"{self.run_loc}/{el}{i}/geometry.in",
+                    geometry,
                 )
 
-                # Change control file
-                content = self.change_control_keywords(control, opts)
+                # Create new geometry file for hole calc by adding label for
+                # core hole basis set
+                # Change geometry file
+                with open(geometry, "r") as read_geom:
+                    geom_content = read_geom.readlines()
 
-                # Write the data to the file
+                # Change core hole atom to {atom}{num}
+                atom_counter = 0
+                for j, line in enumerate(geom_content):
+                    spl = line.split()
+
+                    if "atom" in line and el in line:
+                        if atom_counter + 1 == i:
+                            partial_hole_atom = f" {el}1\n"
+                            geom_content[j] = " ".join(spl[0:-1]) + partial_hole_atom
+
+                        atom_counter += 1
+
+                with open(geometry, "w") as write_geom:
+                    write_geom.writelines(geom_content)
+
+                # Change control file
+                # Find species defaults location from location of binary and
+                # add basis set to control file from defaults
+                basis_set = glob.glob(
+                    f"{defaults}/defaults_2020/{basis_set}/*{el}_default"
+                )
+                os.system(f"cat {basis_set[0]} >> {control}")
+
+                # Change basis set label for core hole atom
+                with open(control, "r") as read_control:
+                    control_content = read_control.readlines()
+
+                for j, line in enumerate(control_content):
+                    spl = line.split()
+
+                    if len(spl) > 1:
+                        if "species" == spl[0] and el == spl[1]:
+                            control_content[j] = f"  species        {el}1\n"
+                            break
+
+                # Write the new label to the file
                 with open(control, "w") as write_control:
-                    write_control.writelines(content)
+                    write_control.writelines(control_content)
+
+                # Change control file keywords
+                control_content = self.change_control_keywords(control, opts)
+
+                # Add additional core-hole basis functions
+                control_content = self.add_additional_basis(
+                    self.current_path, self.elements, control_content, f"{el}1"
+                )
+
+                # Write the keywords and basis functions to the file
+                with open(control, "w") as write_control:
+                    write_control.writelines(control_content)
 
         print("files and directories written successfully")

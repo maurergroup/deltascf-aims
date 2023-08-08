@@ -68,8 +68,10 @@ def main(
     else:
         ctx.obj["CONTROL_INP"] = None
 
-    if not found_lattice_vecs or found_k_grid:
+    if found_lattice_vecs or found_k_grid:
         ctx.obj["LATTICE_VECS"] = True
+    else:
+        ctx.obj["LATTICE_VECS"] = False
 
     # Find the structure if not given
     # Build the structure if given
@@ -153,6 +155,12 @@ def main(
             aims_calc = mu.create_calc(nprocs, binary, species, basis_set)
             atoms.calc = aims_calc
             ctx.obj["CALC"] = aims_calc
+
+            # Print a warning if print_output is used with ase
+            if print_output:
+                print(
+                    "Warning: -p/--print_output is not supported with the ASE backend"
+                )
 
         # User specified context objects
         ctx.obj["ATOMS"] = atoms
@@ -518,6 +526,8 @@ def projector_wrapper(
                     f"cd {run_loc}/{constr_atoms[0]}{i}/{run_type} && mpirun -n "
                     f"{nprocs} {binary} | tee aims.out {spec_run_info}"
                 )
+                if run_type != "init_1" and run_type != "init_2":
+                    mu.print_ks_states(run_loc)
 
         else:
             with click.progressbar(
@@ -678,7 +688,9 @@ def basis_wrapper(
             print("hole calculations already completed, skipping calculation...")
 
         basis = Basis(fo)
-        basis.setup_basis(multiplicity, n_qn, l_qn, m_qn, occ, ks_max, occ_type)
+        basis.setup_basis(
+            multiplicity, n_qn, l_qn, m_qn, occ, ks_max, occ_type, basis_set, species
+        )
 
         # Add molecule identifier to hole geometry.in
         with open(
@@ -721,6 +733,7 @@ def basis_wrapper(
                         f"cd {run_loc}/{constr_atoms[0]}{i} && mpirun -n "
                         f"{nprocs} {binary} | tee aims.out"
                     )
+                    mu.print_ks_states(run_loc)
 
             else:
                 with click.progressbar(
