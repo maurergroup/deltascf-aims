@@ -607,6 +607,7 @@ def basis_wrapper(
             geom,
             control,
             atoms,
+            None,
             basis_set,
             species,
             calc,
