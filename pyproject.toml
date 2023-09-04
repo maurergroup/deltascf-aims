@@ -13,7 +13,7 @@ pyyaml = "^6.0"
 click = "^8.1.6"
 ase = "^3.22.1"
 matplotlib = "^3.6.2"
-pytest = "^7.4.0"
+pytest = "^7.4.1"
 
 [tool.poetry.scripts]
 deltascf = 'delta_scf.cli:cli'
