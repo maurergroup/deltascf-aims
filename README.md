@@ -7,7 +7,7 @@ An application to test the development of core level spectroscopy simulation met
 
 ## Requirements 
 
-- 
+- [python pip](https://pypi.org/project/pip/)
 - Access to an FHI-aims binary with the basis sets saved at `FHIaims/species_defaults`. Note that the `FHIaims/` top level directory can be at any writeable location in your filesystem as `deltaSCF-aims` will ask for the location of this.
 
 ## Installation
