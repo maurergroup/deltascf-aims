@@ -268,9 +268,16 @@ class ProgramFlow:
                     self.constr_atom = atom.symbol
                     break
 
-    def _check_for_binary(self) -> None:
+    def _check_for_bin(self) -> tuple[str, str]:
         """
         Check if a binary is saved in ./aims_bin_loc.txt.
+
+        Returns
+        -------
+            current_path : str
+                path to the current working directory
+            bin_path : str
+                path to the location of the FHI-aims binary
         """
 
         current_path = os.path.dirname(os.path.realpath(__file__))
@@ -280,9 +287,20 @@ class ProgramFlow:
             except IndexError:
                 bin_path = ""
 
-        # TODO: continue from here
-        # Ensure the user has entered the path to the binary
-        # If not open the user's $EDITOR to allow them to enter the path
+        return current_path, bin_path
+
+    def _bin_path_prompt(self, current_path, bin_path):
+        """
+        Ensure the user has entered the path to the binary. If not open the user's
+        $EDITOR to allow them to enter the path.
+
+        Parameters
+        ----------
+            current_path : str
+                path to the current working directory
+            bin_path : str
+                path to the location of the FHI-aims binary
+        """
         if not Path(bin_path).is_file() or self.binary or bin_path == "":
             marker = (
                 "\n# Enter the path to the FHI-aims binary above this line\n"
