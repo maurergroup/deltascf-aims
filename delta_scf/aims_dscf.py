@@ -1,86 +1,233 @@
-#!/usr/bin/env python3
-
 import glob
 import os
 import sys
 from pathlib import Path
+from typing import List, Union
 
 import click
 from ase import Atoms
 from ase.io import read
-from utils.main_utils import MainUtils as mu
 
 from delta_scf.calc_dscf import CalcDeltaSCF as cds
 from delta_scf.force_occupation import Basis, ForceOccupation, Projector
 from delta_scf.plot import Plot
 from delta_scf.schmid_pseudo_voigt import broaden
+from utils.main_utils import MainUtils as mu
 
 
-def main(
-    ctx,
-    hpc,
-    geometry_input,
-    control_input,
-    binary,
-    run_location,
-    spec_mol,
-    constr_atom,
-    spec_at_constr,
-    occupation,
-    n_atoms,
-    basis_set,
-    graph,
-    print_output,
-    nprocs,
-    debug,
-):
+class ProgramFlow:
     """
-    Point of controlling the program flow. Options used for all methods are
-    also defined here.
+    Point of controlling the program flow.
+
+    ...
+
+    Attributes
+    ----------
+        ctx : click.Context
+            click context object
+        hpc : bool
+            setup a calculation primarily for use on a HPC cluster WITHOUT running the
+            calculation
+        geometry_input : click.File()
+            specify a custom geometry.in instead of using a structure from PubChem or ASE
+        control_input : click.File()
+            specify a custom control.in instead of automatically generating one
+        binary : bool
+            modify the path to the FHI-aims binary
+        run_location : click.Path(file_okay=False, dir_okay=True)
+            optionally specify a custom location to run the calculation
+        spec_mol : str
+            molecule to be used in the calculation
+        constr_atom : str
+            atom to be constrained
+        spec_at_constr : click.IntRange(min=1, max_open=True)
+            atom to constrain; constrain all atoms of this element
+        occupation : float
+            occupation of the core hole
+        n_atoms : click.IntRange(1)
+            number of atoms to constrain per calculation
+        basis_set : click.choice(['light', 'intermediate', 'tight', 'really_tight'])
+            the basis set to use for the calculation
+        graph : bool
+            print the simulated XPS spectrum
+        print_output : bool
+            print the live output of the calculation
+        nprocs : int
+            number of processors to use
+
+    Methods
+    -------
+        _check_for_geometry()
+            Check a geometry file exists if specific atom indices are to be constrained
+        _check_for_pbcs()
+            Check for lattice vectors and k_grid in input files
+        _check_for_ase()
+            Check whether ASE should be used or not
+        create_atoms()
+            Initialise an ASE atoms object
     """
 
-    # Pass global options to subcommands
-    ctx.ensure_object(dict)
+    # TODO: Give more info in docstring
+    # TODO: Create functions for each thing in here
+    # TODO: Turn main into an object
 
-    # A geometry file must be given if specific atom indices are to be constrained
-    if len(spec_at_constr) > 0:
-        if not geometry_input:
-            raise click.MissingParameter(
-                param_hint="-e/--geometry_input", param_type="option"
-            )
+    def __init__(
+        self,
+        ctx,
+        hpc,
+        geometry_input,
+        control_input,
+        binary,
+        run_location,
+        spec_mol,
+        constr_atom,
+        spec_at_constr,
+        occupation,
+        n_atoms,
+        basis_set,
+        graph,
+        print_output,
+        nprocs,
+        debug,
+    ) -> None:
+        """
+        Parameters
+        ----------
+            ctx : click.Context
+                click context object
+            hpc : bool
+                setup a calculation primarily for use on a HPC cluster WITHOUT running
+                the calculation
+            geometry_input : click.File()
+                specify a custom geometry.in instead of using a structure from PubChem
+                or ASE
+            control_input : click.File()
+                specify a custom control.in instead of automatically generating one
+            binary : bool
+                modify the path to the FHI-aims binary
+            run_location : click.Path(file_okay=False, dir_okay=True)
+                optionally specify a custom location to run the calculation
+            spec_mol : str
+                molecule to be used in the calculation
+            constr_atom : str
+                atom to be constrained
+            spec_at_constr : click.IntRange(min=1, max_open=True)
+                atom to constrain; constrain all atoms of this element
+            occupation : float
+                occupation of the core hole
+            n_atoms : click.IntRange(1)
+                number of atoms to constrain per calculation
+            basis_set : click.choice(['light', 'intermediate', 'tight', 'really_tight'])
+                the basis set to use for the calculation
+            graph : bool
+                print the simulated XPS spectrum
+            print_output : bool
+                print the live output of the calculation
+            nprocs : int
+                number of processors to use
+        """
+        self.ctx = ctx
+        self.hpc = hpc
+        self.geometry_input = geometry_input
+        self.control_input = control_input
+        self.binary = binary
+        self.run_location = run_location
+        self.spec_mol = spec_mol
+        self.constr_atom = constr_atom
+        self.spec_at_constr = spec_at_constr
+        self.occupation = occupation
+        self.n_atoms = n_atoms
+        self.basis_set = basis_set
+        self.graph = graph
+        self.print_output = print_output
+        self.nprocs = nprocs
+        self.debug = debug
 
-    # Use ASE unless both a custom geometry.in and control.in are specified
-    # Also don't use ASE if a control.in is specified
-    ase = True
-    found_lattice_vecs = False
-    if geometry_input is not None:
-        found_lattice_vecs = mu.check_geom(geometry_input)
-        ctx.obj["GEOM_INP"] = geometry_input.name
-    else:
-        ctx.obj["GEOM_INP"] = None
-        ctx.obj["LATTICE_VECS"] = None
+        # Pass global options to subcommands
+        ctx.ensure_object(dict)
 
-    found_k_grid = False
-    if control_input is not None:
-        ase = False
-        found_k_grid = mu.check_control_k_grid(control_input)
-        ctx.obj["CONTROL_INP"] = control_input.name
-    else:
-        ctx.obj["CONTROL_INP"] = None
+    @staticmethod
+    def _check_for_help_arg() -> None:
+        """
+        Print click help if --help flag given
+        """
 
-    if found_lattice_vecs or found_k_grid:
-        ctx.obj["LATTICE_VECS"] = True
-    else:
-        ctx.obj["LATTICE_VECS"] = False
+        if "--help" in sys.argv:
+            click.help_option()
 
-    # Find the structure if not given
-    # Build the structure if given
-    atoms = Atoms()
+    def _check_for_geometry(self) -> None:
+        """
+        Check a geometry file exists if specific atom indices are to be constrained.
+        """
 
-    if spec_mol is None and geometry_input is None:
-        if "--help" not in sys.argv:
+        if len(self.spec_at_constr) > 0:
+            if not self.geometry_input:
+                raise click.MissingParameter(
+                    param_hint="-e/--geometry_input", param_type="option"
+                )
+
+    def _check_for_pbcs(self) -> None:
+        """
+        Check for lattice vectors and k_grid in input files.
+        """
+
+        found_lattice_vecs = False
+        if self.geometry_input is not None:
+            found_lattice_vecs = mu.check_geom(self.geometry_input)
+            self.ctx.obj["GEOM_INP"] = self.geometry_input.name
+        else:
+            self.ctx.obj["GEOM_INP"] = None
+            self.ctx.obj["LATTICE_VECS"] = None
+
+        found_k_grid = False
+        if self.control_input is not None:
+            found_k_grid = mu.check_control_k_grid(self.control_input)
+            self.ctx.obj["CONTROL_INP"] = self.control_input.name
+        else:
+            self.ctx.obj["CONTROL_INP"] = None
+
+        if found_lattice_vecs or found_k_grid:
+            self.ctx.obj["LATTICE_VECS"] = True
+        else:
+            self.ctx.obj["LATTICE_VECS"] = False
+
+    def _check_ase_usage(self) -> bool:
+        """
+        Check whether ASE should be used or not.
+
+        Returns
+        -------
+            ase : bool
+                use ASE to build the structure
+        """
+        ase = True
+        if self.control_input is not None:
+            ase = False  # Do not use if control.in is specified
+
+        return ase
+
+    def create_structure(self, ase) -> Union[Atoms, List[Atoms]]:
+        """
+        Initialise an ASE atoms object from geometry file if given or find from
+        databases if not.
+
+        Parameters
+        ----------
+            ase : bool
+                use ASE to build the structure
+
+        Returns
+        -------
+            atoms : ase.Atoms
+                ASE atoms object
+        """
+
+        atoms = Atoms()
+
+        # Find the structure if not given
+        if self.spec_mol is None and self.geometry_input is None:
             try:
-                atoms = read(f"./{run_location}/ground/geometry.in")
+                atoms = read(f"./{self.run_location}/ground/geometry.in")
                 print(
                     "molecule argument not provided, defaulting to using existing geometry.in"
                     " file"
@@ -91,22 +238,41 @@ def main(
                     param_type="option",
                 )
 
-    elif "--help" not in sys.argv and ase:
-        if spec_mol is not None:
-            atoms = mu.build_geometry(spec_mol)
-        if geometry_input is not None:
-            atoms = read(geometry_input.name)
+        # Build the structure if given
+        elif ase:
+            if self.spec_mol is not None:
+                atoms = mu.build_geometry(self.spec_mol)
+            if self.geometry_input is not None:
+                atoms = read(self.geometry_input.name)
 
-    # Get the constrained atom element
-    # TODO: support for multiple constrained atoms
-    if constr_atom is None:
-        for atom in atoms:
-            if atom.index in spec_at_constr:
-                constr_atom = atom.symbol
-                break
+        return atoms
 
-    # Check if a binary has been specified
-    if "--help" not in sys.argv:
+    def get_constr_atom_element(self, atoms) -> None:
+        """
+        Find the element of the atom to perform XPS/NEXAFS for.
+
+        Parameters
+        ----------
+            atoms : ase.Atoms
+                ASE atoms object
+
+        Returns
+        -------
+            constr_atom : str
+                element of constr_atom
+        """
+        # TODO: support for multiple constrained atoms
+        if self.constr_atom is None:
+            for atom in atoms:
+                if atom.index in self.spec_at_constr:
+                    self.constr_atom = atom.symbol
+                    break
+
+    def _check_for_binary(self) -> None:
+        """
+        Check if a binary is saved in ./aims_bin_loc.txt.
+        """
+
         current_path = os.path.dirname(os.path.realpath(__file__))
         with open(f"{current_path}/aims_bin_loc.txt", "r") as f:
             try:
@@ -114,9 +280,10 @@ def main(
             except IndexError:
                 bin_path = ""
 
+        # TODO: continue from here
         # Ensure the user has entered the path to the binary
         # If not open the user's $EDITOR to allow them to enter the path
-        if not Path(bin_path).is_file() or binary or bin_path == "":
+        if not Path(bin_path).is_file() or self.binary or bin_path == "":
             marker = (
                 "\n# Enter the path to the FHI-aims binary above this line\n"
                 "# Ensure that the binary is located in the build directory of FHIaims"
@@ -257,6 +424,8 @@ def projector_wrapper(
     # Used later to redirect STDERR to /dev/null to prevent printing not converged errors
     spec_run_info = None
 
+    # TODO: Use warnings.warn import
+
     # Raise a warning if no additional control options have been specified
     if len(control_opts) < 1 and control_inp is None:
         print(
@@ -317,6 +486,7 @@ def projector_wrapper(
         )
 
         # Ground must be run separately to hole calculations
+        # TODO: return shouldn't be placed in the middle of a function
         return
 
     else:  # run_type != ground
@@ -330,7 +500,7 @@ def projector_wrapper(
         )
 
     # Convert constr_atoms to a list
-    if type(constr_atoms) is not list:
+    if isinstance(constr_atoms, list) is False:
         constr_atoms = [constr_atoms]
 
     # Create a list of element symbols to constrain
@@ -382,6 +552,7 @@ def projector_wrapper(
 
     spec_run_info = ""
 
+    # TODO: turn into function (and see above for init_1)
     if run_type == "init_2":
         if hpc:
             raise click.BadParameter(
@@ -425,7 +596,7 @@ def projector_wrapper(
                 glob.glob(f"{run_loc}/{constr_atoms[0]}{i}/init_1/*restart*")[0]
             )
             os.system(
-                f"cp {run_loc}/{constr_atoms[0]}{i}/init_1/*restart* {run_loc}/{constr_atoms[0]}{i}/init_2/"
+                f"cp {run_loc}/{constr_atoms[0]}{i}/init_1/*restart* {run_loc}/{constr_atoms[0]}{i}/init_2/ "
             )
 
         # Prevent SCF not converged errors from printing
@@ -661,7 +832,7 @@ def basis_wrapper(
             )
 
         # Convert constr_atoms to a list
-        if type(constr_atoms) is not list:
+        if isinstance(constr_atoms, list) is False:
             constr_atoms = [constr_atoms]
 
         # Create a list of element symbols to constrain

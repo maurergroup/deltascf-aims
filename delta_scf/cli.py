@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 
 import click
-from utils.custom_click import MutuallyExclusive as me
-from utils.custom_click import MutuallyInclusive as mi
 
 from delta_scf.aims_dscf import basis_wrapper, main, process, projector_wrapper
+from utils.custom_click import MutuallyExclusive as me
+from utils.custom_click import MutuallyInclusive as mi
 
 
 @click.group()
@@ -56,7 +56,7 @@ from delta_scf.aims_dscf import basis_wrapper, main, process, projector_wrapper
     default="./",
     show_default=True,
     type=click.Path(file_okay=False, dir_okay=True),
-    help="Optionally specify a custom location to run the calculation",
+    help="optionally specify a custom location to run the calculation",
 )
 @click.option(
     "-c",
@@ -118,9 +118,6 @@ from delta_scf.aims_dscf import basis_wrapper, main, process, projector_wrapper
     type=int,
     help="number of processors to use",
 )
-@click.option(
-    "-d", "--debug", is_flag=True, help="for developer use: print debug information"
-)
 @click.pass_context
 def cli(
     ctx,
@@ -138,7 +135,6 @@ def cli(
     graph,
     print_output,
     nprocs,
-    debug,
 ):
     """An interface to automate core-hole constrained occupation methods in
     FHI-aims.
@@ -174,7 +170,6 @@ def cli(
         graph,
         print_output,
         nprocs,
-        debug,
     )
 
 
