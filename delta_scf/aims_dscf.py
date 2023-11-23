@@ -15,7 +15,7 @@ from delta_scf.schmid_pseudo_voigt import broaden
 from utils.main_utils import MainUtils as mu
 
 
-class ProgramFlow:
+class Start(object):
     """
     Point of controlling the program flow.
 
@@ -73,7 +73,6 @@ class ProgramFlow:
 
     def __init__(
         self,
-        ctx,
         hpc,
         geometry_input,
         control_input,
@@ -88,13 +87,10 @@ class ProgramFlow:
         graph,
         print_output,
         nprocs,
-        debug,
     ) -> None:
         """
         Parameters
         ----------
-            ctx : click.Context
-                click context object
             hpc : bool
                 setup a calculation primarily for use on a HPC cluster WITHOUT running
                 the calculation
@@ -126,7 +122,6 @@ class ProgramFlow:
             nprocs : int
                 number of processors to use
         """
-        self.ctx = ctx
         self.hpc = hpc
         self.geometry_input = geometry_input
         self.control_input = control_input
@@ -141,15 +136,14 @@ class ProgramFlow:
         self.graph = graph
         self.print_output = print_output
         self.nprocs = nprocs
-        self.debug = debug
 
         # Pass global options to subcommands
-        ctx.ensure_object(dict)
+        # ctx.ensure_object(dict)
 
     @staticmethod
     def _check_for_help_arg() -> None:
         """
-        Print click help if --help flag given
+        Print click help if --help flag is given
         """
 
         if "--help" in sys.argv:
@@ -174,22 +168,20 @@ class ProgramFlow:
         found_lattice_vecs = False
         if self.geometry_input is not None:
             found_lattice_vecs = mu.check_geom(self.geometry_input)
-            self.ctx.obj["GEOM_INP"] = self.geometry_input.name
         else:
-            self.ctx.obj["GEOM_INP"] = None
-            self.ctx.obj["LATTICE_VECS"] = None
+            self.geometry_input = None
+            self.lattice_vecs = None
 
         found_k_grid = False
         if self.control_input is not None:
             found_k_grid = mu.check_control_k_grid(self.control_input)
-            self.ctx.obj["CONTROL_INP"] = self.control_input.name
         else:
-            self.ctx.obj["CONTROL_INP"] = None
+            self.control_input = None
 
         if found_lattice_vecs or found_k_grid:
-            self.ctx.obj["LATTICE_VECS"] = True
+            self.lattice_vecs = True
         else:
-            self.ctx.obj["LATTICE_VECS"] = False
+            self.lattice_vecs = False
 
     def _check_ase_usage(self) -> bool:
         """
@@ -289,7 +281,7 @@ class ProgramFlow:
 
         return current_path, bin_path
 
-    def _bin_path_prompt(self, current_path, bin_path):
+    def _bin_path_prompt(self, current_path, bin_path) -> str:
         """
         Ensure the user has entered the path to the binary. If not open the user's
         $EDITOR to allow them to enter the path.
@@ -299,6 +291,11 @@ class ProgramFlow:
             current_path : str
                 path to the current working directory
             bin_path : str
+                path to the location of the FHI-aims binary
+
+        Returns
+        -------
+            binary : str
                 path to the location of the FHI-aims binary
         """
         if not Path(bin_path).is_file() or self.binary or bin_path == "":
@@ -323,8 +320,21 @@ class ProgramFlow:
             print(f"specified binary path: {bin_path}")
             binary = bin_path
 
-        species = f"{Path(binary).parent.parent}/species_defaults/"
+            return binary
 
+    def _check_species_path(self, binary) -> None:
+        """
+        Check if the species_defaults directory exists in the correct location.
+
+        Parameters
+        ----------
+            binary : str
+                path to the location of the FHI-aims binary
+        """
+
+        species = f"{Path(self.binary).parent.parent}/species_defaults/"
+
+        # TODO: check if the warnings module could be used here
         # Check if the species_defaults directory exists in the correct location
         if not Path(species).exists():
             print(
@@ -335,37 +345,45 @@ class ProgramFlow:
                 f"species_defaults directory not found in {Path(binary).parent.parent}"
             )
 
+    def create_calculator(self, atoms, ase, binary, species, basis_set) -> None:
         # Create the ASE calculator
         if ase:
-            aims_calc = mu.create_calc(nprocs, binary, species, basis_set)
+            aims_calc = mu.create_calc(self.nprocs, binary, species, basis_set)
             atoms.calc = aims_calc
-            ctx.obj["CALC"] = aims_calc
+            self.ctx.obj["CALC"] = aims_calc
 
             # Print a warning if print_output is used with ase
-            if print_output:
+            # TODO: use warnings.warn
+            if self.print_output:
                 print(
                     "Warning: -p/--print_output is not supported with the ASE backend"
                 )
 
-        # User specified context objects
-        ctx.obj["ATOMS"] = atoms
-        ctx.obj["SPEC_MOL"] = spec_mol
-        ctx.obj["BINARY"] = binary
-        ctx.obj["RUN_LOC"] = run_location
-        ctx.obj["CONSTR_ATOM"] = constr_atom
-        ctx.obj["SPEC_AT_CONSTR"] = spec_at_constr
-        ctx.obj["OCC"] = occupation
-        ctx.obj["N_ATOMS"] = n_atoms  # TODO
-        ctx.obj["BASIS_SET"] = basis_set
-        ctx.obj["GRAPH"] = graph
-        ctx.obj["PRINT"] = print_output
-        ctx.obj["NPROCS"] = nprocs
-        ctx.obj["DEBUG"] = debug
-        ctx.obj["HPC"] = hpc
+    # def _export_context(
+    #     self,
+    #     atoms,
+    #     binary,
+    #     run_location,
+    # ):
+    #     # User specified context objects
+    #     self.ctx.obj["ATOMS"] = atoms
+    #     self.ctx.obj["SPEC_MOL"] = self.spec_mol
+    #     self.ctx.obj["BINARY"] = binary
+    #     self.ctx.obj["RUN_LOC"] = run_location
+    #     self.ctx.obj["CONSTR_ATOM"] = self.constr_atom
+    #     self.ctx.obj["SPEC_AT_CONSTR"] = self.spec_at_constr
+    #     self.ctx.obj["OCC"] = self.occupation
+    #     self.ctx.obj["N_ATOMS"] = n_atoms  # TODO
+    #     self.ctx.obj["BASIS_SET"] = basis_set
+    #     self.ctx.obj["GRAPH"] = graph
+    #     self.ctx.obj["PRINT"] = print_output
+    #     self.ctx.obj["NPROCS"] = nprocs
+    #     self.ctx.obj["DEBUG"] = debug
+    #     self.ctx.obj["HPC"] = hpc
 
-        # Context objects created in main()
-        ctx.obj["SPECIES"] = species
-        ctx.obj["ASE"] = ase
+    #     # Context objects created in main()
+    #     self.ctx.obj["SPECIES"] = species
+    #     self.ctx.obj["ASE"] = ase
 
 
 def process(

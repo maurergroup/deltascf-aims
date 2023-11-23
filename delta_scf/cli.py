@@ -2,7 +2,7 @@
 
 import click
 
-from delta_scf.aims_dscf import basis_wrapper, main, process, projector_wrapper
+from delta_scf.aims_dscf import Start, basis_wrapper, process, projector_wrapper
 from utils.custom_click import MutuallyExclusive as me
 from utils.custom_click import MutuallyInclusive as mi
 
@@ -154,8 +154,7 @@ def cli(
     Copyright \u00A9 2022-2023, Dylan Morgan dylan.morgan@warwick.ac.uk
     """
 
-    main(
-        ctx,
+    ctx.obj = Start(
         hpc,
         geometry_input,
         control_input,
