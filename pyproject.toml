@@ -7,13 +7,13 @@ readme = "README.md"
 packages = [{ include = "delta_scf" }]
 
 [tool.poetry.dependencies]
-python = "^3.8"
-numpy = "^1.24.1"
+python = "^3.9"
 pyyaml = "^6.0"
 click = "^8.1.6"
 ase = "^3.22.1"
 matplotlib = "^3.6.2"
 pytest = "^7.4.3"
+numpy = "^1.26.2"
 
 [tool.poetry.scripts]
 deltascf = 'delta_scf.cli:cli'
