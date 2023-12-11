@@ -1,6 +1,7 @@
 import glob
 import os
 import sys
+import warnings
 from pathlib import Path
 from typing import List, Union
 
@@ -8,11 +9,11 @@ import click
 from ase import Atoms
 from ase.io import read
 
+import dscf_utils.main_utils as du
 from delta_scf.calc_dscf import CalcDeltaSCF as cds
 from delta_scf.force_occupation import Basis, ForceOccupation, Projector
 from delta_scf.plot import Plot
 from delta_scf.schmid_pseudo_voigt import broaden
-from utils.main_utils import MainUtils as mu
 
 
 class Start(object):
@@ -57,14 +58,25 @@ class Start(object):
 
     Methods
     -------
-        _check_for_geometry()
+        check_for_help_arg()
+            Print click help if --help flag is given
+        check_for_geometry()
             Check a geometry file exists if specific atom indices are to be constrained
-        _check_for_pbcs()
+        check_for_pbcs()
             Check for lattice vectors and k_grid in input files
-        _check_for_ase()
+        check_ase_usage()
             Check whether ASE should be used or not
-        create_atoms()
+        create_structure()
             Initialise an ASE atoms object
+        find_constr_atom_element()
+            Find the element of the atom to perform XPS/NEXAFS for
+        check_for_bin()
+            Check if a binary is saved in ./aims_bin_loc.txt
+        bin_path_prompt()
+            Ensure the user has entered the path to the binary
+        check_species_path()
+            Check if the species_defaults directory exists in the correct location
+
     """
 
     # TODO: Give more info in docstring
@@ -141,15 +153,15 @@ class Start(object):
         # ctx.ensure_object(dict)
 
     @staticmethod
-    def _check_for_help_arg() -> None:
+    def check_for_help_arg() -> None:
         """
-        Print click help if --help flag is given
+        Print click help if --help flag is given.
         """
 
         if "--help" in sys.argv:
             click.help_option()
 
-    def _check_for_geometry(self) -> None:
+    def check_for_geometry(self) -> None:
         """
         Check a geometry file exists if specific atom indices are to be constrained.
         """
@@ -160,21 +172,21 @@ class Start(object):
                     param_hint="-e/--geometry_input", param_type="option"
                 )
 
-    def _check_for_pbcs(self) -> None:
+    def check_for_pbcs(self) -> None:
         """
         Check for lattice vectors and k_grid in input files.
         """
 
         found_lattice_vecs = False
         if self.geometry_input is not None:
-            found_lattice_vecs = mu.check_geom(self.geometry_input)
+            found_lattice_vecs = du.check_geom(self.geometry_input)
         else:
             self.geometry_input = None
             self.lattice_vecs = None
 
         found_k_grid = False
         if self.control_input is not None:
-            found_k_grid = mu.check_control_k_grid(self.control_input)
+            found_k_grid = du.check_control_k_grid(self.control_input)
         else:
             self.control_input = None
 
@@ -183,7 +195,7 @@ class Start(object):
         else:
             self.lattice_vecs = False
 
-    def _check_ase_usage(self) -> bool:
+    def check_ase_usage(self) -> bool:
         """
         Check whether ASE should be used or not.
 
@@ -192,13 +204,14 @@ class Start(object):
             ase : bool
                 use ASE to build the structure
         """
+
         ase = True
         if self.control_input is not None:
             ase = False  # Do not use if control.in is specified
 
         return ase
 
-    def create_structure(self, ase) -> Union[Atoms, List[Atoms]]:
+    def create_structure(self, ase) -> Union[Atoms, List[Atoms], None]:
         """
         Initialise an ASE atoms object from geometry file if given or find from
         databases if not.
@@ -210,7 +223,7 @@ class Start(object):
 
         Returns
         -------
-            atoms : ase.Atoms
+            atoms : Atoms
                 ASE atoms object
         """
 
@@ -233,19 +246,19 @@ class Start(object):
         # Build the structure if given
         elif ase:
             if self.spec_mol is not None:
-                atoms = mu.build_geometry(self.spec_mol)
+                atoms = du.build_geometry(self.spec_mol)
             if self.geometry_input is not None:
                 atoms = read(self.geometry_input.name)
 
         return atoms
 
-    def get_constr_atom_element(self, atoms) -> None:
+    def find_constr_atom_element(self, atoms) -> None:
         """
         Find the element of the atom to perform XPS/NEXAFS for.
 
         Parameters
         ----------
-            atoms : ase.Atoms
+            atoms : Atoms
                 ASE atoms object
 
         Returns
@@ -253,6 +266,7 @@ class Start(object):
             constr_atom : str
                 element of constr_atom
         """
+
         # TODO: support for multiple constrained atoms
         if self.constr_atom is None:
             for atom in atoms:
@@ -260,7 +274,7 @@ class Start(object):
                     self.constr_atom = atom.symbol
                     break
 
-    def _check_for_bin(self) -> tuple[str, str]:
+    def check_for_bin(self) -> tuple[str, str]:
         """
         Check if a binary is saved in ./aims_bin_loc.txt.
 
@@ -281,7 +295,7 @@ class Start(object):
 
         return current_path, bin_path
 
-    def _bin_path_prompt(self, current_path, bin_path) -> str:
+    def bin_path_prompt(self, current_path, bin_path) -> str:
         """
         Ensure the user has entered the path to the binary. If not open the user's
         $EDITOR to allow them to enter the path.
@@ -298,6 +312,7 @@ class Start(object):
             binary : str
                 path to the location of the FHI-aims binary
         """
+
         if not Path(bin_path).is_file() or self.binary or bin_path == "":
             marker = (
                 "\n# Enter the path to the FHI-aims binary above this line\n"
@@ -320,9 +335,12 @@ class Start(object):
             print(f"specified binary path: {bin_path}")
             binary = bin_path
 
-            return binary
+        else:
+            raise FileNotFoundError("path to the FHI-aims binary could not be found")
 
-    def _check_species_path(self, binary) -> None:
+        return binary
+
+    def check_species_path(self, binary) -> None:
         """
         Check if the species_defaults directory exists in the correct location.
 
@@ -345,19 +363,28 @@ class Start(object):
                 f"species_defaults directory not found in {Path(binary).parent.parent}"
             )
 
-    def create_calculator(self, atoms, ase, binary, species, basis_set) -> None:
-        # Create the ASE calculator
-        if ase:
-            aims_calc = mu.create_calc(self.nprocs, binary, species, basis_set)
-            atoms.calc = aims_calc
-            self.ctx.obj["CALC"] = aims_calc
+    def create_calculator(self, atoms, binary, species, basis_set) -> None:
+        """
+        Create an ASE calculator for the ground calculation.
 
-            # Print a warning if print_output is used with ase
-            # TODO: use warnings.warn
-            if self.print_output:
-                print(
-                    "Warning: -p/--print_output is not supported with the ASE backend"
-                )
+        Parameters
+        __________
+            atoms : Atoms
+                ASE atoms object
+            binary : str
+                path to the location of the FHI-aims binary
+            species : str
+                path to the species_defaults directory
+            basis_set : str
+                basis set to use for the calculation
+        """
+
+        aims_calc = du.create_calc(self.nprocs, binary, species, basis_set)
+        atoms.calc = aims_calc
+        # self.ctx.obj["CALC"] = aims_calc
+
+        if self.print_output:
+            warnings.warn("-p/--print_output is not supported with the ASE backend")
 
     # def _export_context(
     #     self,
@@ -470,7 +497,7 @@ def projector_wrapper(
         )
 
     # Convert control options to a dictionary
-    control_opts = mu.convert_opts_to_dict(control_opts, pbc)
+    control_opts = du.convert_opts_to_dict(control_opts, pbc)
 
     # Check if the lattice vectors and k_grid have been provided
     if found_lattice_vecs or l_vecs is not None:
@@ -503,7 +530,7 @@ def projector_wrapper(
                 raise click.MissingParameter(param_hint="-p/--pbc", param_type="option")
 
     if run_type == "ground":
-        mu.ground_calc(
+        du.ground_calc(
             run_loc,
             geom_inp,
             control_inp,
@@ -541,7 +568,7 @@ def projector_wrapper(
 
     # Create a list of element symbols to constrain
     if len(spec_at_constr) > 0:
-        element_symbols = mu.get_element_symbols(ground_geom, spec_at_constr)[0]
+        element_symbols = du.get_element_symbols(ground_geom, spec_at_constr)[0]
         constr_atoms = element_symbols
     else:
         element_symbols = constr_atoms
@@ -570,7 +597,7 @@ def projector_wrapper(
             )
 
         # Check required arguments are given in main()
-        mu.check_args(("ks_range", ks_range))
+        du.check_args(("ks_range", ks_range))
 
         # TODO allow this for multiple constrained atoms using n_atoms
         for atom in element_symbols:
@@ -646,7 +673,7 @@ def projector_wrapper(
             )
 
         if hpc:
-            mu.check_args(("ks_range", ks_range))
+            du.check_args(("ks_range", ks_range))
 
             for atom in element_symbols:
                 fo.get_electronic_structure(atom)
@@ -735,7 +762,7 @@ def projector_wrapper(
                     f"{nprocs} {binary} | tee aims.out {spec_run_info}"
                 )
                 if run_type != "init_1" and run_type != "init_2":
-                    mu.print_ks_states(run_loc)
+                    du.print_ks_states(run_loc)
 
         else:
             with click.progressbar(
@@ -806,10 +833,10 @@ def basis_wrapper(
         )
 
     # Convert control options to a dictionary
-    control_opts = mu.convert_opts_to_dict(control_opts, None)
+    control_opts = du.convert_opts_to_dict(control_opts, None)
 
     if run_type == "ground":
-        mu.ground_calc(
+        du.ground_calc(
             run_loc,
             geom,
             control,
@@ -841,7 +868,7 @@ def basis_wrapper(
         )
 
     if run_type == "hole":
-        mu.check_args(
+        du.check_args(
             ("atom_index", atom_index),
             ("ks_max", ks_max),
             ("n_qn", n_qn),
@@ -873,7 +900,7 @@ def basis_wrapper(
 
         # Create a list of element symbols to constrain
         if len(spec_at_constr) > 0:
-            element_symbols = mu.get_element_symbols(ground_geom, spec_at_constr)[0]
+            element_symbols = du.get_element_symbols(ground_geom, spec_at_constr)[0]
             constr_atoms = element_symbols
         else:
             element_symbols = constr_atoms
@@ -942,7 +969,7 @@ def basis_wrapper(
                         f"cd {run_loc}/{constr_atoms[0]}{i} && mpirun -n "
                         f"{nprocs} {binary} | tee aims.out"
                     )
-                    mu.print_ks_states(run_loc)
+                    du.print_ks_states(run_loc)
 
             else:
                 with click.progressbar(

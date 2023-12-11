@@ -2,7 +2,17 @@ from click import Option, UsageError
 
 
 class MutuallyExclusive(Option):
-    """Allow a click option to be mutually exclusive with another option."""
+    """
+    Allow a click option to be mutually exclusive with another option.
+
+    ...
+
+    Methods
+    -------
+        handle_parse_result(ctx, opts, args)
+            Check if the mutually exclusive options are present in the command line
+            arguments.
+    """
 
     def __init__(self, *args, **kwargs):
         self.mutually_exclusive = set(kwargs.pop("mutually_exclusive", []))
@@ -10,9 +20,9 @@ class MutuallyExclusive(Option):
 
         if self.mutually_exclusive:
             ex_str = ", ".join(self.mutually_exclusive)
-            kwargs["help"] = help + (
-                " | NOTE: This argument is mutually exclusive with: [" + ex_str + "]."
-            )
+            kwargs[
+                "help"
+            ] = f"{help} | NOTE: This argument is mutually exclusive with: [{ex_str}]."
 
         super().__init__(*args, **kwargs)
 
@@ -27,7 +37,17 @@ class MutuallyExclusive(Option):
 
 
 class MutuallyInclusive(Option):
-    """Allow a click option to be mutually inclusive with another option."""
+    """
+    Allow a click option to be mutually inclusive with another option.
+
+    ...
+
+    Methods
+    -------
+        handle_parse_result(ctx, opts, args)
+            Check if the mutually inclusive options are present in the command line
+            arguments.
+    """
 
     def __init__(self, *args, **kwargs):
         self.mutually_inclusive = set(kwargs.pop("mutually_inclusive", []))

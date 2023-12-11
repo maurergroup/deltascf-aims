@@ -3,8 +3,8 @@
 import click
 
 from delta_scf.aims_dscf import Start, basis_wrapper, process, projector_wrapper
-from utils.custom_click import MutuallyExclusive as me
-from utils.custom_click import MutuallyInclusive as mi
+from dscf_utils.custom_click import MutuallyExclusive as me
+from dscf_utils.custom_click import MutuallyInclusive as mi
 
 
 @click.group()
@@ -136,7 +136,8 @@ def cli(
     print_output,
     nprocs,
 ):
-    """An interface to automate core-hole constrained occupation methods in
+    """
+    An interface to automate core-hole constrained occupation methods in
     FHI-aims.
 
     There is functionality to use both the older and soon-to-be deprecated
@@ -225,12 +226,14 @@ def cli(
     type=str,
     help="provide additional options to be used in 'control.in' in a key=value format",
 )
-@click.pass_context
-def projector(ctx, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts):
-    """Directly force occupation of the Kohn-Sham states."""
+@click.pass_obj
+def projector(start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts):
+    """
+    Directly force occupation of the Kohn-Sham states.
+    """
 
     projector_wrapper(
-        ctx, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts
+        start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts
     )
 
 
@@ -295,9 +298,9 @@ def projector(ctx, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts
     type=str,
     help="provide additional options to be used in 'control.in'",
 )
-@click.pass_context
+@click.pass_obj
 def basis(
-    ctx,
+    start,
     run_type,
     atom_index,
     occ_type,
@@ -308,10 +311,12 @@ def basis(
     ks_max,
     control_opts,
 ):
-    """Force occupation of Kohn-Sham states through basis functions."""
+    """
+    Force occupation of Kohn-Sham states through basis functions.
+    """
 
     basis_wrapper(
-        ctx,
+        start,
         run_type,
         atom_index,
         occ_type,
@@ -387,11 +392,13 @@ def basis(
     show_default=True,
     help="Global minimum percentage",
 )
-@click.pass_context
-def plot(ctx, intensity, asym, a, b, gl_ratio, omega, gmp):
-    """Plot the simulated XPS spectra."""
+@click.pass_obj
+def plot(start, intensity, asym, a, b, gl_ratio, omega, gmp):
+    """
+    Plot the simulated XPS spectra.
+    """
 
-    process(ctx, intensity, asym, a, b, gl_ratio, omega, gmp)
+    process(start, intensity, asym, a, b, gl_ratio, omega, gmp)
 
 
 if __name__ == "__main__":
