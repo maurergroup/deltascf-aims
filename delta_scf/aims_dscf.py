@@ -530,22 +530,17 @@ def projector_wrapper(
                 raise click.MissingParameter(param_hint="-p/--pbc", param_type="option")
 
     if run_type == "ground":
-        du.ground_calc(
-            run_loc,
+        ground_calc = du.GroundCalc(run_loc, atoms, basis_set, species, ase, hpc)
+        ground_calc.run(
             geom_inp,
             control_inp,
-            atoms,
-            l_vecs,
-            basis_set,
-            species,
-            calc,
-            ase,
-            control_opts,
             constr_atoms,
+            calc,
+            control_opts,
+            l_vecs,
+            print_output,
             nprocs,
             binary,
-            hpc,
-            print_output,
         )
 
         # Ground must be run separately to hole calculations

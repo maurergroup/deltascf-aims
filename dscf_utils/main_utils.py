@@ -318,54 +318,112 @@ def write_control(run_loc, control_opts, atoms, int_grid, defaults) -> None:
         os.system(f"cat {basis_set} >> {run_loc}/ground/control.in")
 
 
-def ground_calc(
-    run_loc,
-    geom_inp,
-    control_inp,
-    atoms,
-    l_vecs,
-    basis_set,
-    species,
-    calc,
-    ase,
-    control_opts,
-    constr_atom,
-    nprocs,
-    binary,
-    hpc,
-    print_output,
-):
-    """Run a ground state calculation"""
+class GroundCalc:
+    """
+    Setup and run a ground state calculation.
 
-    # Ensure that aims always runs with the following environment variables:
-    os.system("export OMP_NUM_THREADS=1")
-    os.system("export MKL_NUM_THREADS=1")
-    os.system("export MKL_DYNAMIC=FALSE")
+    ...
 
-    if platform == "linux" or platform == "linux2":
-        os.system("ulimit -s unlimited")
-    if platform == "darwin":
-        os.system("sudo ulimit -s unlimited")
+    Attributes
+    ----------
+        run_loc : str
+            path to the calculation directory
+        atoms : Atoms
+            ASE atoms object
+        basis_set : str
+            basis set density
+        species : str
+            path to species directory
+        ase : bool
+            whether to use ASE
+        hpc : bool
+            whether to run on a HPC
 
-    # Create the ground directory if it doesn't already exist
-    os.system(f"mkdir -p {run_loc}/ground")
+    Methods
+    -------
+        _set_env_vars()
+            Set environment variables for running aims.
+        _setup_files_and_dirs(geom_inp, control_inp)
+            Setup the ground calculation files and directories.
+        add_extra_basis_fns(constr_atom)
+            Add additional basis functions to the basis set.
+        _with_ase(calc, control_opts, l_vecs)
+            Run the ground state calculation using ASE.
+        _without_ase(print_output, nprocs, binary)
+            Run the ground state calculation without ASE.
+        run(geom_inp, control_inp, constr_atom, calc, control_opts, l_vecs, print_output, nprocs, binary)
+            Run the ground state calculation.
+    """
 
-    # Write the geometry file if the system is specified through CLI
-    if geom_inp is None and control_inp is not None:
-        write(f"{run_loc}/geometry.in", atoms, format="aims")
+    def __init__(
+        self,
+        run_loc,
+        atoms,
+        basis_set,
+        species,
+        ase,
+        hpc,
+    ):
+        self.run_loc = run_loc
+        self.atoms = atoms
+        self.basis_set = basis_set
+        self.species = species
+        self.ase = ase
+        self.hpc = hpc
 
-    # Copy the geometry.in and control.in files to the ground directory
-    if control_inp is not None:
-        os.system(f"cp {control_inp} {run_loc}/ground")
+    @staticmethod
+    def _set_env_vars() -> None:
+        """
+        Set environment variables for running aims.
+        """
 
-    if geom_inp is not None:
-        os.system(f"cp {geom_inp} {run_loc}/ground")
+        os.system("export OMP_NUM_THREADS=1")
+        os.system("export MKL_NUM_THREADS=1")
+        os.system("export MKL_DYNAMIC=FALSE")
 
-    # Run the ground state calculation
-    if os.path.isfile(f"{run_loc}/ground/aims.out") is False:
-        # Add additional basis functions
+        if platform == "linux" or platform == "linux2":
+            os.system("ulimit -s unlimited")
+        if platform == "darwin":
+            os.system("sudo ulimit -s unlimited")
+
+    def _setup_files_and_dirs(self, geom_inp, control_inp) -> None:
+        """
+        Setup the ground calculation files and directories.
+
+        Parameters
+        ----------
+            geom_inp : str
+                path to the geometry.in file
+            control_inp : str
+                path to the control.in file
+        """
+
+        # Create the ground directory if it doesn't already exist
+        os.system(f"mkdir -p {self.run_loc}/ground")
+
+        # Write the geometry file if the system is specified through CLI
+        if geom_inp is None and control_inp is not None:
+            write(f"{self.run_loc}/geometry.in", self.atoms, format="aims")
+
+        # Copy the geometry.in and control.in files to the ground directory
+        if control_inp is not None:
+            os.system(f"cp {control_inp} {self.run_loc}/ground")
+
+        if geom_inp is not None:
+            os.system(f"cp {geom_inp} {self.run_loc}/ground")
+
+    def add_extra_basis_fns(self, constr_atom):
+        """
+        Add additional basis functions to the basis set.
+
+        Parameters
+        ----------
+            constr_atom : str
+                element symbol of the constrained atom
+        """
+
         basis_file = glob.glob(
-            f"{species}/defaults_2020/{basis_set}/*{constr_atom}_default"
+            f"{self.species}/defaults_2020/{self.basis_set}/*{constr_atom}_default"
         )[0]
         current_path = os.path.dirname(os.path.realpath(__file__))
 
@@ -380,16 +438,18 @@ def ground_calc(
         )
 
         # Create a new directory for modified basis sets
-        new_dir = f"{species}/ch_basis_sets/{basis_set}/"
+        new_dir = f"{self.species}/ch_self.basis_sets/{self.basis_set}/"
 
         if os.path.exists(new_dir):
             os.system(f"rm {new_dir}/*")
         else:
-            os.system(f"mkdir -p {species}/ch_basis_sets/{basis_set}/")
+            os.system(f"mkdir -p {self.species}/ch_self.basis_sets/{self.basis_set}/")
 
-        os.system(f"cp {basis_file} {species}/ch_basis_sets/{basis_set}/")
+        os.system(
+            f"cp {basis_file} {self.species}/ch_self.basis_sets/{self.basis_set}/"
+        )
         new_basis_file = glob.glob(
-            f"{species}/ch_basis_sets/{basis_set}/*{constr_atom}_default"
+            f"{self.species}/ch_self.basis_sets/{self.basis_set}/*{constr_atom}_default"
         )[0]
 
         if new_content is not None:
@@ -397,71 +457,157 @@ def ground_calc(
                 basis_functions.writelines(new_content)
 
         # Copy atoms from the original basis set directory to the new one
-        chem_symbols = list(set(atoms.get_chemical_symbols()))
+        chem_symbols = list(set(self.atoms.get_chemical_symbols()))
 
         for atom in chem_symbols:
             if atom != constr_atom:
                 os.system(
-                    f"cp {species}/defaults_2020/{basis_set}/*{atom}_default "
-                    f"{species}/ch_basis_sets/{basis_set}/"
+                    f"cp {self.species}/defaults_2020/{self.basis_set}/*{atom}_default "
+                    f"{self.species}/ch_self.basis_sets/{self.basis_set}/"
                 )
 
-        if ase:
-            # Change the defaults if any are specified by the user
-            # Update with all control options from the calculator
-            calc.set(**control_opts)
-            control_opts = calc.parameters
+    def _with_ase(self, calc, control_opts, l_vecs) -> None:
+        """
+        Run the ground state calculation using ASE.
 
-            # Add the lattice vectors if periodic
-            if l_vecs is not None:
-                atoms.set_pbc(l_vecs)
+        Parameters
+        ----------
+            control_opts : dict
+                dictionary of control options
+            l_vecs : list
+                lattice vectors
+        """
 
-            if not hpc:
-                print("running calculation...")
-                atoms.get_potential_energy()
-                # Move files to ground directory
-                os.system(f"cp geometry.in control.in {run_loc}/ground/")
-                os.system(f"mv aims.out parameters.ase {run_loc}/ground/")
+        # Change the defaults if any are specified by the user
+        # Update with all control options from the calculator
+        calc.set(**control_opts)
+        control_opts = calc.parameters
 
-                # print("ground calculation completed successfully\n")
+        # Add the lattice vectors if periodic
+        if l_vecs is not None:
+            self.atoms.set_pbc(l_vecs)
 
-            else:
-                # Prevent species dir from being written
-                control_opts.pop("species_dir")
+        if self.hpc:
+            # Prevent species dir from being written
+            control_opts.pop("species_dir")
 
-                print("writing geometry.in file...")
-                write(f"{run_loc}/ground/geometry.in", images=atoms, format="aims")
+            print("writing geometry.in file...")
+            write(
+                f"{self.run_loc}/ground/geometry.in", images=self.atoms, format="aims"
+            )
 
-                print("writing control.in file...")
-                write_control(run_loc, control_opts, atoms, basis_set, species)
+            print("writing control.in file...")
+            write_control(
+                self.run_loc, control_opts, self.atoms, self.basis_set, self.species
+            )
 
-        elif not hpc:  # Don't use ASE
+        else:
             print("running calculation...")
+            self.atoms.get_potential_energy()
+            # Move files to ground directory
+            os.system(f"cp geometry.in control.in {self.run_loc}/ground/")
+            os.system(f"mv aims.out parameters.ase {self.run_loc}/ground/")
 
-            if print_output:  # Show live output of calculation
-                os.system(
-                    f"cd {run_loc}/ground && mpirun -n {nprocs} {binary} | tee aims.out"
-                )
+    def _without_ase(self, print_output, nprocs, binary) -> None:
+        """
+        Run the ground state calculation without ASE.
 
-            else:
-                os.system(
-                    f"cd {run_loc}/ground && mpirun -n {nprocs} {binary} > aims.out"
-                )
+        Parameters
+        ----------
+            print_output : bool
+                whether to print the output of the calculation
+            nprocs : int
+                number of processors to use
+            binary : str
+                path to the aims binary
+        """
 
-            # print("ground calculation completed successfully\n")
+        print("running calculation...")
 
-        # Print the KS states from aims.out so it is easier to specify the
-        # KS states for the hole calculation
-        if not hpc:
-            print_ks_states(run_loc)
+        if print_output:  # Show live output of calculation
+            os.system(
+                f"cd {self.run_loc}/ground && mpirun -n {nprocs} {binary} | tee aims.out"
+            )
 
-    else:
-        print("aims.out file found in ground calculation directory")
-        print("skipping calculation...")
+        else:
+            os.system(
+                f"cd {self.run_loc}/ground && mpirun -n {nprocs} {binary} > aims.out"
+            )
+
+    def run(
+        self,
+        geom_inp,
+        control_inp,
+        constr_atom,
+        calc,
+        control_opts,
+        l_vecs,
+        print_output,
+        nprocs,
+        binary,
+    ) -> None:
+        """
+        Run the ground state calculation.
+
+        Parameters
+        ----------
+            geom_inp : str
+                path to the geometry.in file
+            control_inp : str
+                path to the control.in file
+            constr_atom : str
+                element symbol of the constrained atom
+            control_opts : dict
+                dictionary of control options
+            l_vecs : list
+                lattice vectors
+            print_output : bool
+                whether to print the output of the calculation
+            nprocs : int
+                number of processors to use
+            binary : str
+                path to the aims binary
+        """
+
+        # Export environment variables
+        GroundCalc._set_env_vars()
+
+        # Setup the files and directories
+        GroundCalc._setup_files_and_dirs(self, geom_inp, control_inp)
+
+        # Run the ground state calculation
+        if os.path.isfile(f"{self.run_loc}/ground/aims.out") is False:
+            GroundCalc.add_extra_basis_fns(self, constr_atom)
+
+            # Use ASE
+            if self.ase:
+                GroundCalc._with_ase(self, calc, control_opts, l_vecs)
+
+            # Don't use ASE
+            elif not self.hpc:  # Don't use ASE
+                GroundCalc._without_ase(self, print_output, nprocs, binary)
+
+            # Print the KS states from aims.out so it is easier to specify the
+            # KS states for the hole calculation
+            if not self.hpc:
+                print_ks_states(self.run_loc)
+
+        else:
+            print("aims.out file found in ground calculation directory")
+            print("skipping calculation...")
 
 
 def get_element_symbols(geom, spec_at_constr):
-    """Find the element symbols from specified atom indices in a geometry file."""
+    """
+    Find the element symbols from specified atom indices in a geometry file.
+
+    Parameters
+    ----------
+        geom : str
+            path to the geometry file
+        spec_at_constr : list
+            list of atom indices
+    """
 
     with open(geom, "r") as geom:
         lines = geom.readlines()
