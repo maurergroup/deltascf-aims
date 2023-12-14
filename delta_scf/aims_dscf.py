@@ -8,12 +8,12 @@ from pathlib import Path
 import click
 from ase import Atoms
 from ase.io import read
-from utils.main_utils import MainUtils as mu
 
 from delta_scf.calc_dscf import CalcDeltaSCF as cds
 from delta_scf.force_occupation import Basis, ForceOccupation, Projector
 from delta_scf.plot import Plot
 from delta_scf.schmid_pseudo_voigt import broaden
+from utils.main_utils import MainUtils as mu
 
 
 def main(
@@ -601,6 +601,7 @@ def basis_wrapper(
             nprocs,
             binary,
             hpc,
+            print_output,
         )
 
         # Ground must be run separately to hole calculations
