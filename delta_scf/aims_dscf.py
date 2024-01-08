@@ -13,7 +13,7 @@ from delta_scf.calc_dscf import CalcDeltaSCF as cds
 from delta_scf.force_occupation import Basis, ForceOccupation, Projector
 from delta_scf.plot import Plot
 from delta_scf.schmid_pseudo_voigt import broaden
-from utils.main_utils import MainUtils as mu
+from utils_dscf.main_utils import MainUtils as mu
 
 
 def main(
@@ -32,7 +32,7 @@ def main(
     graph,
     print_output,
     nprocs,
-    debug,
+    # debug,
 ):
     """
     Point of controlling the program flow. Options used for all methods are
@@ -98,10 +98,17 @@ def main(
     # Get the constrained atom element
     # TODO: support for multiple constrained atoms
     if constr_atom is None:
-        for atom in atoms:
-            if atom.index in spec_at_constr:
-                constr_atom = atom.symbol
-                break
+        # for atom in atoms:
+        #     if atom.index in spec_at_constr:
+        #         constr_atom = atom.symbol
+        #         break
+        #     else:
+
+        # Currently just exit if no constrained atom is specified
+        raise click.MissingParameter(
+            param_hint="-c/--constrained_atom or -s/--specific_atom_constraint",
+            param_type="option",
+        )
 
     # Check if a binary has been specified
     if "--help" not in sys.argv:
@@ -167,7 +174,7 @@ def main(
         ctx.obj["GRAPH"] = graph
         ctx.obj["PRINT"] = print_output
         ctx.obj["NPROCS"] = nprocs
-        ctx.obj["DEBUG"] = debug
+        # ctx.obj["DEBUG"] = debug
         ctx.obj["HPC"] = hpc
 
         # Context objects created in main()

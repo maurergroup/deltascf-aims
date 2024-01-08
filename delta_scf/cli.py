@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 
+import importlib.metadata
+
 import click
-from utils.custom_click import MutuallyExclusive as me
 
 from delta_scf.aims_dscf import basis_wrapper, main, process, projector_wrapper
+from utils_dscf.custom_click import MutuallyExclusive as me
 
 
 @click.group()
@@ -117,9 +119,10 @@ from delta_scf.aims_dscf import basis_wrapper, main, process, projector_wrapper
     type=int,
     help="number of processors to use",
 )
-@click.option(
-    "-d", "--debug", is_flag=True, help="for developer use: print debug information"
-)
+# @click.option(
+#     "-d", "--debug", is_flag=True, help="for developer use: print debug information"
+# )
+@click.version_option(importlib.metadata.version("deltascf-aims"))
 @click.pass_context
 def cli(
     ctx,
@@ -137,7 +140,7 @@ def cli(
     graph,
     print_output,
     nprocs,
-    debug,
+    # debug,
 ):
     """An interface to automate core-hole constrained occupation methods in
     FHI-aims.
@@ -173,7 +176,7 @@ def cli(
         graph,
         print_output,
         nprocs,
-        debug,
+        # debug,
     )
 
 

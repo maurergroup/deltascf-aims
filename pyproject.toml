@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "deltascf-aims"
-version = "0.6.3"
+version = "0.6.5"
 description = "Application to test calculation of core holes in FHI-aims"
 authors = ["Dylan Morgan <dylan.morgan@warwick.ac.uk>"]
 readme = "README.md"
