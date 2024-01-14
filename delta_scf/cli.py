@@ -2,7 +2,7 @@
 
 import click
 
-from delta_scf.aims_dscf import Start, basis_wrapper, process, projector_wrapper
+from delta_scf.aims_dscf import ProjectorWrapper, Start, basis_wrapper, process
 from dscf_utils.custom_click import MutuallyExclusive as me
 from dscf_utils.custom_click import MutuallyInclusive as mi
 
@@ -227,14 +227,12 @@ def cli(
     help="provide additional options to be used in 'control.in' in a key=value format",
 )
 @click.pass_obj
-def projector(start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts):
+def projector(run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts):
     """
-    Directly force occupation of the Kohn-Sham states.
+    Force occupation through defining Kohn-Sham states.
     """
 
-    projector_wrapper(
-        start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts
-    )
+    ProjectorWrapper(run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts)
 
 
 @cli.command()

@@ -24,8 +24,6 @@ class Start(object):
 
     Attributes
     ----------
-        ctx : click.Context
-            click context object
         hpc : bool
             setup a calculation primarily for use on a HPC cluster WITHOUT running the
             calculation
@@ -78,10 +76,6 @@ class Start(object):
             Check if the species_defaults directory exists in the correct location
 
     """
-
-    # TODO: Give more info in docstring
-    # TODO: Create functions for each thing in here
-    # TODO: Turn main into an object
 
     def __init__(
         self,
@@ -455,6 +449,82 @@ def process(
         Plot.sim_xps_spectrum(
             xps, ctx.obj["RUN_LOC"], ctx.obj["CONSTR_ATOM"], ctx.obj["AT_SPEC"][0], gmp
         )
+
+
+class ProjectorWrapper(Start):
+    """
+    Force occupation of the basis functions by projecting the occupation of Kohn-Sham
+    states onto them.
+
+    ...
+
+    Attributes
+    ----------
+        run_type : click.Choice(["ground", "init_1", "init_2", "hole"])
+            type of calculation to perform
+        occ_type : click.Choice(["deltascf_projector", "force_occupation_projector"])
+            use either the refactored or original projector keyword
+        pbc : tuple
+            k-grid for a periodic calculation
+        l_vecs : List[List[float]]
+            lattice vectors in a 3x3 matrix of floats
+        spin : click.Choice(["1", "2"])
+            spin channel of the constraint
+        ks_range : click.IntRange(1)
+            range of Kohn-Sham states to constrain
+        control_opts : Tuple[str]
+            additional control options to be added to the control.in file
+
+    Methods
+    -------
+
+    """
+
+    def __init__(self, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts):
+        """
+        Parameters
+        ----------
+            run_type : click.Choice(["ground", "init_1", "init_2", "hole"])
+                type of calculation to perform
+            occ_type : click.Choice(["deltascf_projector", "force_occupation_projector"])
+                use either the refactored or original projector keyword
+            pbc : tuple
+                k-grid for a periodic calculation
+            l_vecs : List[List[float]]
+                lattice vectors in a 3x3 matrix of floats
+            spin : click.Choice(["1", "2"])
+                spin channel of the constraint
+            ks_range : click.IntRange(1)
+                range of Kohn-Sham states to constrain
+            control_opts : Tuple[str]
+                additional control options to be added to the control.in file
+        """
+
+        # Define class variables from args
+        self.run_type = run_type
+        self.occ_type = occ_type
+        self.pbc = pbc
+        self.l_vecs = l_vecs
+        self.spin = spin
+        self.ks_range = ks_range
+        self.control_opts = control_opts
+
+        # Define class variables here
+        self.spec_run_info = None
+
+        # Access super class variables
+        super().__init__()
+
+        # Raise a warning if no additional control options have been specified
+        if len(self.control_opts) < 1 and self.control_inp is None:
+            warnings.warn(
+                "Warning: no control options provided, using default options "
+                "which can be found in the 'control.in' file"
+            )
+        """
+        Perform a ground state calculation.
+        """
+        pass
 
 
 def projector_wrapper(
