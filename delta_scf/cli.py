@@ -2,7 +2,7 @@
 
 import click
 
-from delta_scf.aims_dscf import ProjectorWrapper, Start, basis_wrapper, process
+from delta_scf.aims_dscf import Process, ProjectorWrapper, Start, basis_wrapper
 from dscf_utils.custom_click import MutuallyExclusive as me
 from dscf_utils.custom_click import MutuallyInclusive as mi
 
@@ -227,12 +227,14 @@ def cli(
     help="provide additional options to be used in 'control.in' in a key=value format",
 )
 @click.pass_obj
-def projector(run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts):
+def projector(start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts):
     """
     Force occupation through defining Kohn-Sham states.
     """
 
-    ProjectorWrapper(run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts)
+    ProjectorWrapper(
+        start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts
+    )
 
 
 @cli.command()
@@ -396,7 +398,7 @@ def plot(start, intensity, asym, a, b, gl_ratio, omega, gmp):
     Plot the simulated XPS spectra.
     """
 
-    process(start, intensity, asym, a, b, gl_ratio, omega, gmp)
+    Process(start, intensity, asym, a, b, gl_ratio, omega, gmp)
 
 
 if __name__ == "__main__":

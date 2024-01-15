@@ -2,6 +2,7 @@
 
 import glob
 import os
+import warnings
 from sys import platform
 from typing import List, Union
 
@@ -278,6 +279,23 @@ def print_ks_states(run_loc) -> None:
     print(*sd_eigs, sep="")
 
 
+def set_env_vars() -> None:
+    """
+    Set environment variables for running aims.
+    """
+
+    os.system("export OMP_NUM_THREADS=1")
+    os.system("export MKL_NUM_THREADS=1")
+    os.system("export MKL_DYNAMIC=FALSE")
+
+    if platform == "linux" or platform == "linux2":
+        os.system("ulimit -s unlimited")
+    if platform == "darwin":
+        os.system("ulimit -s hard")
+    else:
+        warnings.warn("OS not supported, please ensure ulimit is set to unlimited")
+
+
 def write_control(run_loc, control_opts, atoms, int_grid, defaults) -> None:
     """
     Write a control.in file
@@ -370,21 +388,6 @@ class GroundCalc:
         self.species = species
         self.ase = ase
         self.hpc = hpc
-
-    @staticmethod
-    def _set_env_vars() -> None:
-        """
-        Set environment variables for running aims.
-        """
-
-        os.system("export OMP_NUM_THREADS=1")
-        os.system("export MKL_NUM_THREADS=1")
-        os.system("export MKL_DYNAMIC=FALSE")
-
-        if platform == "linux" or platform == "linux2":
-            os.system("ulimit -s unlimited")
-        if platform == "darwin":
-            os.system("sudo ulimit -s unlimited")
 
     def _setup_files_and_dirs(self, geom_inp, control_inp) -> None:
         """
@@ -570,7 +573,7 @@ class GroundCalc:
         """
 
         # Export environment variables
-        GroundCalc._set_env_vars()
+        set_env_vars()
 
         # Setup the files and directories
         GroundCalc._setup_files_and_dirs(self, geom_inp, control_inp)
@@ -597,7 +600,7 @@ class GroundCalc:
             print("skipping calculation...")
 
 
-def get_element_symbols(geom, spec_at_constr):
+def get_element_symbols(geom, spec_at_constr) -> List[str]:
     """
     Find the element symbols from specified atom indices in a geometry file.
 
@@ -607,6 +610,11 @@ def get_element_symbols(geom, spec_at_constr):
             path to the geometry file
         spec_at_constr : list
             list of atom indices
+
+    Returns
+    -------
+        element_symbols : List[str]
+            list of element symbols
     """
 
     with open(geom, "r") as geom:
