@@ -62,4 +62,4 @@ def broaden(start, stop, A, m, dirac_peaks, omega, asymmetry, a, b):
         V = _schmid_pseudo_voigt(domain, A, m, i, omega, asymmetry, a, b)
         data += V
 
-    return data, domain
+    return data

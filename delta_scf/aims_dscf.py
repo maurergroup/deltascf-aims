@@ -3,9 +3,10 @@ import os
 import sys
 import warnings
 from pathlib import Path
-from typing import List, Union
+from typing import List, Literal, Union
 
 import click
+import numpy as np
 from ase import Atoms
 from ase.io import read
 
@@ -407,48 +408,130 @@ class Start(object):
     #     self.ctx.obj["ASE"] = ase
 
 
-def process(
-    ctx, intensity=1, asym=False, a=0.2, b=0.0, gl_ratio=0.5, omega=0.35, gmp=0.003
-):
-    """Calculate DSCF values and plot the simulated XPS spectra."""
+class Process:
+    """
+    Calculate DSCF values and plot the simulated XPS spectra.
 
-    # Calculate the delta scf energies
-    grenrgys = cds.read_ground(ctx.obj["RUN_LOC"])
-    element, excienrgys = cds.read_atoms(
-        ctx.obj["RUN_LOC"], ctx.obj["CONSTR_ATOM"], cds.contains_number
-    )
-    xps = cds.calc_delta_scf(element, grenrgys, excienrgys)
+    ...
 
-    if ctx.obj["RUN_LOC"] != "./":
-        os.system(f"mv {element}_xps_peaks.txt {ctx.obj['RUN_LOC']}")
+    Attributes
+    ----------
+    """
 
-    if ctx.obj["GRAPH"]:
-        # Apply the peak broadening
-        peaks, domain = broaden(0, 1000, intensity, gl_ratio, xps, omega, asym, a, b)
+    def __init__(
+        self,
+        intensity=1,
+        asym=False,
+        a=0.2,
+        b=0.0,
+        gl_ratio=0.5,
+        omega=0.35,
+        gmp=0.003,
+    ):
+        """
+        Parameters
+        ----------
+        """
+        self.intensity = intensity
+        self.asym = asym
+        self.a = a
+        self.b = b
+        self.gl_ratio = gl_ratio
+        self.omega = omega
+        self.gmp = gmp
 
-        # Write out the spectrum to a text file
-        # Include bin width of 0.01 eV
+    def calc_dscf_energies(self, start) -> List[float]:
+        grenrgys = cds.read_ground(start.run_location)
+        element, excienrgys = cds.read_atoms(
+            start.run_location, start.constr_atom, cds.contains_number
+        )
+        xps = cds.calc_delta_scf(element, grenrgys, excienrgys)
+
+        return xps
+
+    def move_file(self, start, element, type: Literal["peaks", "spectrum"]) -> None:
+        os.system(f"mv {element}_xps_{type}.txt {start.run_loc}")
+
+    def broaden(self, xps) -> np.ndarray:
+        """
+        Apply pseudo-Voigt peak broadening.
+        """
+
+        peaks, _ = broaden(
+            0,
+            1000,
+            self.intensity,
+            self.gl_ratio,
+            xps,
+            self.omega,
+            self.asym,
+            self.a,
+            self.b,
+        )
+
+        return peaks
+
+    def write_spectrum_to_file(self, peaks, element, bin_width=0.01):
+        """
+        Write the spectrum to a text file.
+        """
+
         data = []
         bin_val = 0.00
-        for i, peak in enumerate(peaks):
+        for peak in peaks:
             data.append(f"{str(bin_val)} {str(peak)}\n")
-            bin_val += 0.01
+            bin_val += bin_width
 
         with open(f"{element}_xps_spectrum.txt", "w") as spec:
             spec.writelines(data)
 
-        # Move the spectrum to the run location
-        if ctx.obj["RUN_LOC"] != "./":
-            os.system(f'mv {element}_xps_spectrum.txt {ctx.obj["RUN_LOC"]}/')
+    # TODO:
+    # Probaly remove OOP from plot.py
+    # Re-write the end of old def process in OOP as to continue the above function
 
-        # Set at spec if called outside of projector or basis
-        if "AT_SPEC" not in ctx.obj:
-            ctx.obj["AT_SPEC"] = [1]
 
-        print("\nplotting spectrum and calculating MABE...")
-        Plot.sim_xps_spectrum(
-            xps, ctx.obj["RUN_LOC"], ctx.obj["CONSTR_ATOM"], ctx.obj["AT_SPEC"][0], gmp
-        )
+# def process(
+#     ctx, intensity=1, asym=False, a=0.2, b=0.0, gl_ratio=0.5, omega=0.35, gmp=0.003
+# ):
+#     """Calculate DSCF values and plot the simulated XPS spectra."""
+
+#     # Calculate the delta scf energies
+#     grenrgys = cds.read_ground(ctx.obj["RUN_LOC"])
+#     element, excienrgys = cds.read_atoms(
+#         ctx.obj["RUN_LOC"], ctx.obj["CONSTR_ATOM"], cds.contains_number
+#     )
+#     xps = cds.calc_delta_scf(element, grenrgys, excienrgys)
+
+#     if ctx.obj["RUN_LOC"] != "./":
+#         os.system(f"mv {element}_xps_peaks.txt {ctx.obj['RUN_LOC']}")
+
+#     if ctx.obj["GRAPH"]:
+#         # Apply the peak broadening
+#         peaks, domain = broaden(0, 1000, intensity, gl_ratio, xps, omega, asym, a, b)
+
+#         # Write out the spectrum to a text file
+#         # Include bin width of 0.01 eV
+#         data = []
+#         bin_val = 0.00
+#         for i, peak in enumerate(peaks):
+#             data.append(f"{str(bin_val)} {str(peak)}\n")
+#             bin_val += 0.01
+
+#         with open(f"{element}_xps_spectrum.txt", "w") as spec:
+#             spec.writelines(data)
+
+#         # Move the spectrum to the run location
+#         if ctx.obj["RUN_LOC"] != "./":
+#             os.system(f'mv {element}_xps_spectrum.txt {ctx.obj["RUN_LOC"]}/')
+
+#         # Set at spec if called outside of projector or basis
+#         if "AT_SPEC" not in ctx.obj:
+#             ctx.obj["AT_SPEC"] = [1]
+
+#         print("\nplotting spectrum and calculating MABE...")
+#         Plot.sim_xps_spectrum(
+#             xps, ctx.obj["RUN_LOC"], ctx.obj["CONSTR_ATOM"], ctx.obj["AT_SPEC"][0], gmp
+#         )
 
 
 class ProjectorWrapper:
@@ -833,14 +916,6 @@ class ProjectorWrapper:
                     )
 
             # print(f"{run_type} calculations completed successfully")
-
-        # These need to be passed to process()
-        ctx.obj["RUN_TYPE"] = self.run_type
-        ctx.obj["AT_SPEC"] = atom_specifier
-
-        # Compute the dscf energies and plot if option provided
-        if self.run_type == "hole":
-            process(ctx)
 
 
 def projector_wrapper(
