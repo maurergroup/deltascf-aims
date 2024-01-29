@@ -290,7 +290,7 @@ def set_env_vars() -> None:
 
     if platform == "linux" or platform == "linux2":
         os.system("ulimit -s unlimited")
-    if platform == "darwin":
+    elif platform == "darwin":
         os.system("ulimit -s hard")
     else:
         warnings.warn("OS not supported, please ensure ulimit is set to unlimited")
@@ -560,6 +560,8 @@ class GroundCalc:
                 path to the control.in file
             constr_atom : str
                 element symbol of the constrained atom
+            calc : Aims
+                ASE calculator object
             control_opts : dict
                 dictionary of control options
             l_vecs : list
