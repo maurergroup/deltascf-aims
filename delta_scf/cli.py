@@ -152,7 +152,7 @@ def cli(
     geometry.in and control.in can be manually created and passed to this program.
     For full documentation, please refer to the README.md.
 
-    Copyright \u00A9 2022-2023, Dylan Morgan dylan.morgan@warwick.ac.uk
+    Copyright \u00A9 2022-2024, Dylan Morgan dylan.morgan@warwick.ac.uk
     """
 
     ctx.obj = Start(
