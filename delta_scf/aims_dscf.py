@@ -13,7 +13,7 @@ from ase.io import read
 import dscf_utils.main_utils as du
 from delta_scf.calc_dscf import CalcDeltaSCF as cds
 from delta_scf.force_occupation import Basis, ForceOccupation, Projector
-from delta_scf.plot import Plot
+from delta_scf.plot import XPSSpectrum
 from delta_scf.schmid_pseudo_voigt import broaden
 
 
@@ -65,15 +65,15 @@ class Start(object):
             Check for lattice vectors and k_grid in input files
         check_ase_usage()
             Check whether ASE should be used or not
-        create_structure()
+        create_structure(ase)
             Initialise an ASE atoms object
-        find_constr_atom_element()
+        find_constr_atom_element(atoms)
             Find the element of the atom to perform XPS/NEXAFS for
         check_for_bin()
             Check if a binary is saved in ./aims_bin_loc.txt
-        bin_path_prompt()
+        bin_path_prompt(current_path, bin_path)
             Ensure the user has entered the path to the binary
-        check_species_path()
+        check_species_path(binary)
             Check if the species_defaults directory exists in the correct location
 
     """
@@ -416,10 +416,12 @@ class Process:
 
     Attributes
     ----------
+
     """
 
     def __init__(
         self,
+        start,
         intensity=1,
         asym=False,
         a=0.2,
@@ -485,53 +487,13 @@ class Process:
         with open(f"{element}_xps_spectrum.txt", "w") as spec:
             spec.writelines(data)
 
-    # TODO:
-    # Probaly remove OOP from plot.py
-    # Re-write the end of old def process in OOP as to continue the above function
+    def plot_xps(self, start):
+        xps_spec = XPSSpectrum(start.run_loc, start.constr_atom)
 
-
-# def process(
-#     ctx, intensity=1, asym=False, a=0.2, b=0.0, gl_ratio=0.5, omega=0.35, gmp=0.003
-# ):
-#     """Calculate DSCF values and plot the simulated XPS spectra."""
-
-#     # Calculate the delta scf energies
-#     grenrgys = cds.read_ground(ctx.obj["RUN_LOC"])
-#     element, excienrgys = cds.read_atoms(
-#         ctx.obj["RUN_LOC"], ctx.obj["CONSTR_ATOM"], cds.contains_number
-#     )
-#     xps = cds.calc_delta_scf(element, grenrgys, excienrgys)
-
-#     if ctx.obj["RUN_LOC"] != "./":
-#         os.system(f"mv {element}_xps_peaks.txt {ctx.obj['RUN_LOC']}")
-
-#     if ctx.obj["GRAPH"]:
-#         # Apply the peak broadening
-#         peaks, domain = broaden(0, 1000, intensity, gl_ratio, xps, omega, asym, a, b)
-
-#         # Write out the spectrum to a text file
-#         # Include bin width of 0.01 eV
-#         data = []
-#         bin_val = 0.00
-#         for i, peak in enumerate(peaks):
-#             data.append(f"{str(bin_val)} {str(peak)}\n")
-#             bin_val += 0.01
-
-#         with open(f"{element}_xps_spectrum.txt", "w") as spec:
-#             spec.writelines(data)
-
-#         # Move the spectrum to the run location
-#         if ctx.obj["RUN_LOC"] != "./":
-#             os.system(f'mv {element}_xps_spectrum.txt {ctx.obj["RUN_LOC"]}/')
-
-#         # Set at spec if called outside of projector or basis
-#         if "AT_SPEC" not in ctx.obj:
-#             ctx.obj["AT_SPEC"] = [1]
-
-#         print("\nplotting spectrum and calculating MABE...")
-#         Plot.sim_xps_spectrum(
-#             xps, ctx.obj["RUN_LOC"], ctx.obj["CONSTR_ATOM"], ctx.obj["AT_SPEC"][0], gmp
-#         )
+        print("\nplotting spectrum and calculating MABE...")
+        Plot.sim_xps_spectrum(
+            xps, ctx.obj["RUN_LOC"], ctx.obj["CONSTR_ATOM"], ctx.obj["AT_SPEC"][0], gmp
+        )
 
 
 class ProjectorWrapper:
