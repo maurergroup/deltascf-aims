@@ -47,16 +47,19 @@ class XPSSpectrum:
             Plot the XPS spectrum and save as pdf and png files.
     """
 
-    def __init__(self, run_loc, targ_at) -> None:
+    def __init__(self, gmp, run_loc, targ_at) -> None:
         """
         Parameters
         ----------
+            gmp : float
+                global minimum percentage
             run_loc : str
-                The location of the FHI-aims run
+                the location of the FHI-aims run
             targ_at : str
-                Atom to calculate the XPS spectrum for
+                atom to calculate the XPS spectrum for
         """
 
+        self.gmp = gmp
         self.run_loc = run_loc
         self.targ_at = targ_at
 
@@ -75,7 +78,7 @@ class XPSSpectrum:
         Parameters
         ----------
             output : bool
-                Whether to print the mean average binding energy
+                whether to print the mean average binding energy
         """
 
         aims_y_max = self.y_axis_aims.max()
@@ -88,20 +91,16 @@ class XPSSpectrum:
         if output:
             print("\nFHI-aims mean average binding energy (MABE):", self.aims_be, "eV")
 
-    def _get_spectrum_range(self, gmp) -> None:
+    def _get_spectrum_range(self) -> None:
         """
         Calculate the range of the XPS spectrum to plot
-
-        Parameters
-        ----------
-            gmp : float
-                Global minimum percentage
         """
-        self.plot_x = np.zeros(())
-        self.plot_y = np.zeros(())
+
+        self.plot_x = np.zeros([])
+        self.plot_y = np.zeros([])
 
         glob_max_y = max(self.y_axis_aims)
-        glob_min_y = glob_max_y * gmp
+        glob_min_y = glob_max_y * self.gmp
 
         for c, y in enumerate(self.y_axis_aims):
             if y > glob_min_y:
@@ -122,12 +121,12 @@ class XPSSpectrum:
         Parameters
         ----------
             at_spec : str
-                Atom element
+                atom element
 
         Returns
         -------
             molecule : str
-                Molecule type
+                molecule type
         """
 
         # Enable for both basis and projector file structures
@@ -152,16 +151,16 @@ class XPSSpectrum:
 
         return molecule
 
-    def plot(self, xps, gmp) -> None:
+    def plot(self, xps) -> None:
         """
         Plot the XPS spectrum and save as pdf and png files.
 
         Parameters
         ----------
             xps : list
-                List of individual binding energies
+                list of individual binding energies
             gmp : float
-                Global minimum percentage
+                global minimum percentage
         """
 
         self._find_k_edge_mabe()
@@ -189,7 +188,7 @@ class XPSSpectrum:
             else:
                 plt.axvline(x=peak, c="#9467bd", ymax=0.25)  # Purpley colour
 
-        self._get_spectrum_range(gmp)
+        self._get_spectrum_range()
 
         # Plot the spectrum
         plt.plot(self.plot_x, self.plot_y, label="Simulated XPS spectrum")

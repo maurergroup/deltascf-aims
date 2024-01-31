@@ -1,10 +1,8 @@
-"""Utilities which are used in aims_dscf"""
-
 import glob
 import os
 import warnings
 from sys import platform
-from typing import List, Union
+from typing import List, Tuple, Union
 
 import numpy as np
 import yaml
@@ -13,9 +11,70 @@ from ase.build import molecule
 from ase.calculators.aims import Aims
 from ase.data.pubchem import pubchem_atoms_search
 from ase.io import write
-from click import MissingParameter
+from click import BadParameter, MissingParameter, progressbar
 
 from delta_scf.force_occupation import ForceOccupation as fo
+
+
+def add_control_opts(start, fo, control_opts, atom, calc) -> None:
+    """
+    Add additional control options to the control file.
+
+    Parameters
+    ----------
+        start : Start
+            instance of the Start class
+        fo : object
+            ForceOccupation object
+        control_opts : list
+            tuple of control options
+        atom : int
+            atom to add the control options to
+        calc : str
+            name of the calculation to add the control options to
+    """
+
+    parsed_control_opts = fo.get_control_keywords(
+        f"{start.run_loc}/{start.constr_atoms[0]}{atom}/{calc}/control.in"
+    )
+    mod_control_opts = fo.mod_keywords(control_opts, parsed_control_opts)
+    control_content = fo.change_control_keywords(
+        f"{start.run_loc}/{start.constr_atoms[0]}{atom}/{calc}/control.in",
+        mod_control_opts,
+    )
+
+    with open(
+        f"{start.run_loc}/{start.constr_atoms[0]}{atom}/{calc}/control.in",
+        "w",
+    ) as control_file:
+        control_file.writelines(control_content)
+
+
+def add_molecule_identifier(start, atom_specifier) -> None:
+    """
+    Add a string to the geometry.in to parse when plotting to identify it.
+
+    Parameters
+    ----------
+        start : Start
+            instance of the Start class
+        atom_specifier : list
+            list of atom indices
+    """
+
+    with open(
+        f"{start.run_loc}/{start.constr_atoms[0]}{atom_specifier[0]}/hole/geometry.in",
+        "r",
+    ) as hole_geom:
+        lines = hole_geom.readlines()
+
+    lines.insert(4, f"# {start.spec_mol}\n")
+
+    with open(
+        f"{start.run_loc}/{start.constr_atoms[0]}{atom_specifier[0]}/hole/geometry.in",
+        "w",
+    ) as hole_geom:
+        hole_geom.writelines(lines)
 
 
 def build_geometry(geometry) -> Union[Atoms, List[Atoms], None]:
@@ -76,6 +135,7 @@ def check_args(*args) -> None:
             arbitrary number of arguments to check
     """
 
+    # TODO: Check that this function is working correctly
     # TODO: Check if this works with the locals() commented out below
     # def_args = locals()
     # for arg in def_args["args"]:
@@ -90,7 +150,7 @@ def check_args(*args) -> None:
             raise MissingParameter(param_hint=f"'--{arg[0]}'", param_type="option")
 
 
-def check_geom(geom_file) -> bool:
+def check_constrained_geom(geom_file) -> bool:
     """
     Check for any constrain_relaxation keywords in geometry.in.
 
@@ -116,7 +176,7 @@ def check_geom(geom_file) -> bool:
             print("ensure that no atoms are fixed in the geometry.in file")
             print(
                 "the geometry of the structure should have already been relaxed before "
-                "any SP calculations"
+                "any single point calculations"
             )
             print("aborting...")
             raise SystemExit
@@ -146,6 +206,48 @@ def check_control_k_grid(control_file) -> bool:
             k_grid = True
 
     return k_grid
+
+
+def check_ground_calc(start) -> None:
+    """
+    Check that the ground calculation has been run.
+
+    Parameters
+    ----------
+        start : Start
+            instance of the Start class
+    """
+
+    if not os.path.isfile(f"{start.run_loc}/ground/aims.out"):
+        raise FileNotFoundError(
+            "\nERROR: ground aims.out not found, please ensure the ground "
+            "calculation has been run"
+        )
+
+
+def check_params(start, include_hpc=True) -> None:
+    """
+    Check that the parameters given in Start are valid.
+
+    Parameters
+    ----------
+        start : Start
+            instance of the Start class
+        include_hpc : bool
+            include the hpc parameter in the check
+    """
+
+    if include_hpc:
+        if start.hpc:
+            raise BadParameter(
+                "the -h/--hpc flag is only supported for the 'hole' run type"
+            )
+
+    if len(start.spec_at_constr) == 0 and len(start.constr_atom) == 0:
+        raise MissingParameter(
+            param_hint="-c/--constrained_atom or -s/--specific_atom_constraint",
+            param_type="option",
+        )
 
 
 def convert_opts_to_dict(opts, pbc) -> dict:
@@ -210,6 +312,88 @@ def create_calc(procs, binary, species, int_grid) -> Aims:
     )
 
     return aims_calc
+
+
+def get_element_symbols(geom, spec_at_constr) -> List[str]:
+    """
+    Find the element symbols from specified atom indices in a geometry file.
+
+    Parameters
+    ----------
+        geom : str
+            path to the geometry file
+        spec_at_constr : list
+            list of atom indices
+
+    Returns
+    -------
+        element_symbols : List[str]
+            list of element symbols
+    """
+
+    with open(geom, "r") as geom:
+        lines = geom.readlines()
+
+    atom_lines = []
+
+    # Copy only the lines which specify atom coors into a new list
+    for line in lines:
+        spl = line.split()
+        if len(line) > 0 and "atom" == spl[0]:
+            atom_lines.append(line)
+
+    element_symbols = []
+
+    # Get the element symbols from the atom coors
+    # Uniquely add each element symbol
+    for atom in spec_at_constr:
+        element = atom_lines[atom].split()[-1]
+
+        if element not in element_symbols:
+            element_symbols.append(element)
+
+    return element_symbols
+
+
+def prepare_excited_calcs(self) -> Tuple[str, str, List[str], List[str]]:
+    """
+    Prepare excited state calculations for basis and projector.
+
+    Parameters
+    ----------
+        self : object
+            Basis or Projector Wrapper object
+
+    Returns
+    -------
+        ground_geom : str
+            path to the ground state geometry.in file
+        constr_atoms : list
+            list of constrained atoms
+        element_symbols : list
+            list of element symbols
+    """
+
+    ground_geom = f"{self.start.run_loc}/ground/geometry.in"
+    ground_control = f"{self.start.run_loc}/ground/control.in"
+
+    # Ensure constrained atoms are defined
+    check_params(self.start, include_hpc=False)
+
+    # Convert constr_atoms to a list
+    if isinstance(self.start.constr_atom, list) is False:
+        constr_atoms = [self.start.constr_atom]
+    else:
+        constr_atoms = self.start.constr_atom
+
+    # Create a list of element symbols to constrain
+    if len(self.start.spec_at_constr) > 0:
+        element_symbols = get_element_symbols(ground_geom, self.start.spec_at_constr)[0]
+        constr_atoms = element_symbols
+    else:
+        element_symbols = constr_atoms
+
+    return ground_geom, ground_control, constr_atoms, element_symbols
 
 
 def print_ks_states(run_loc) -> None:
@@ -279,6 +463,66 @@ def print_ks_states(run_loc) -> None:
     print(*sd_eigs, sep="")
 
 
+# TODO: Possibly make own class for excited state (similarly to ground state) and get ProjectorWrapper and BasisWrapper to inherit it?
+def run_excited(start, atom_specifier, run_type) -> None:
+    """
+    Run an excited projector or basis calculations.
+
+    Parameters
+    ----------
+        start : Start
+            instance of the Start object
+        atom_specifier : List[int]
+            atom indices to constrain
+    """
+
+    # TODO: Move the below if statement to outside the function for PROJECTOR ONLY
+    # if (
+    #     self.run_type != "ground"
+    #     and os.path.isfile(
+    #         f"{self.run_loc}/{self.constr_atoms[0]}{atom_specifier[0]}"
+    #         f"/{self.run_type}/aims.out"
+    #     )
+    #     is False
+    #     and not self.hpc
+    # ):
+    # elif self.run_type != "ground" and not self.hpc:
+    #     print(
+    #         f"{self.run_type} calculations already completed, "
+    #         "skipping calculation..."
+    #     )
+
+    set_env_vars()
+
+    if start.print_output:  # Print live output of calculation
+        for i in range(len(atom_specifier)):
+            i += 1
+            os.system(
+                f"cd {start.run_loc}/{start.constr_atoms[0]}{i}/{start.run_type} "
+                f"&& mpirun -n {start.nprocs} {start.binary} "
+                f"| tee aims.out {start.spec_run_info}"
+            )
+            if run_type != "init_1" and run_type != "init_2":
+                print_ks_states(start.run_loc)
+
+    else:
+        with progressbar(
+            range(len(atom_specifier)),
+            label=f"calculating {run_type}:",
+        ) as prog_bar:
+            for i in prog_bar:
+                i += 1
+                os.system(
+                    f"cd {start.run_loc}/{start.constr_atoms[0]}{i}/"
+                    f"{run_type} && mpirun -n {start.nprocs} {start.binary}"
+                    " > aims.out {self.spec_run_info}"
+                )
+
+        # TODO figure out how to parse STDOUT so a compelted successfully calculation
+        # message can be given or not
+        # print(f"{run_type} calculations completed successfully")
+
+
 def set_env_vars() -> None:
     """
     Set environment variables for running aims.
@@ -294,6 +538,25 @@ def set_env_vars() -> None:
         os.system("ulimit -s hard")
     else:
         warnings.warn("OS not supported, please ensure ulimit is set to unlimited")
+
+
+def warn_no_extra_control_opts(opts, inp) -> None:
+    """
+    Raise a warning if not additional control options have been specified.
+
+    Parameters
+    ----------
+        opts : Tuple[str]
+            additional control options to be added to the control.in file
+        inp : click.File
+            path to custom control.in file
+
+    """
+    if len(opts) < 1 and inp is None:
+        warnings.warn(
+            "No control options provided, using default options "
+            "which can be found in the 'control.in' file"
+        )
 
 
 def write_control(run_loc, control_opts, atoms, int_grid, defaults) -> None:
@@ -600,44 +863,3 @@ class GroundCalc:
         else:
             print("aims.out file found in ground calculation directory")
             print("skipping calculation...")
-
-
-def get_element_symbols(geom, spec_at_constr) -> List[str]:
-    """
-    Find the element symbols from specified atom indices in a geometry file.
-
-    Parameters
-    ----------
-        geom : str
-            path to the geometry file
-        spec_at_constr : list
-            list of atom indices
-
-    Returns
-    -------
-        element_symbols : List[str]
-            list of element symbols
-    """
-
-    with open(geom, "r") as geom:
-        lines = geom.readlines()
-
-    atom_lines = []
-
-    # Copy only the lines which specify atom coors into a new list
-    for line in lines:
-        spl = line.split()
-        if len(line) > 0 and "atom" == spl[0]:
-            atom_lines.append(line)
-
-    element_symbols = []
-
-    # Get the element symbols from the atom coors
-    # Uniquely add each element symbol
-    for atom in spec_at_constr:
-        element = atom_lines[atom].split()[-1]
-
-        if element not in element_symbols:
-            element_symbols.append(element)
-
-    return element_symbols
