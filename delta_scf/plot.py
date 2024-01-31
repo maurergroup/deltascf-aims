@@ -97,8 +97,8 @@ class XPSSpectrum:
             gmp : float
                 Global minimum percentage
         """
-        self.plot_x = np.zeros()
-        self.plot_y = np.zeros()
+        self.plot_x = np.zeros(())
+        self.plot_y = np.zeros(())
 
         glob_max_y = max(self.y_axis_aims)
         glob_min_y = glob_max_y * gmp
