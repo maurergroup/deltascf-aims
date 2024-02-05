@@ -648,7 +648,50 @@ class ProjectorWrapper(GroundCalc):
         # Convert control options to a dictionary
         control_opts = du.convert_opts_to_dict(control_opts, pbc)
 
-    def check_periodic(self) -> None:
+    def _calc_checks(self) -> None:
+        """
+        Perform checks before running an excited calculation.
+        """
+
+        # Check that the ground state calculation has been run
+        du.check_ground_calc(self.start)
+
+        # Check that the constrained atoms have been given
+        du.check_params(self.start)
+
+        # Check required arguments have been given
+        du.check_args(("ks_range", self.ks_range))
+
+    def _call_setups(self, proj) -> None:
+        """
+        Setup files and parameters required for the initialisation and hole
+        calculations.
+
+        Parameters
+        ----------
+            proj : ForceOccupation
+                Projector instance of ForceOccupation
+        """
+
+        proj.setup_init_1(self.start.basis_set, self.start.species, self.ground_control)
+        proj.setup_init_2(
+            self.ks_range[0],
+            self.ks_range[1],
+            self.start.occ,
+            self.occ_type,
+            self.spin,
+            self.start.found_lattice_vecs,
+        )
+        proj.setup_hole(
+            self.ks_range[0],
+            self.ks_range[1],
+            self.start.occ,
+            self.occ_type,
+            self.spin,
+            self.start.found_lattice_vecs,
+        )
+
+    def _check_periodic(self) -> None:
         """
         Check if the lattice vectors and k_grid have been provided.
         """
@@ -739,35 +782,6 @@ class ProjectorWrapper(GroundCalc):
             f"/{end}/"
         )
 
-    def _call_setups(self, proj) -> None:
-        """
-        Setup files and parameters required for the initialisation and hole
-        calculations.
-
-        Parameters
-        ----------
-            proj : ForceOccupation
-                Projector instance of ForceOccupation
-        """
-
-        proj.setup_init_1(self.start.basis_set, self.start.species, self.ground_control)
-        proj.setup_init_2(
-            self.ks_range[0],
-            self.ks_range[1],
-            self.start.occ,
-            self.occ_type,
-            self.spin,
-            self.start.found_lattice_vecs,
-        )
-        proj.setup_hole(
-            self.ks_range[0],
-            self.ks_range[1],
-            self.start.occ,
-            self.occ_type,
-            self.spin,
-            self.start.found_lattice_vecs,
-        )
-
     # TODO: remove and put outside of class in ifmain
     # def run_ground(self) -> None:
     #     """
@@ -786,7 +800,7 @@ class ProjectorWrapper(GroundCalc):
     #         self.start.binary,
     #     )
 
-    def setup_excited_calcs(self) -> Tuple[object, List[int]]:
+    def setup_excited_calculations(self) -> Tuple[object, List[int]]:
         """
         Setup files and parameters required for the initialisation and hole
         calculations.
@@ -799,14 +813,7 @@ class ProjectorWrapper(GroundCalc):
                 atom indices to constrain
         """
 
-        # Check that the ground state calculation has been run
-        du.check_ground_calc(self.start)
-
-        # Check that the constrained atoms have been given
-        du.check_params(self.start)
-
-        # Check required arguments have been given
-        du.check_args(("ks_range", self.ks_range))
+        self._calc_checks()
 
         (
             ground_geom,
@@ -839,7 +846,7 @@ class ProjectorWrapper(GroundCalc):
 
     def pre_init_2(self, fo, atom_specifier) -> str:
         """
-        Setup everything for the 2nd init calculation.
+        Prerequisite before running the 2nd init calculation.
 
         Parameters
         ----------
@@ -877,7 +884,7 @@ class ProjectorWrapper(GroundCalc):
 
     def pre_hole(self, fo, atom_specifier) -> str:
         """
-        Setup everything for the hole calculation.
+        Prerequisite before running the hole calculation
 
         Parameters
         ----------
@@ -901,8 +908,8 @@ class ProjectorWrapper(GroundCalc):
                 fo.get_electronic_structure(atom)
 
             # Setup files required for the initialisation and hole calculations
-            proj = Projector(fo)
-            self._call_setups(proj)
+            # proj = Projector(fo)
+            # self._call_setups(proj)
 
         # Add a tag to the geometry file to identify the molecule name
         du.add_molecule_identifier(self.start, atom_specifier)
@@ -1040,7 +1047,52 @@ class BasisWrapper(GroundCalc):
     #         self.start.binary,
     #     )
 
-    def setup_excited(self):
+    def _add_control_keywords(self, fo, atom_specifier) -> None:
+        """
+        Add additional options to the control file.
+
+        Parameters
+        ----------
+            fo : object
+                ForceOccupation object
+            atom_specifier : List[int]
+                atom indices to constrain
+        """
+
+        # TODO allow multiple constraints using n_atoms
+        for i in range(len(atom_specifier)):
+            i += 1
+
+            if len(self.control_opts) > 0 or self.start.control:
+                du.add_control_opts(self.start, fo, self.control_opts, i, "hole")
+
+    def _add_geometry_tag(self, fo, constr_atoms, ground_geom) -> None:
+        """
+        Add the name of the molecule to the geometry file.
+
+        Parameters
+        ----------
+            fo : object
+                ForceOccupation object
+            constr_atoms : List[str]
+                atom indices to constrain
+            ground_geom : str
+                path to the ground state geometry file
+        """
+
+        # Get the atom indices from the ground state geometry file
+        atom_specifier = fo.read_ground_inp(
+            constr_atoms, self.start.spec_at_constr, ground_geom
+        )
+
+        # Add the tag
+        du.add_molecule_identifier(self.start, atom_specifier)
+
+    def _pre_calc_checks(self) -> None:
+        """
+        Perform checks before running the excited calculation.
+        """
+
         # Check that the ground state calculation has been run
         du.check_ground_calc(self.start)
 
@@ -1056,12 +1108,23 @@ class BasisWrapper(GroundCalc):
             ("m_qn", self.m_qn),
         )
 
-        (
-            ground_geom,
-            self.ground_control,
-            constr_atoms,
-            element_symbols,
-        ) = du.prepare_excited_calcs(self)
+    def setup_excited_calculation(self) -> Tuple[object, List[str], str]:
+        """
+        Setup files and parameters required for the hole calculations.
+
+        Returns
+        -------
+            fo : object
+                ForceOccupation object
+            constr_atoms : List[str]
+                atom indices to constrain
+            ground_geom : str
+                path to the ground state geometry file
+        """
+
+        ground_geom, _, constr_atoms, element_symbols = du.prepare_excited_calcs(self)
+
+        self._pre_calc_checks()
 
         # Create the directories required for the hole calculation
         fo = ForceOccupation(
@@ -1070,11 +1133,6 @@ class BasisWrapper(GroundCalc):
             ground_geom,
             self.control_opts,
             f"{self.start.species}/defaults_2020/{self.start.basis_set}",
-        )
-
-        # Get the atom indices from the ground state geometry file
-        atom_specifier = fo.read_ground_inp(
-            constr_atoms, self.start.spec_at_constr, ground_geom
         )
 
         basis = Basis(fo)
@@ -1090,14 +1148,10 @@ class BasisWrapper(GroundCalc):
             self.start.species,
         )
 
-        # Add a tag to the geometry file to identify the molecule name
-        du.add_molecule_identifier(self.start, atom_specifier)
+        # Add molecule ID to geometry file
+        self._add_geometry_tag(fo, constr_atoms, ground_geom)
 
-        # TODO allow multiple constraints using n_atoms
+        # Add any additional options to the control file
+        self._add_control_keywords(fo, constr_atoms)
 
-        # Add any additional control options to the control file
-        for i in range(len(atom_specifier)):
-            i += 1
-
-            if len(self.control_opts) > 0 or self.start.control:
-                du.add_control_opts(self.start, fo, self.control_opts, i, "hole")
+        return fo, constr_atoms, ground_geom

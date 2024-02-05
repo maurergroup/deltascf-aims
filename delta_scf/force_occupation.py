@@ -4,13 +4,17 @@ import glob
 import os
 import shutil
 import subprocess
+import warnings
+from typing import List
 
 import numpy as np
 import yaml
 
 
 class ForceOccupation:
-    """Manipulate FHIaims input files to setup basis and projector calculations."""
+    """
+    Manipulate FHIaims input files to setup basis and projector calculations.
+    """
 
     def __init__(self, element_symbols, run_loc, geometry, ad_cont_opts, species):
         self.element_symbols = element_symbols
@@ -35,8 +39,24 @@ class ForceOccupation:
         with open(f"{self.current_path}/elements.yml", "r") as elements:
             self.elements = yaml.load(elements, Loader=yaml.SafeLoader)
 
-    def read_ground_inp(self, constr_atoms, spec_at_constr, geometry_path):
-        """Find the number of atoms in the geometry file."""
+    def read_ground_inp(self, constr_atoms, spec_at_constr, geometry_path) -> List[int]:
+        """
+        Find the number of atoms in the geometry file.
+
+        Parameters
+        ----------
+            constr_atoms : List[str]
+                list of elements to constrain
+            spec_at_constr : List[int]
+                list of atom indices to constrain
+            geometry_path : str
+                path to the geometry file
+
+        Returns
+        -------
+            atom_specifier : List[int]
+                list of atom indices to constrain
+        """
 
         # For if the user supplied element symbols to constrain
         if constr_atoms is not None:
@@ -45,9 +65,7 @@ class ForceOccupation:
                 if atom not in self.elements:
                     raise ValueError("invalid element specified")
 
-            print(
-                "atoms argument not specified, defaulting to all target atoms in geometry.in"
-            )
+            print("Calculating all target atoms in geometry.in")
 
             # Constrain all atoms of the target element
             for atom in constr_atoms:
@@ -78,9 +96,21 @@ class ForceOccupation:
 
         return self.atom_specifier
 
-    def get_electronic_structure(self, atom):
-        """Get valence electronic structure of target atom."""
-        # Adapted from scipython.com question P2.5.12
+    def get_electronic_structure(self, atom) -> str:
+        """
+        Get valence electronic structure of target atom.
+        Adapted from scipython.com question P2.5.12
+
+        Parameters
+        ----------
+            atom : str
+                element symbol of target atom
+
+        Returns
+        -------
+            valence : str
+                valence electronic structure of target atom
+        """
 
         # Get the atomic number
         self.atom_index = self.elements.index(str(atom)) + 1
@@ -153,9 +183,29 @@ class ForceOccupation:
 
         self.valence = f"    valence      {output[0]}  {output[1]}   {output[2]}.1\n"
 
+        return self.valence
+
     @staticmethod
-    def add_additional_basis(current_path, elements, content, target_atom):
-        """Add an additional basis set for the core hole calculation."""
+    def add_additional_basis(current_path, elements, content, target_atom) -> List[str]:
+        """
+        Add an additional basis set for the core hole calculation.
+
+        Parameters
+        ----------
+            current_path : str
+                path to the current directory
+            elements : List[str]
+                list of all supported elements
+            content : List[str]
+                list of lines in the control file
+            target_atom : str
+                element symbol of target atom
+
+        Returns
+        -------
+            content : List[str]
+                list of lines in the control file
+        """
 
         # Check the additional functions haven't already been added to control
         for line in content:
@@ -240,8 +290,8 @@ class ForceOccupation:
             return content
 
         else:
-            print(
-                "Warning: there was an error with adding the additional basis functions"
+            warnings.warn(
+                "There was an error with adding the additional basis function"
             )
             return content
 
