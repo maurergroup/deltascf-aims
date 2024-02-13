@@ -184,17 +184,18 @@ def cli(
     start.check_for_geometry()
     start.check_for_pbcs()
     start.check_ase_usage()
-    atoms = start.create_structure()
+    start.atoms = start.create_structure()
 
     if start.constr_atom is None:
-        start.find_constr_atom_element(atoms)
+        start.find_constr_atom_element(start.atoms)
 
     curr_path, bin_path = start.check_for_bin()
     bin_path = start.bin_path_prompt(curr_path, bin_path)
     start.check_species_path(bin_path)
 
+    # Return the atoms object with a calculator
     if start.ase:
-        start.create_calculator(bin_path)
+        start.atoms = start.add_calc(start.atoms, bin_path)
 
     ctx.obj = start  # pass the Start object to the subcommands
 
@@ -255,7 +256,7 @@ def cli(
 @click.pass_obj
 def projector(start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts):
     """
-    Force occupation through defining Kohn-Sham states to occupy.
+    Force occupation through defining the Kohn-Sham states to occupy.
     """
 
     proj = ProjectorWrapper(
@@ -269,11 +270,27 @@ def projector(start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_op
     if start.use_additional_basis:
         proj.add_extra_basis_fns(start.constr_atom)
 
-    if proj.run_type == "ground":
-        proj.setup_files_and_dirs(start.geometry_input, start.control_input)
+    match proj.run_type:
+        case "ground":
+            proj.setup_files_and_dirs(start.geometry_input, start.control_input)
 
-        # if not start.hpc:
-        #     proj.run_ground(start.geometry_input, start.control_input,
+            if not start.hpc:  # Don't run on HPC
+                proj.run_ground(
+                    proj.control_opts,
+                    proj.l_vecs,
+                    start.print_output,
+                    start.nprocs,
+                    start.binary,
+                    start.atoms.calc,
+                )
+
+        case "init_1":
+            fo, atom_specifier = proj.setup_excited_calculations()
+
+            # if not start.hpc:
+
+        case "init_2":
+            proj.pre_init_2
 
 
 @cli.command()

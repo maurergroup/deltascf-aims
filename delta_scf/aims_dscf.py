@@ -8,6 +8,7 @@ from typing import List, Literal, Tuple, Union
 import click
 import numpy as np
 from ase import Atoms
+from ase.calculators.aims import Aims
 from ase.io import read
 
 import delta_scf.calc_dscf as cds
@@ -49,12 +50,22 @@ class Start(object):
             number of atoms to constrain per calculation
         basis_set : click.choice(['light', 'intermediate', 'tight', 'really_tight'])
             the basis set to use for the calculation
+        use_additional_basis : bool
+            whether to use additional basis functions
         graph : bool
             print the simulated XPS spectrum
         print_output : bool
             print the live output of the calculation
         nprocs : int
             number of processors to use
+        ase : bool
+            whether to use the ASE backend
+        atoms : Atoms
+            ASE atoms object
+        lattice_vecs : bool
+            whether lattice vectors are present in the geometry file
+        found_k_grid : bool
+            whether a k_grid is present in the control file
 
     Methods
     -------
@@ -76,6 +87,12 @@ class Start(object):
             Ensure the user has entered the path to the binary
         check_species_path(binary)
             Check if the species_defaults directory exists in the correct location
+        atoms
+            property method to return the ASE atoms object
+        atoms(atoms)
+            setter method to set the ASE atoms object
+        add_calc(atoms, binary)
+            Add an ASE calculator to an Atoms object
     """
 
     def __init__(
@@ -96,40 +113,6 @@ class Start(object):
         print_output,
         nprocs,
     ):
-        """
-        Parameters
-        ----------
-            hpc : bool
-                setup a calculation primarily for use on a HPC cluster WITHOUT running
-                the calculation
-            geometry_input : click.File
-                specify a custom geometry.in instead of using a structure from PubChem
-                or ASE
-            control_input : click.File
-                specify a custom control.in instead of automatically generating one
-            binary : bool
-                modify the path to the FHI-aims binary
-            run_location : click.Path(file_okay=False, dir_okay=True)
-                optionally specify a custom location to run the calculation
-            spec_mol : str
-                molecule to be used in the calculation
-            constr_atom : str
-                atom to be constrained
-            spec_at_constr : click.IntRange(min=1, max_open=True)
-                atom to constrain; constrain all atoms of this element
-            occupation : float
-                occupation of the core hole
-            n_atoms : click.IntRange(1)
-                number of atoms to constrain per calculation
-            basis_set : click.choice(['light', 'intermediate', 'tight', 'really_tight'])
-                the basis set to use for the calculation
-            graph : bool
-                print the simulated XPS spectrum
-            print_output : bool
-                print the live output of the calculation
-            nprocs : int
-                number of processors to use
-        """
         self.hpc = hpc
         self.geometry_input = geometry_input
         self.control_input = control_input
@@ -202,7 +185,7 @@ class Start(object):
         if self.control_input is not None:
             self.ase = False  # Do not use if control.in is specified
 
-    def create_structure(self) -> Union[Atoms, List[Atoms], None]:
+    def create_structure(self) -> Union[Atoms, List[Atoms]]:
         """
         Initialise an ASE atoms object from geometry file if given or find from
         databases if not.
@@ -348,27 +331,54 @@ class Start(object):
                 f"species_defaults directory not found in {Path(binary).parent.parent}"
             )
 
-    def create_calculator(self, binary) -> object:
+    @property
+    def atoms(self):
         """
-        Create an ASE calculator for the ground calculation.
+        ASE atoms object
+
+        Returns
+        -------
+            _atoms : Atoms
+                ASE atoms object
+        """
+        return self._atoms
+
+    @atoms.setter
+    def atoms(self, atoms):
+        """
+        Set the ASE atoms object
+
+        Parameters
+        ----------
+            atoms : Atoms
+                ASE atoms object
+        """
+
+        self._atoms = atoms
+
+    def add_calc(self, atoms, binary) -> Atoms:
+        """
+        Add an ASE calculator to an Atoms object.
 
         Parameters
         __________
             atoms : Atoms
                 ASE atoms object
+            binary : str
+                path to the location of the FHI-aims binary
 
         Returns
         -------
-            aims_calc : calculator
-                ASE calculator object
+            atoms : Atoms
+                ASE atoms object with a calculator added
         """
 
-        aims_calc = du.create_calc(self.nprocs, binary, self.species, self.basis_set)
+        atoms.calc = du.create_calc(self.nprocs, binary, self.species, self.basis_set)
 
         if self.print_output:
             warnings.warn("-p/--print_output is not supported with the ASE backend")
 
-        return aims_calc
+        return atoms
 
     # def _export_context(
     #     self,
@@ -419,27 +429,6 @@ class Process:
         gl_ratio=0.5,
         omega=0.35,
     ):
-        """
-        Parameters
-        ----------
-            start : Start
-                instance of the Start object
-            intensity : float
-                intensity of the peaks
-            asym : bool
-                use an asymmetric pseudo-Voigt peak shape
-            a : float
-                parameter to control the asymmetry of the pseudo-Voigt peak shape
-            b : float
-                parameter to control the asymmetry of the pseudo-Voigt peak shape
-            gl_ratio : float
-                ratio of Gaussian to Lorentzian broadening
-            omega : float
-                width of the Lorentzian broadening
-            gmp : float
-                Gaussian mixing parameter
-        """
-
         self.start = start
         self.gmp = gmp
         self.intensity = intensity
@@ -606,27 +595,6 @@ class ProjectorWrapper(GroundCalc):
     def __init__(
         self, start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts
     ):
-        """
-        Parameters
-        ----------
-            start : Start
-                instance of the Start object
-            run_type : click.Choice(["ground", "init_1", "init_2", "hole"])
-                type of calculation to perform
-            occ_type : click.Choice(["deltascf_projector", "force_occupation_projector"])
-                use either the refactored or original projector keyword
-            pbc : tuple
-                k-grid for a periodic calculation
-            l_vecs : List[List[float]]
-                lattice vectors in a 3x3 matrix of floats
-            spin : click.Choice(["1", "2"])
-                spin channel of the constraint
-            ks_range : click.IntRange(1)
-                range of Kohn-Sham states to constrain
-            control_opts : Tuple[str]
-                additional control options to be added to the control.in file
-        """
-
         super().__init__(
             start.run_loc,
             start.atoms,
@@ -778,24 +746,6 @@ class ProjectorWrapper(GroundCalc):
             f"*reself.start* {self.start.run_loc}/{self.start.constr_atoms[0]}{atom}"
             f"/{end}/"
         )
-
-    # TODO: remove and put outside of class in ifmain
-    # def run_ground(self) -> None:
-    #     """
-    #     Run the ground state calculation.
-    #     """
-
-    #     self.run(
-    #         self.start.geom_inp,
-    #         self.start.control_inp,
-    #         self.start.constr_atom,
-    #         self.start.calc,
-    #         self.control_opts,
-    #         self.l_vecs,
-    #         self.start.print_output,
-    #         self.start.nprocs,
-    #         self.start.binary,
-    #     )
 
     def setup_excited_calculations(self) -> Tuple[object, List[int]]:
         """
@@ -975,31 +925,6 @@ class BasisWrapper(GroundCalc):
         ks_max,
         control_opts,
     ):
-        """
-        Parameters
-        ----------
-            start : Start
-                instance of the Start object
-            run_type : click.Choice(["ground", "hole"])
-                type of calculation to perform
-            atom_index : click.IntRange(1)
-                atom index to constrain
-            occ_type : click.Choice(["deltascf_projector", "force_occupation_projector"])
-                use either the refactored or original projector keyword
-            multiplicity : click.IntRange(1)
-                multiplicity of the system
-            n_qn : click.IntRange(1)
-                principal quantum number
-            l_qn : click.IntRange(0)
-                angular momentum quantum number
-            m_qn : click.IntRange(-l_qn, l_qn)
-                magnetic quantum number
-            ks_max : click.IntRange(1)
-                maximum Kohn-Sham state to constrain
-            control_opts : Tuple[str]
-                additional control options to be added to the control.in file
-        """
-
         super().__init__(
             start.run_loc,
             start.atoms,

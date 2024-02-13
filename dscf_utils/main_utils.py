@@ -77,7 +77,7 @@ def add_molecule_identifier(start, atom_specifier) -> None:
         hole_geom.writelines(lines)
 
 
-def build_geometry(geometry) -> Union[Atoms, List[Atoms], None]:
+def build_geometry(geometry) -> Union[Atoms, List[Atoms]]:
     """
     Try various databases to create a geometry.in file.
 
@@ -802,8 +802,6 @@ class GroundCalc:
 
     def run_ground(
         self,
-        geom_inp,
-        control_inp,
         control_opts,
         l_vecs,
         print_output,
@@ -816,10 +814,6 @@ class GroundCalc:
 
         Parameters
         ----------
-            geom_inp : str
-                path to the geometry.in file
-            control_inp : str
-                path to the control.in file
             control_opts : dict
                 dictionary of control options
             l_vecs : list
