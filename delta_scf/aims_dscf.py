@@ -91,6 +91,7 @@ class Start(object):
         occupation,
         n_atoms,
         basis_set,
+        use_additional_basis,
         graph,
         print_output,
         nprocs,
@@ -140,9 +141,12 @@ class Start(object):
         self.occupation = occupation
         self.n_atoms = n_atoms
         self.basis_set = basis_set
+        self.use_additional_basis = use_additional_basis
         self.graph = graph
         self.print_output = print_output
         self.nprocs = nprocs
+
+        self.ase = True
 
         # Pass global options to subcommands
         # ctx.ensure_object(dict)
@@ -195,7 +199,6 @@ class Start(object):
         Check whether ASE should be used or not.
         """
 
-        self.ase = True
         if self.control_input is not None:
             self.ase = False  # Do not use if control.in is specified
 
@@ -251,11 +254,10 @@ class Start(object):
         """
 
         # TODO: support for multiple constrained atoms
-        if self.constr_atom is None:
-            for atom in atoms:
-                if atom.index in self.spec_at_constr:
-                    self.constr_atom = atom.symbol
-                    break
+        for atom in atoms:
+            if atom.index in self.spec_at_constr:
+                self.constr_atom = atom.symbol
+                break
 
     def check_for_bin(self) -> tuple[str, str]:
         """
@@ -346,7 +348,7 @@ class Start(object):
                 f"species_defaults directory not found in {Path(binary).parent.parent}"
             )
 
-    def create_calculator(self, atoms, binary, basis_set) -> None:
+    def create_calculator(self, binary) -> object:
         """
         Create an ASE calculator for the ground calculation.
 
@@ -354,18 +356,19 @@ class Start(object):
         __________
             atoms : Atoms
                 ASE atoms object
-            binary : str
-                path to the location of the FHI-aims binary
-            basis_set : str
-                basis set to use for the calculation
+
+        Returns
+        -------
+            aims_calc : calculator
+                ASE calculator object
         """
 
-        aims_calc = du.create_calc(self.nprocs, binary, self.species, basis_set)
-        atoms.calc = aims_calc
-        # self.ctx.obj["CALC"] = aims_calc
+        aims_calc = du.create_calc(self.nprocs, binary, self.species, self.basis_set)
 
         if self.print_output:
             warnings.warn("-p/--print_output is not supported with the ASE backend")
+
+        return aims_calc
 
     # def _export_context(
     #     self,
@@ -691,43 +694,37 @@ class ProjectorWrapper(GroundCalc):
             self.start.found_lattice_vecs,
         )
 
-    def _check_periodic(self) -> None:
+    def check_periodic(self) -> None:
         """
         Check if the lattice vectors and k_grid have been provided.
         """
 
-        if self.start.found_lattice_vecs or self.l_vecs is not None:
-            if self.pbc is None:
-                print(
-                    "-p/--pbc argument not given, attempting to use"
-                    " k_grid from control file or previous calculation"
-                )
+        print(
+            "-p/--pbc argument not given, attempting to use"
+            " k_grid from control file or previous calculation"
+        )
 
-                # Try to parse the k-grid if other calculations have been run
-                try:
-                    pbc_list = []
-                    for control in glob.glob(
-                        f"{self.start.run_loc}/**/control.in", recursive=True
-                    ):
-                        with open(control, "r") as control:
-                            for line in control:
-                                if "k_grid" in line:
-                                    pbc_list.append(line.split()[1:])
+        # Try to parse the k-grid if other calculations have been run
+        try:
+            pbc_list = []
+            for control in glob.glob(
+                f"{self.start.run_loc}/**/control.in", recursive=True
+            ):
+                with open(control, "r") as control:
+                    for line in control:
+                        if "k_grid" in line:
+                            pbc_list.append(line.split()[1:])
 
-                    # If different k_grids have been used for different calculations,
-                    # then enforce the user to provide the k_grid
-                    if not pbc_list.count(pbc_list[0]) == len(pbc_list):
-                        raise click.MissingParameter(
-                            param_hint="-p/--pbc", param_type="option"
-                        )
-                    else:
-                        pbc_list = tuple([int(i) for i in pbc_list[0]])
-                        self.control_opts["k_grid"] = pbc_list
+            # If different k_grids have been used for different calculations,
+            # then enforce the user to provide the k_grid
+            if not pbc_list.count(pbc_list[0]) == len(pbc_list):
+                raise click.MissingParameter(param_hint="-p/--pbc", param_type="option")
+            else:
+                pbc_list = tuple([int(i) for i in pbc_list[0]])
+                self.control_opts["k_grid"] = pbc_list
 
-                except IndexError:
-                    raise click.MissingParameter(
-                        param_hint="-p/--pbc", param_type="option"
-                    )
+        except IndexError:
+            raise click.MissingParameter(param_hint="-p/--pbc", param_type="option")
 
     def _check_prev_runs(self, prev_calc, atom) -> None:
         """

@@ -652,7 +652,7 @@ class GroundCalc:
         self.ase = ase
         self.hpc = hpc
 
-    def _setup_files_and_dirs(self, geom_inp, control_inp) -> None:
+    def setup_files_and_dirs(self, geom_inp, control_inp) -> None:
         """
         Setup the ground calculation files and directories.
 
@@ -678,7 +678,7 @@ class GroundCalc:
         if geom_inp is not None:
             os.system(f"cp {geom_inp} {self.run_loc}/ground")
 
-    def add_extra_basis_fns(self, constr_atom):
+    def add_extra_basis_fns(self, constr_atom) -> None:
         """
         Add additional basis functions to the basis set.
 
@@ -800,17 +800,16 @@ class GroundCalc:
                 f"cd {self.run_loc}/ground && mpirun -n {nprocs} {binary} > aims.out"
             )
 
-    def run(
+    def run_ground(
         self,
         geom_inp,
         control_inp,
-        constr_atom,
-        calc,
         control_opts,
         l_vecs,
         print_output,
         nprocs,
         binary,
+        calc=None,
     ) -> None:
         """
         Run the ground state calculation.
@@ -821,10 +820,6 @@ class GroundCalc:
                 path to the geometry.in file
             control_inp : str
                 path to the control.in file
-            constr_atom : str
-                element symbol of the constrained atom
-            calc : Aims
-                ASE calculator object
             control_opts : dict
                 dictionary of control options
             l_vecs : list
@@ -835,23 +830,21 @@ class GroundCalc:
                 number of processors to use
             binary : str
                 path to the aims binary
+            calc : Aims
+                ASE calculator object
         """
 
         # Export environment variables
         set_env_vars()
 
         # Setup the files and directories
-        GroundCalc._setup_files_and_dirs(self, geom_inp, control_inp)
+        # GroundCalc._setup_files_and_dirs(self, geom_inp, control_inp)
 
         # Run the ground state calculation
         if os.path.isfile(f"{self.run_loc}/ground/aims.out") is False:
-            GroundCalc.add_extra_basis_fns(self, constr_atom)
-
-            # Use ASE
-            if self.ase:
+            if self.ase:  # Use ASE
                 GroundCalc._with_ase(self, calc, control_opts, l_vecs)
 
-            # Don't use ASE
             elif not self.hpc:  # Don't use ASE
                 GroundCalc._without_ase(self, print_output, nprocs, binary)
 

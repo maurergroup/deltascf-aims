@@ -39,6 +39,8 @@ class ForceOccupation:
         with open(f"{self.current_path}/elements.yml", "r") as elements:
             self.elements = yaml.load(elements, Loader=yaml.SafeLoader)
 
+    # def read_ground_inp_el_symb
+
     def read_ground_inp(self, constr_atoms, spec_at_constr, geometry_path) -> List[int]:
         """
         Find the number of atoms in the geometry file.
@@ -400,17 +402,17 @@ class ForceOccupation:
                         content[j:].index(f"    nucleus             {at_num}\n") + j
                     )
                     nucleus = content[nuclear_index]  # save for hole
-                    content[
-                        nuclear_index
-                    ] = f"    nucleus             {at_num + partial_charge}\n"
+                    content[nuclear_index] = (
+                        f"    nucleus             {at_num + partial_charge}\n"
+                    )
                 elif f"    nucleus      {at_num}\n" in content[j:]:
                     nuclear_index = (
                         content[j:].index(f"    nucleus      {at_num}\n") + j
                     )
                     nucleus = content[nuclear_index]  # save for hole
-                    content[
-                        nuclear_index
-                    ] = f"    nucleus      {at_num + partial_charge}\n"
+                    content[nuclear_index] = (
+                        f"    nucleus      {at_num + partial_charge}\n"
+                    )
 
                 # Add to valence orbital
                 if "#     ion occupancy\n" in content[j:]:

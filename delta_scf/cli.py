@@ -2,7 +2,7 @@
 
 import click
 
-from delta_scf.aims_dscf import Process, ProjectorWrapper, Start, basis_wrapper
+from delta_scf.aims_dscf import BasisWrapper, Process, ProjectorWrapper, Start
 from dscf_utils.custom_click import MutuallyExclusive as me
 from dscf_utils.custom_click import MutuallyInclusive as mi
 
@@ -102,6 +102,12 @@ from dscf_utils.custom_click import MutuallyInclusive as mi
     type=click.Choice(["light", "intermediate", "tight", "really_tight"]),
     help="the basis set to use for the calculation",
 )
+@click.option(
+    "-x",
+    "--use_extra_basis",
+    is_flag=True,
+    help="add additional basis functions for the core hole",
+)
 @click.option("-g", "--graph", is_flag=True, help="print out the simulated XPS spectra")
 @click.option(
     "-p",
@@ -132,6 +138,7 @@ def cli(
     occupation,
     n_atoms,
     basis_set,
+    use_additional_basis,
     graph,
     print_output,
     nprocs,
@@ -155,7 +162,7 @@ def cli(
     Copyright \u00A9 2022-2024, Dylan Morgan dylan.morgan@warwick.ac.uk
     """
 
-    ctx.obj = Start(
+    start = Start(
         hpc,
         geometry_input,
         control_input,
@@ -167,10 +174,29 @@ def cli(
         occupation,
         n_atoms,
         basis_set,
+        use_additional_basis,
         graph,
         print_output,
         nprocs,
     )
+
+    start.check_for_help_arg()
+    start.check_for_geometry()
+    start.check_for_pbcs()
+    start.check_ase_usage()
+    atoms = start.create_structure()
+
+    if start.constr_atom is None:
+        start.find_constr_atom_element(atoms)
+
+    curr_path, bin_path = start.check_for_bin()
+    bin_path = start.bin_path_prompt(curr_path, bin_path)
+    start.check_species_path(bin_path)
+
+    if start.ase:
+        start.create_calculator(bin_path)
+
+    ctx.obj = start  # pass the Start object to the subcommands
 
 
 @cli.command()
@@ -229,12 +255,25 @@ def cli(
 @click.pass_obj
 def projector(start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts):
     """
-    Force occupation through defining Kohn-Sham states.
+    Force occupation through defining Kohn-Sham states to occupy.
     """
 
-    ProjectorWrapper(
+    proj = ProjectorWrapper(
         start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts
     )
+
+    if start.found_lattice_vecs or proj.l_vecs is not None:
+        if proj.pbc is None:
+            proj.check_periodic()
+
+    if start.use_additional_basis:
+        proj.add_extra_basis_fns(start.constr_atom)
+
+    if proj.run_type == "ground":
+        proj.setup_files_and_dirs(start.geometry_input, start.control_input)
+
+        # if not start.hpc:
+        #     proj.run_ground(start.geometry_input, start.control_input,
 
 
 @cli.command()
@@ -315,7 +354,7 @@ def basis(
     Force occupation of Kohn-Sham states through basis functions.
     """
 
-    basis_wrapper(
+    BasisWrapper(
         start,
         run_type,
         atom_index,
@@ -399,7 +438,3 @@ def plot(start, intensity, asym, a, b, gl_ratio, omega, gmp):
     """
 
     Process(start, intensity, asym, a, b, gl_ratio, omega, gmp)
-
-
-if __name__ == "__main__":
-    cli()
