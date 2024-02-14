@@ -12,7 +12,6 @@ from ase.calculators.aims import Aims
 from ase.data.pubchem import pubchem_atoms_search
 from ase.io import write
 from click import BadParameter, MissingParameter, progressbar
-
 from delta_scf.force_occupation import ForceOccupation as fo
 
 
@@ -250,6 +249,46 @@ def check_params(start, include_hpc=True) -> None:
         )
 
 
+def check_curr_calc_prev(
+    run_type, run_loc, constr_atoms, atom_specifier, constr_method, hpc
+) -> None:
+    """
+    Check if the current calculation has previously been run.
+
+    Parameters
+    ----------
+        run_loc : str
+            path to the calculation directory
+        constr_atoms : List[str]
+            list of constrained atoms
+        atom_specifier : List[int]
+            list of atom indices
+        run_type : str
+            type of calculation to check for (ground, hole, init_1, or init_2)
+        hpc : bool
+            whether to run on a HPC
+    """
+
+    if run_type == "ground":
+        search_path = f"{run_loc}/{run_type}/aims.out"
+    elif constr_method == "projector":
+        search_path = (
+            f"{run_loc}/{constr_atoms[0]}{atom_specifier[0]}/{run_type}/aims.out"
+        )
+    elif constr_method == "basis":
+        search_path = f"{run_loc}/{constr_atoms[0]}{atom_specifier[0]}/aims.out"
+
+    if os.path.isfile(search_path) and not hpc:
+        warnings.warn("Calculation has already been completed")
+        cont = None
+        while cont != "y" or cont != "n":
+            cont = str(input("Do you want to continue? (y/n)")).lower()
+
+        if cont == "n":
+            print("aborting...")
+            raise SystemExit(0)
+
+
 def convert_opts_to_dict(opts, pbc) -> dict:
     """
     Convert the control options from a tuple to a dictionary.
@@ -353,47 +392,6 @@ def get_element_symbols(geom, spec_at_constr) -> List[str]:
             element_symbols.append(element)
 
     return element_symbols
-
-
-def prepare_excited_calcs(self) -> Tuple[str, str, List[str], List[str]]:
-    """
-    Prepare excited state calculations for basis and projector.
-
-    Parameters
-    ----------
-        self : object
-            Basis or Projector Wrapper object
-
-    Returns
-    -------
-        ground_geom : str
-            path to the ground state geometry.in file
-        constr_atoms : list
-            list of constrained atoms
-        element_symbols : list
-            list of element symbols
-    """
-
-    ground_geom = f"{self.start.run_loc}/ground/geometry.in"
-    ground_control = f"{self.start.run_loc}/ground/control.in"
-
-    # Ensure constrained atoms are defined
-    check_params(self.start, include_hpc=False)
-
-    # Convert constr_atoms to a list
-    if isinstance(self.start.constr_atom, list) is False:
-        constr_atoms = [self.start.constr_atom]
-    else:
-        constr_atoms = self.start.constr_atom
-
-    # Create a list of element symbols to constrain
-    if len(self.start.spec_at_constr) > 0:
-        element_symbols = get_element_symbols(ground_geom, self.start.spec_at_constr)[0]
-        constr_atoms = element_symbols
-    else:
-        element_symbols = constr_atoms
-
-    return ground_geom, ground_control, constr_atoms, element_symbols
 
 
 def print_ks_states(run_loc) -> None:
@@ -652,7 +650,7 @@ class GroundCalc:
         self.ase = ase
         self.hpc = hpc
 
-    def setup_files_and_dirs(self, geom_inp, control_inp) -> None:
+    def setup_ground(self, geom_inp, control_inp) -> None:
         """
         Setup the ground calculation files and directories.
 
@@ -850,3 +848,125 @@ class GroundCalc:
         else:
             print("aims.out file found in ground calculation directory")
             print("skipping calculation...")
+
+
+class ExcitedCalc:
+    def __init__(self, start):
+        self.start = start
+
+    def _check_restart_files(self, prev_calc, atom) -> None:
+        """
+        Check if the restart files from the previous calculation exist.
+
+        Parameters
+        ----------
+            prev_calc : str
+                name of the previous calculation to check
+            atom : int
+                atom to check for
+        """
+
+        if (
+            len(
+                glob.glob(
+                    f"{self.start.run_loc}/{self.start.constr_atoms[0]}"
+                    f"{atom}/{prev_calc}/*restart*"
+                )
+            )
+            < 1
+        ):
+            print(
+                f'{prev_calc} restart files not found, please ensure "{prev_calc}"'
+                "has been run"
+            )
+            raise FileNotFoundError
+
+    def _check_prereq_calc(self, current_calc, constr_method) -> None:
+        """
+        Check if the prerequisite calculation has been run.
+
+        Parameters
+        ----------
+            current_calc : str
+
+            constr_method : str
+
+            run_loc : str
+                path to the calculation directory
+            constr_atoms : List[str]
+                list of constrained atoms
+            atom_specifier : List[int]
+                list of atom indices
+        """
+
+        match current_calc:
+            case "init_1":
+                prev_calc = "ground"
+                search_path = f"{self.start.run_loc}/ground/aims.out"
+            case "init_2":
+                prev_calc = "init_1"
+                search_path = (
+                    f"{self.start.run_loc}/{self.start.constr_atoms[0]}"
+                    f"{self.start.atom_specifier[0]}/init_1/aims.out"
+                )
+            case "hole":
+                if constr_method == "projector":
+                    prev_calc = "init_2"
+                    search_path = (
+                        f"{self.start.run_loc}/{self.start.constr_atoms[0]}"
+                        f"{self.start.atom_specifier[0]}/init_2/aims.out"
+                    )
+                if constr_method == "basis":
+                    prev_calc = "ground"
+                    search_path = f"{self.start.run_loc}/ground/aims.out"
+
+        if not os.path.isfile(search_path):
+            raise FileNotFoundError(
+                f"aims.out for {prev_calc} not found, please ensure the {prev_calc} "
+                "calculation has been run"
+            )
+
+    def setup_excited(self) -> None:
+        """
+        Prepare excited state calculations for basis and projector.
+
+        Parameters
+        ----------
+            self : object
+                Basis or Projector Wrapper object
+
+        Returns
+        -------
+            ground_geom : str
+                path to the ground state geometry.in file
+            constr_atoms : list
+                list of constrained atoms
+            element_symbols : list
+                list of element symbols
+        """
+
+        self._check_restart_files()
+
+        ground_geom = f"{self.start.run_loc}/ground/geometry.in"
+        ground_control = f"{self.start.run_loc}/ground/control.in"
+
+        # Ensure constrained atoms are defined
+        check_params(self.start, include_hpc=False)
+
+        # Convert constr_atoms to a list
+        if not isinstance(self.start.constr_atom, list):
+            constr_atoms = [self.start.constr_atom]
+        else:
+            constr_atoms = self.start.constr_atom
+
+        # Create a list of element symbols to constrain
+        if len(self.start.spec_at_constr) > 0:
+            element_symbols = get_element_symbols(
+                ground_geom, self.start.spec_at_constr
+            )[0]
+            constr_atoms = element_symbols
+        else:
+            element_symbols = constr_atoms
+
+    def run_excited(self, atom_specifier, run_type) -> None:
+        set_env_vars()

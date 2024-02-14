@@ -6,17 +6,16 @@ from pathlib import Path
 from typing import List, Literal, Tuple, Union
 
 import click
+import dscf_utils.main_utils as du
 import numpy as np
 from ase import Atoms
-from ase.calculators.aims import Aims
 from ase.io import read
+from dscf_utils.main_utils import ExcitedCalc, GroundCalc
 
 import delta_scf.calc_dscf as cds
-import dscf_utils.main_utils as du
 from delta_scf.force_occupation import Basis, ForceOccupation, Projector
 from delta_scf.plot import XPSSpectrum
 from delta_scf.schmid_pseudo_voigt import broaden
-from dscf_utils.main_utils import GroundCalc
 
 
 class Start(object):
@@ -538,7 +537,7 @@ class Process:
         xps_spec.plot(xps)
 
 
-class ProjectorWrapper(GroundCalc):
+class ProjectorWrapper(GroundCalc, ExcitedCalc):
     """
     Force occupation of the basis functions by projecting the occupation of Kohn-Sham
     states onto them.
@@ -693,33 +692,6 @@ class ProjectorWrapper(GroundCalc):
 
         except IndexError:
             raise click.MissingParameter(param_hint="-p/--pbc", param_type="option")
-
-    def _check_prev_runs(self, prev_calc, atom) -> None:
-        """
-        Check if the required previous calculation has been run.
-
-        Parameters
-        ----------
-            prev_calc : str
-                name of the previous calculation to check
-            atom : int
-                atom to check for
-        """
-
-        if (
-            len(
-                glob.glob(
-                    f"{self.start.run_loc}/{self.start.constr_atoms[0]}"
-                    f"{atom}/{prev_calc}/*restart*"
-                )
-            )
-            < 1
-        ):
-            print(
-                f'{prev_calc} restart files not found, please ensure "{prev_calc}"'
-                "has been run"
-            )
-            raise FileNotFoundError
 
     def _cp_restart_files(self, atom, begin, end) -> None:
         """

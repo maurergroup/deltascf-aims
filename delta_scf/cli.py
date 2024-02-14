@@ -287,7 +287,8 @@ def projector(start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_op
         case "init_1":
             fo, atom_specifier = proj.setup_excited_calculations()
 
-            # if not start.hpc:
+            if not start.hpc:
+                du.prepare_excited_calcs()
 
         case "init_2":
             proj.pre_init_2
