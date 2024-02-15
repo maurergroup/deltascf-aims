@@ -2,7 +2,7 @@ import glob
 import os
 import warnings
 from sys import platform
-from typing import List, Tuple, Union
+from typing import List, Literal, Tuple, Union
 
 import numpy as np
 import yaml
@@ -12,6 +12,7 @@ from ase.calculators.aims import Aims
 from ase.data.pubchem import pubchem_atoms_search
 from ase.io import write
 from click import BadParameter, MissingParameter, progressbar
+
 from delta_scf.force_occupation import ForceOccupation as fo
 
 
@@ -207,23 +208,6 @@ def check_control_k_grid(control_file) -> bool:
     return k_grid
 
 
-def check_ground_calc(start) -> None:
-    """
-    Check that the ground calculation has been run.
-
-    Parameters
-    ----------
-        start : Start
-            instance of the Start class
-    """
-
-    if not os.path.isfile(f"{start.run_loc}/ground/aims.out"):
-        raise FileNotFoundError(
-            "\nERROR: ground aims.out not found, please ensure the ground "
-            "calculation has been run"
-        )
-
-
 def check_params(start, include_hpc=True) -> None:
     """
     Check that the parameters given in Start are valid.
@@ -249,22 +233,29 @@ def check_params(start, include_hpc=True) -> None:
         )
 
 
-def check_curr_calc_prev(
-    run_type, run_loc, constr_atoms, atom_specifier, constr_method, hpc
+def check_curr_prev_run(
+    run_type: Literal["ground", "hole", "init_1", "init_2"],
+    run_loc,
+    constr_atoms,
+    atom_specifier,
+    constr_method: Literal["projector", "basis"],
+    hpc,
 ) -> None:
     """
     Check if the current calculation has previously been run.
 
     Parameters
     ----------
+        run_type : Literal["ground", "hole", "init_1", "init_2"]
+            type of calculation to check for
         run_loc : str
             path to the calculation directory
         constr_atoms : List[str]
             list of constrained atoms
         atom_specifier : List[int]
             list of atom indices
-        run_type : str
-            type of calculation to check for (ground, hole, init_1, or init_2)
+        constr_method : Literal["projector", "basis"]
+            method of constraining atoms
         hpc : bool
             whether to run on a HPC
     """
@@ -461,66 +452,6 @@ def print_ks_states(run_loc) -> None:
     print(*sd_eigs, sep="")
 
 
-# TODO: Possibly make own class for excited state (similarly to ground state) and get ProjectorWrapper and BasisWrapper to inherit it?
-def run_excited(start, atom_specifier, run_type) -> None:
-    """
-    Run an excited projector or basis calculations.
-
-    Parameters
-    ----------
-        start : Start
-            instance of the Start object
-        atom_specifier : List[int]
-            atom indices to constrain
-    """
-
-    # TODO: Move the below if statement to outside the function for PROJECTOR ONLY
-    # if (
-    #     self.run_type != "ground"
-    #     and os.path.isfile(
-    #         f"{self.run_loc}/{self.constr_atoms[0]}{atom_specifier[0]}"
-    #         f"/{self.run_type}/aims.out"
-    #     )
-    #     is False
-    #     and not self.hpc
-    # ):
-    # elif self.run_type != "ground" and not self.hpc:
-    #     print(
-    #         f"{self.run_type} calculations already completed, "
-    #         "skipping calculation..."
-    #     )
-
-    set_env_vars()
-
-    if start.print_output:  # Print live output of calculation
-        for i in range(len(atom_specifier)):
-            i += 1
-            os.system(
-                f"cd {start.run_loc}/{start.constr_atoms[0]}{i}/{start.run_type} "
-                f"&& mpirun -n {start.nprocs} {start.binary} "
-                f"| tee aims.out {start.spec_run_info}"
-            )
-            if run_type != "init_1" and run_type != "init_2":
-                print_ks_states(start.run_loc)
-
-    else:
-        with progressbar(
-            range(len(atom_specifier)),
-            label=f"calculating {run_type}:",
-        ) as prog_bar:
-            for i in prog_bar:
-                i += 1
-                os.system(
-                    f"cd {start.run_loc}/{start.constr_atoms[0]}{i}/"
-                    f"{run_type} && mpirun -n {start.nprocs} {start.binary}"
-                    " > aims.out {self.spec_run_info}"
-                )
-
-        # TODO figure out how to parse STDOUT so a compelted successfully calculation
-        # message can be given or not
-        # print(f"{run_type} calculations completed successfully")
-
-
 def set_env_vars() -> None:
     """
     Set environment variables for running aims.
@@ -564,7 +495,7 @@ def write_control(run_loc, control_opts, atoms, int_grid, defaults) -> None:
     Parameters
     ----------
         run_loc : str
-            path to the calculation directory
+             path to the calculation directory
         control_opts : dict
             dictionary of control options
         atoms : Atoms
@@ -661,7 +592,6 @@ class GroundCalc:
             control_inp : str
                 path to the control.in file
         """
-
         # Create the ground directory if it doesn't already exist
         os.system(f"mkdir -p {self.run_loc}/ground")
 
@@ -854,7 +784,7 @@ class ExcitedCalc:
     def __init__(self, start):
         self.start = start
 
-    def _check_restart_files(self, prev_calc, atom) -> None:
+    def check_restart_files(self, prev_calc, i_atom) -> None:
         """
         Check if the restart files from the previous calculation exist.
 
@@ -870,7 +800,7 @@ class ExcitedCalc:
             len(
                 glob.glob(
                     f"{self.start.run_loc}/{self.start.constr_atoms[0]}"
-                    f"{atom}/{prev_calc}/*restart*"
+                    f"{i_atom}/{prev_calc}/*restart*"
                 )
             )
             < 1
@@ -881,22 +811,20 @@ class ExcitedCalc:
             )
             raise FileNotFoundError
 
-    def _check_prereq_calc(self, current_calc, constr_method) -> None:
+    def check_prereq_calc(
+        self,
+        current_calc: Literal["init_1", "init_2", "hole"],
+        constr_method: Literal["projector", "basis"],
+    ) -> Literal["ground", "init_1", "init_2"]:
         """
         Check if the prerequisite calculation has been run.
 
         Parameters
         ----------
-            current_calc : str
-
-            constr_method : str
-
-            run_loc : str
-                path to the calculation directory
-            constr_atoms : List[str]
-                list of constrained atoms
-            atom_specifier : List[int]
-                list of atom indices
+            current_calc : Literal["init_1", "init_2", "hole"]
+                type of excited calculation to check for
+            constr_method : Literal["projector", "basis"]
+                method of constraining atoms
         """
 
         match current_calc:
@@ -920,53 +848,66 @@ class ExcitedCalc:
                     prev_calc = "ground"
                     search_path = f"{self.start.run_loc}/ground/aims.out"
 
+            case _:
+                if isinstance(current_calc, str):
+                    raise ValueError(
+                        "current_calc must be 'init_1', 'init_2', or 'hole', not "
+                        f"{current_calc}"
+                    )
+                else:
+                    raise TypeError(
+                        "current_calc must be a string with a value of init_1, init_2, "
+                        f"or hole, not {type(current_calc)}"
+                    )
+
         if not os.path.isfile(search_path):
             raise FileNotFoundError(
                 f"aims.out for {prev_calc} not found, please ensure the {prev_calc} "
                 "calculation has been run"
             )
 
-    def setup_excited(self) -> None:
+        return prev_calc
+
+    def run_excited(
+        self, run_type: Literal["init_1", "init_2", "hole"], atom_specifier
+    ) -> None:
         """
-        Prepare excited state calculations for basis and projector.
+        Run an excited projector or basis calculations.
 
         Parameters
         ----------
-            self : object
-                Basis or Projector Wrapper object
-
-        Returns
-        -------
-            ground_geom : str
-                path to the ground state geometry.in file
-            constr_atoms : list
-                list of constrained atoms
-            element_symbols : list
-                list of element symbols
+            run_type : Literal['init_1', 'init_2', 'hole']
+                type of excited calculation to run
+            atom_specifier : List[int]
+                atom indices to constrain
         """
 
-        self._check_restart_files()
-
-        ground_geom = f"{self.start.run_loc}/ground/geometry.in"
-        ground_control = f"{self.start.run_loc}/ground/control.in"
-
-        # Ensure constrained atoms are defined
-        check_params(self.start, include_hpc=False)
-
-        # Convert constr_atoms to a list
-        if not isinstance(self.start.constr_atom, list):
-            constr_atoms = [self.start.constr_atom]
-        else:
-            constr_atoms = self.start.constr_atom
-
-        # Create a list of element symbols to constrain
-        if len(self.start.spec_at_constr) > 0:
-            element_symbols = get_element_symbols(
-                ground_geom, self.start.spec_at_constr
-            )[0]
-            constr_atoms = element_symbols
-        else:
-            element_symbols = constr_atoms
-
-    def run_excited(self, atom_specifier, run_type) -> None:
         set_env_vars()
+
+        if self.start.print_output:  # Print live output of calculation
+            for i in range(len(atom_specifier)):
+                i += 1
+                os.system(
+                    f"cd {self.start.run_loc}/{self.start.constr_atoms[0]}{i}/{self.start.run_type} "
+                    f"&& mpirun -n {self.start.nprocs} {self.start.binary} "
+                    f"| tee aims.out {self.start.spec_run_info}"
+                )
+                if run_type != "init_1" and run_type != "init_2":
+                    print_ks_states(self.start.run_loc)
+
+        else:
+            with progressbar(
+                range(len(atom_specifier)),
+                label=f"calculating {run_type}:",
+            ) as prog_bar:
+                for i in prog_bar:
+                    i += 1
+                    os.system(
+                        f"cd {self.start.run_loc}/{self.start.constr_atoms[0]}{i}/"
+                        f"{run_type} && mpirun -n {self.start.nprocs} {self.start.binary}"
+                        " > aims.out {self.spec_run_info}"
+                    )
+
+            # TODO figure out how to parse STDOUT so a completed successfully calculation
+            # message can be given or not
+            # print(f"{run_type} calculations completed successfully")

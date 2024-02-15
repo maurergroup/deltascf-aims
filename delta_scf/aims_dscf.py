@@ -6,16 +6,16 @@ from pathlib import Path
 from typing import List, Literal, Tuple, Union
 
 import click
-import dscf_utils.main_utils as du
 import numpy as np
 from ase import Atoms
 from ase.io import read
-from dscf_utils.main_utils import ExcitedCalc, GroundCalc
 
 import delta_scf.calc_dscf as cds
+import dscf_utils.main_utils as du
 from delta_scf.force_occupation import Basis, ForceOccupation, Projector
 from delta_scf.plot import XPSSpectrum
 from delta_scf.schmid_pseudo_voigt import broaden
+from dscf_utils.main_utils import ExcitedCalc, GroundCalc
 
 
 class Start(object):
@@ -594,14 +594,16 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
     def __init__(
         self, start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts
     ):
-        super().__init__(
-            start.run_loc,
-            start.atoms,
-            start.basis_set,
-            start.species,
-            start.ase,
-            start.hpc,
-        )
+        # We only need to call __init__ from the GroundCalc parent class
+        # All that is defined in __init__ from ExcitedCalc is an instance of Start
+        # super().__init__(
+        #     start.run_loc,
+        #     start.atoms,
+        #     start.basis_set,
+        #     start.species,
+        #     start.ase,
+        #     start.hpc,
+        # )
 
         self.start = start
         self.run_type = run_type
@@ -612,19 +614,81 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
         self.ks_range = ks_range
         self.control_opts = control_opts
 
+        self.ground_geom = f"{self.start.run_loc}/ground/geometry.in"
+        self.ground_control = f"{self.start.run_loc}/ground/control.in"
+
         # Raise a warning if no additional control options have been specified
         du.warn_no_extra_control_opts(self.control_opts, start.control_input)
 
         # Convert control options to a dictionary
         control_opts = du.convert_opts_to_dict(control_opts, pbc)
 
-    def _calc_checks(self) -> None:
+        # Convert constr_atoms to a list
+        if not isinstance(self.start.constr_atom, list):
+            self.constr_atoms = [self.start.constr_atom]
+        else:
+            self.constr_atoms = self.start.constr_atom
+
+    def check_periodic(self) -> None:
+        """
+        Check if the lattice vectors and k_grid have been provided.
+        """
+
+        print(
+            "-p/--pbc argument not given, attempting to use"
+            " k_grid from control file or previous calculation"
+        )
+
+        # Try to parse the k-grid if other calculations have been run
+        try:
+            pbc_list = []
+            for control in glob.glob(
+                f"{self.start.run_loc}/**/control.in", recursive=True
+            ):
+                with open(control, "r") as control:
+                    for line in control:
+                        if "k_grid" in line:
+                            pbc_list.append(line.split()[1:])
+
+            # If different k_grids have been used for different calculations,
+            # then enforce the user to provide the k_grid
+            if not pbc_list.count(pbc_list[0]) == len(pbc_list):
+                raise click.MissingParameter(param_hint="-p/--pbc", param_type="option")
+            else:
+                pbc_list = tuple([int(i) for i in pbc_list[0]])
+                self.control_opts["k_grid"] = pbc_list
+
+        except IndexError:
+            raise click.MissingParameter(param_hint="-p/--pbc", param_type="option")
+
+    def _calc_checks(self, current_calc, atom_specifier) -> None:
         """
         Perform checks before running an excited calculation.
+
+        Parameters
+        ----------
+            current_calc : str
+                type of excited calculation to perform
+            atom_specifier : List[int]
+                atom indices to constrain
         """
 
         # Check that the ground state calculation has been run
-        du.check_ground_calc(self.start)
+        prev_calc = super().check_prereq_calc(current_calc, "projector")
+
+        # Check that the current calculation has not already been run
+        du.check_curr_prev_run(
+            self.run_type,
+            self.start.run_loc,
+            self.constr_atoms,
+            self.start.atom_specifier,
+            "projector",
+            self.start.hpc,
+        )
+
+        # Check that the restart files exist from the previous calculation
+        for i_atom in atom_specifier:
+            super().check_restart_files(prev_calc, i_atom)
 
         # Check that the constrained atoms have been given
         du.check_params(self.start)
@@ -661,38 +725,6 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
             self.start.found_lattice_vecs,
         )
 
-    def check_periodic(self) -> None:
-        """
-        Check if the lattice vectors and k_grid have been provided.
-        """
-
-        print(
-            "-p/--pbc argument not given, attempting to use"
-            " k_grid from control file or previous calculation"
-        )
-
-        # Try to parse the k-grid if other calculations have been run
-        try:
-            pbc_list = []
-            for control in glob.glob(
-                f"{self.start.run_loc}/**/control.in", recursive=True
-            ):
-                with open(control, "r") as control:
-                    for line in control:
-                        if "k_grid" in line:
-                            pbc_list.append(line.split()[1:])
-
-            # If different k_grids have been used for different calculations,
-            # then enforce the user to provide the k_grid
-            if not pbc_list.count(pbc_list[0]) == len(pbc_list):
-                raise click.MissingParameter(param_hint="-p/--pbc", param_type="option")
-            else:
-                pbc_list = tuple([int(i) for i in pbc_list[0]])
-                self.control_opts["k_grid"] = pbc_list
-
-        except IndexError:
-            raise click.MissingParameter(param_hint="-p/--pbc", param_type="option")
-
     def _cp_restart_files(self, atom, begin, end) -> None:
         """
         Copy the restart files from one calculation location to another.
@@ -709,20 +741,19 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
 
         os.path.isfile(
             glob.glob(
-                f"{self.start.run_loc}/{self.start.constr_atoms[0]}{atom}/{begin}/"
-                "*reself.start*"
+                f"{self.start.run_loc}/{self.constr_atoms[0]}{atom}/{begin}/"
+                "*restart*"
             )[0]
         )
         os.system(
-            f"cp {self.start.run_loc}/{self.start.constr_atoms[0]}{atom}/{begin}/"
-            f"*reself.start* {self.start.run_loc}/{self.start.constr_atoms[0]}{atom}"
+            f"cp {self.start.run_loc}/{self.constr_atoms[0]}{atom}/{begin}/"
+            f"*restart* {self.start.run_loc}/{self.constr_atoms[0]}{atom}"
             f"/{end}/"
         )
 
-    def setup_excited_calculations(self) -> Tuple[object, List[int]]:
+    def setup_excited(self) -> Tuple[object, List[int]]:
         """
-        Setup files and parameters required for the initialisation and hole
-        calculations.
+        Setup files and parameters required for the init and hole calculations.
 
         Returns
         -------
@@ -732,27 +763,29 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
                 atom indices to constrain
         """
 
-        self._calc_checks()
-
-        (
-            ground_geom,
-            self.ground_control,
-            constr_atoms,
-            element_symbols,
-        ) = du.prepare_excited_calcs(self)
+        # Create a list of element symbols to constrain
+        if len(self.start.spec_at_constr) > 0:
+            element_symbols = du.get_element_symbols(
+                self.ground_geom, self.start.spec_at_constr
+            )[0]
+            self.constr_atoms = element_symbols
+        else:
+            element_symbols = self.constr_atoms
 
         fo = ForceOccupation(
             element_symbols,
             self.start.run_loc,
-            ground_geom,
+            self.ground_geom,
             self.control_opts,
             f"{self.start.species}/defaults_2020/{self.start.basis_set}",
         )
 
         # Get atom indices from the ground state geometry file
-        atom_specifier = fo.read_ground_inp(
-            constr_atoms, self.start.spec_at_constr, ground_geom
+        atom_specifier = fo.get_atoms(
+            self.constr_atoms, self.start.spec_at_constr, self.ground_geom
         )
+
+        self._calc_checks("init_1", atom_specifier)
 
         # TODO allow this for multiple constrained atoms using n_atoms
         for atom in element_symbols:
@@ -975,7 +1008,7 @@ class BasisWrapper(GroundCalc):
         """
 
         # Get the atom indices from the ground state geometry file
-        atom_specifier = fo.read_ground_inp(
+        atom_specifier = fo.get_atoms(
             constr_atoms, self.start.spec_at_constr, ground_geom
         )
 

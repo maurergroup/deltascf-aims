@@ -272,7 +272,7 @@ def projector(start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_op
 
     match proj.run_type:
         case "ground":
-            proj.setup_files_and_dirs(start.geometry_input, start.control_input)
+            proj.setup_ground(start.geometry_input, start.control_input)
 
             if not start.hpc:  # Don't run on HPC
                 proj.run_ground(
@@ -285,10 +285,10 @@ def projector(start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_op
                 )
 
         case "init_1":
-            fo, atom_specifier = proj.setup_excited_calculations()
+            _, atom_specifier = proj.setup_excited()
 
             if not start.hpc:
-                du.prepare_excited_calcs()
+                proj.run_excited("init_1", atom_specifier)
 
         case "init_2":
             proj.pre_init_2
