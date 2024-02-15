@@ -5,7 +5,7 @@ import os
 import shutil
 import subprocess
 import warnings
-from typing import List
+from typing import List, Tuple, Union
 
 import numpy as np
 import yaml
@@ -14,6 +14,16 @@ import yaml
 class ForceOccupation:
     """
     Manipulate FHIaims input files to setup basis and projector calculations.
+
+    ...
+
+    Attributes
+    ----------
+        element_symbols : List[str]
+            list of element symbols to constrain
+
+
+    TODO
     """
 
     def __init__(self, element_symbols, run_loc, geometry, ad_cont_opts, species):
@@ -39,9 +49,10 @@ class ForceOccupation:
         with open(f"{self.current_path}/elements.yml", "r") as elements:
             self.elements = yaml.load(elements, Loader=yaml.SafeLoader)
 
+    # TODO
     # def read_ground_inp_el_symb
 
-    def read_ground_inp(self, constr_atoms, spec_at_constr, geometry_path) -> List[int]:
+    def get_atoms(self, constr_atoms, spec_at_constr, geometry_path) -> List[int]:
         """
         Find the number of atoms in the geometry file.
 
@@ -101,7 +112,7 @@ class ForceOccupation:
     def get_electronic_structure(self, atom) -> str:
         """
         Get valence electronic structure of target atom.
-        Adapted from scipython.com question P2.5.12
+        Adapted from scipython.com question P2.5.12.
 
         Parameters
         ----------
@@ -188,7 +199,9 @@ class ForceOccupation:
         return self.valence
 
     @staticmethod
-    def add_additional_basis(current_path, elements, content, target_atom) -> List[str]:
+    def add_additional_basis(
+        current_path, elements, content, target_atom
+    ) -> Union[List[str], None]:
         """
         Add an additional basis set for the core hole calculation.
 
@@ -298,8 +311,20 @@ class ForceOccupation:
             return content
 
     @staticmethod
-    def get_control_keywords(control):
-        """Get the keywords in a control.in file"""
+    def get_control_keywords(control) -> dict:
+        """
+        Get the keywords in a control.in file.
+
+        Parameters
+        ----------
+            control : str
+                path to the control file
+
+        Returns
+        -------
+            opts : dict
+                dictionary of keywords in the control file
+        """
 
         # Find and replace keywords in control file
         with open(control, "r") as read_control:
@@ -328,8 +353,22 @@ class ForceOccupation:
         return opts
 
     @staticmethod
-    def mod_keywords(ad_cont_opts, opts):
-        """Allow users to modify and add keywords"""
+    def mod_keywords(ad_cont_opts, opts) -> dict:
+        """
+        Allow users to modify and add keywords.
+
+        Parameters
+        ----------
+            ad_cont_opts : dict
+                dictionary of user-specified keywords
+            opts : dict
+                dictionary of default keywords
+
+        Returns
+        -------
+            opts : dict
+                dictionary of keywords
+        """
 
         for key in list(ad_cont_opts.keys()):
             opts.update({key: ad_cont_opts[key]})
@@ -337,8 +376,22 @@ class ForceOccupation:
         return opts
 
     @staticmethod
-    def change_control_keywords(control, opts):
-        """Modify the keywords in a control.in file from a dictionary of options."""
+    def change_control_keywords(control, opts) -> List[str]:
+        """
+        Modify the keywords in a control.in file from a dictionary of options.
+
+        Parameters
+        ----------
+            control : str
+                path to the control file
+            opts : dict
+                dictionary of keywords to change
+
+        Returns
+        -------
+            content : List[str]
+                list of lines in the control file
+        """
 
         # Find and replace keywords in control file
         with open(control, "r") as read_control:
@@ -353,10 +406,6 @@ class ForceOccupation:
 
             for j, line in enumerate(content):
                 spl = line.split()
-
-                # print(opts)
-                # print(opts[opt])
-                # print(opt)
 
                 if opt in spl:
                     content[j] = f"{opt:<34} {opts[opt]}\n"
@@ -377,6 +426,7 @@ class ForceOccupation:
                     content.insert(j - 1, f"{opt:<34} {opts[opt]}\n")
                     break
 
+            # TODO
             # Ensure keywords are added in all other instances
             # if ident == 0:
             #     content.insert(0, f"{opt:<34} {opts[opt]}\n")
@@ -384,8 +434,36 @@ class ForceOccupation:
         return content
 
     @staticmethod
-    def add_partial_charge(content, target_atom, at_num, atom_valence, partial_charge):
-        """Add a partial charge to a basis set in a control.in file."""
+    def add_partial_charge(
+        content, target_atom, at_num, atom_valence, partial_charge
+    ) -> Tuple[int, int, str, List[str]]:
+        """
+        Add a partial charge to a basis set in a control.in file.
+
+        Parameters
+        ----------
+            content : List[str]
+                list of lines in the control file
+            target_atom : str
+                element symbol of target atom
+            at_num : int
+                atomic number of target atom
+            atom_valence : str
+                valence electronic structure of target atom
+            partial_charge : float
+                partial charge to add to the nucleus
+
+        Returns
+        -------
+            nuclear_index : int
+                index of the nucleus in the control file
+            valence_index : int
+                index of the valence orbital in the control file
+            nucleus : str
+                nucleus line in the control file
+            content : List[str]
+                list of lines in the control file
+        """
 
         # Ensure returned variables are bound
         nuclear_index = 0
@@ -463,10 +541,18 @@ class ForceOccupation:
 
 
 class Projector(ForceOccupation):
-    """Create input files for projector calculations."""
+    """
+    Create input files for projector calculations.
+
+    ...
+
+    Attributes
+    ----------
+    TODO
+    """
 
     def __init__(self, parent_instance):
-        """Inherit all the variables from an instance of the parent class"""
+        # Inherit all the variables from an instance of the parent class
         vars(self).update(vars(parent_instance))
 
     def setup_init_1(self, basis_set, defaults, control):
@@ -722,7 +808,7 @@ class Basis(ForceOccupation):
     """Create input files for basis calculations."""
 
     def __init__(self, parent_instance):
-        """Inherit all the variables from an instance of the parent class"""
+        # Inherit all the variables from an instance of the parent class
         vars(self).update(vars(parent_instance))
 
     def setup_basis(
