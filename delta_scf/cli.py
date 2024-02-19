@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
 
+import sys
+
 import click
 
 from delta_scf.aims_dscf import BasisWrapper, Process, ProjectorWrapper, Start
-from dscf_utils.custom_click import MutuallyExclusive as me
-from dscf_utils.custom_click import MutuallyInclusive as mi
+from dscf_utils.custom_click import MutuallyExclusive, MutuallyInclusive, ShowHelpSubCmd
 
 
 @click.group()
+# @click.argument("argument", cls=ShowHelpSubCmd)
 @click.option(
     "-h",
     "--hpc",
-    cls=me,
+    cls=MutuallyExclusive,
     mutually_exclusive=["--binary"],
     is_flag=True,
     help="setup a calculation primarily for use on a HPC cluster WITHOUT "
@@ -21,7 +23,7 @@ from dscf_utils.custom_click import MutuallyInclusive as mi
     "-m",
     "--molecule",
     "spec_mol",
-    cls=me,
+    cls=MutuallyExclusive,
     mutually_exclusive=["--geometry_input"],
     type=str,
     help="molecule to be used in the calculation",
@@ -29,7 +31,7 @@ from dscf_utils.custom_click import MutuallyInclusive as mi
 @click.option(
     "-e",
     "--geometry_input",
-    cls=me,
+    cls=MutuallyExclusive,
     mutually_exclusive=["--molecule"],
     nargs=1,
     type=click.File(),
@@ -45,7 +47,7 @@ from dscf_utils.custom_click import MutuallyInclusive as mi
 @click.option(
     "-y",
     "--binary",
-    cls=me,
+    cls=MutuallyExclusive,
     mutually_exclusive=["hpc"],
     is_flag=True,
     help="modify the path to the FHI-aims binary",
@@ -62,7 +64,7 @@ from dscf_utils.custom_click import MutuallyInclusive as mi
     "-c",
     "--constrained_atom",
     "constr_atom",
-    cls=me,
+    cls=MutuallyExclusive,
     mutually_exclusive=["spec_at_constr"],
     type=str,
     # multiple=True,  # TODO: allow for multiple atoms to be constrained
@@ -72,7 +74,7 @@ from dscf_utils.custom_click import MutuallyInclusive as mi
     "-s",
     "--specific_atom_constraint",
     "spec_at_constr",
-    cls=me,
+    cls=MutuallyExclusive,
     mutually_exclusive=["constr_atom"],
     multiple=True,
     type=click.IntRange(min=1, max_open=True),
@@ -127,6 +129,7 @@ from dscf_utils.custom_click import MutuallyInclusive as mi
 @click.pass_context
 def cli(
     ctx,
+    # argument,
     hpc,
     geometry_input,
     control_input,
@@ -138,7 +141,7 @@ def cli(
     occupation,
     n_atoms,
     basis_set,
-    use_additional_basis,
+    use_extra_basis,
     graph,
     print_output,
     nprocs,
@@ -162,6 +165,14 @@ def cli(
     Copyright \u00A9 2022-2024, Dylan Morgan dylan.morgan@warwick.ac.uk
     """
 
+    # TODO
+    # print(sys.argv)
+
+    # if "--help" in sys.argv:
+    #     tmp = cli.get_help(ctx)
+
+    #     print(tmp)
+
     start = Start(
         hpc,
         geometry_input,
@@ -174,13 +185,13 @@ def cli(
         occupation,
         n_atoms,
         basis_set,
-        use_additional_basis,
+        use_extra_basis,
         graph,
         print_output,
         nprocs,
     )
 
-    start.check_for_help_arg()
+    # start.check_for_help_arg()
     start.check_for_geometry()
     start.check_for_pbcs()
     start.check_ase_usage()
@@ -197,7 +208,9 @@ def cli(
     if start.ase:
         start.atoms = start.add_calc(start.atoms, bin_path)
 
-    ctx.obj = start  # pass the Start object to the subcommands
+    # pass the Start and Argument objects to the subcommands
+    # ctx.obj = {"argument": argument, "start": start}
+    ctx.obj = start
 
 
 @cli.command()
@@ -229,7 +242,7 @@ def cli(
     "l_vecs",
     # nargs=3,
     # type=list,
-    help="provide the lattice vectors in a 3x3 matrix",
+    help="provide the lattice vectors as a 3x3 matrix",
 )
 @click.option(
     "-s",
@@ -244,7 +257,7 @@ def cli(
     "--ks_range",
     nargs=2,
     type=click.IntRange(1),
-    help="range of Kohn-Sham states to constrain taken with 2 arguments",
+    help="range of Kohn-Sham states to constrain - taken with 2 arguments",
 )
 @click.option(
     "-c",
@@ -263,11 +276,11 @@ def projector(start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_op
         start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts
     )
 
-    if start.found_lattice_vecs or proj.l_vecs is not None:
+    if start.lattice_vecs or proj.l_vecs is not None:
         if proj.pbc is None:
             proj.check_periodic()
 
-    if start.use_additional_basis:
+    if start.use_extra_basis:
         proj.add_extra_basis_fns(start.constr_atom)
 
     match proj.run_type:
@@ -285,13 +298,21 @@ def projector(start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_op
                 )
 
         case "init_1":
-            _, atom_specifier = proj.setup_excited()
-
-            if not start.hpc:
-                proj.run_excited("init_1", atom_specifier)
+            spec_run_info = proj.setup_excited()
+            proj.run_excited("init_1", spec_run_info)
 
         case "init_2":
-            proj.pre_init_2
+            spec_run_info = proj.pre_init_2()
+            proj.run_excited("init_2", spec_run_info)
+
+        case "hole":
+            spec_run_info = proj.pre_hole()
+
+            if not start.hpc:  # Don't run on HPC
+                proj.run_excited("hole", spec_run_info)
+
+        case _:
+            raise ValueError(f"Invalid run_type: {proj.run_type}")
 
 
 @cli.command()
@@ -372,6 +393,8 @@ def basis(
     Force occupation of Kohn-Sham states through basis functions.
     """
 
+    raise NotImplementedError("This method is not yet implemented")
+
     BasisWrapper(
         start,
         run_type,
@@ -407,7 +430,7 @@ def basis(
     "-a",
     "--asym_param",
     "a",
-    cls=mi,
+    cls=MutuallyInclusive,
     mutually_inclusive=["--asym"],
     default=0.2,
     type=float,
@@ -418,7 +441,7 @@ def basis(
     "-b",
     "--asym_trans_param",
     "b",
-    cls=mi,
+    cls=MutuallyInclusive,
     mutually_inclusive=["--asym"],
     default=0.0,
     type=float,
@@ -455,4 +478,22 @@ def plot(start, intensity, asym, a, b, gl_ratio, omega, gmp):
     Plot the simulated XPS spectra.
     """
 
-    Process(start, intensity, asym, a, b, gl_ratio, omega, gmp)
+    # Calculate peaks
+    process = Process(start, intensity, asym, a, b, gl_ratio, omega, gmp)
+    xps, element = process.calc_dscf_energies()
+
+    # Ensure peaks file is in the run location
+    if start.run_location != "./":
+        process.move_file_to_run_loc(element, "peaks")
+
+    # Broaden spectrum and write to file
+    peaks = process.call_broaden(xps)
+    process.write_spectrum_to_file(peaks, element)
+
+    if start.graph:
+        process.plot_xps(xps)
+
+
+# cli.add_command(projector)
+# cli.add_command(basis)
+# cli.add_command(plot)

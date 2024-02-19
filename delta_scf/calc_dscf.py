@@ -1,5 +1,5 @@
 import os
-from typing import List
+from typing import List, Tuple
 
 
 def read_ground(calc_path) -> float:
@@ -61,7 +61,7 @@ def contains_number(string) -> bool:
     return found_string
 
 
-def read_atoms(calc_path, element) -> List[float]:
+def read_atoms(calc_path, element) -> Tuple[List[float], str]:
     """
     Get the excited state energies.
 
@@ -107,7 +107,7 @@ def read_atoms(calc_path, element) -> List[float]:
 
     print("Core hole calculated energies (eV):", *excienrgys, sep="\n")
 
-    return excienrgys
+    return excienrgys, element
 
 
 def calc_delta_scf(element, grenrgys, excienrgys) -> List[float]:

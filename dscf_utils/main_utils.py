@@ -2,9 +2,8 @@ import glob
 import os
 import warnings
 from sys import platform
-from typing import List, Literal, Tuple, Union
+from typing import List, Literal, Union
 
-import numpy as np
 import yaml
 from ase import Atoms
 from ase.build import molecule
@@ -16,7 +15,7 @@ from click import BadParameter, MissingParameter, progressbar
 from delta_scf.force_occupation import ForceOccupation as fo
 
 
-def add_control_opts(start, fo, control_opts, atom, calc) -> None:
+def add_control_opts(start, control_opts, atom, calc) -> None:
     """
     Add additional control options to the control file.
 
@@ -24,8 +23,6 @@ def add_control_opts(start, fo, control_opts, atom, calc) -> None:
     ----------
         start : Start
             instance of the Start class
-        fo : object
-            ForceOccupation object
         control_opts : list
             tuple of control options
         atom : int
@@ -63,15 +60,20 @@ def add_molecule_identifier(start, atom_specifier) -> None:
     """
 
     with open(
-        f"{start.run_loc}/{start.constr_atoms[0]}{atom_specifier[0]}/hole/geometry.in",
+        f"{start.run_loc}/{start.constr_atom[0]}{atom_specifier[0]}/hole/geometry.in",
         "r",
     ) as hole_geom:
         lines = hole_geom.readlines()
 
+    # Check that the molecule identifier is not already in the file
+    for line in lines:
+        if start.spec_mol in line:
+            return
+
     lines.insert(4, f"# {start.spec_mol}\n")
 
     with open(
-        f"{start.run_loc}/{start.constr_atoms[0]}{atom_specifier[0]}/hole/geometry.in",
+        f"{start.run_loc}/{start.constr_atom[0]}{atom_specifier[0]}/hole/geometry.in",
         "w",
     ) as hole_geom:
         hole_geom.writelines(lines)
@@ -273,11 +275,13 @@ def check_curr_prev_run(
         warnings.warn("Calculation has already been completed")
         cont = None
         while cont != "y" or cont != "n":
-            cont = str(input("Do you want to continue? (y/n)")).lower()
+            cont = str(input("Do you want to continue? (y/n) ")).lower()
 
-        if cont == "n":
-            print("aborting...")
-            raise SystemExit(0)
+            if cont == "n":
+                print("aborting...")
+                raise SystemExit(1)
+            elif cont == "y":
+                break
 
 
 def convert_opts_to_dict(opts, pbc) -> dict:
@@ -424,15 +428,15 @@ def print_ks_states(run_loc) -> None:
         print("Did you run a spin polarised calculation?")
         raise SystemExit
 
-    su_eigs = np.array([])
-    sd_eigs = np.array([])
+    su_eigs = []
+    sd_eigs = []
 
     # Save the KS states into lists
     for num, content in enumerate(lines[su_eigs_start_line + 2 :]):
         spl = content.split()
 
         if len(spl) != 0:
-            np.append(su_eigs, content)
+            su_eigs.append(content)
         else:
             break
 
@@ -440,7 +444,7 @@ def print_ks_states(run_loc) -> None:
         spl = content.split()
 
         if len(spl) != 0:
-            np.append(sd_eigs, content)
+            sd_eigs.append(content)
         else:
             break
 
@@ -483,8 +487,7 @@ def warn_no_extra_control_opts(opts, inp) -> None:
     """
     if len(opts) < 1 and inp is None:
         warnings.warn(
-            "No control options provided, using default options "
-            "which can be found in the 'control.in' file"
+            "No control options provided, using default options which can be found in the 'control.in' file"
         )
 
 
@@ -759,9 +762,6 @@ class GroundCalc:
         # Export environment variables
         set_env_vars()
 
-        # Setup the files and directories
-        # GroundCalc._setup_files_and_dirs(self, geom_inp, control_inp)
-
         # Run the ground state calculation
         if os.path.isfile(f"{self.run_loc}/ground/aims.out") is False:
             if self.ase:  # Use ASE
@@ -799,7 +799,7 @@ class ExcitedCalc:
         if (
             len(
                 glob.glob(
-                    f"{self.start.run_loc}/{self.start.constr_atoms[0]}"
+                    f"{self.start.run_loc}/{self.constr_atoms[0]}"
                     f"{i_atom}/{prev_calc}/*restart*"
                 )
             )
@@ -834,15 +834,15 @@ class ExcitedCalc:
             case "init_2":
                 prev_calc = "init_1"
                 search_path = (
-                    f"{self.start.run_loc}/{self.start.constr_atoms[0]}"
-                    f"{self.start.atom_specifier[0]}/init_1/aims.out"
+                    f"{self.start.run_loc}/{self.constr_atoms[0]}"
+                    f"{self.atom_specifier[0]}/init_1/aims.out"
                 )
             case "hole":
                 if constr_method == "projector":
                     prev_calc = "init_2"
                     search_path = (
-                        f"{self.start.run_loc}/{self.start.constr_atoms[0]}"
-                        f"{self.start.atom_specifier[0]}/init_2/aims.out"
+                        f"{self.start.run_loc}/{self.constr_atoms[0]}"
+                        f"{self.atom_specifier[0]}/init_2/aims.out"
                     )
                 if constr_method == "basis":
                     prev_calc = "ground"
@@ -869,7 +869,9 @@ class ExcitedCalc:
         return prev_calc
 
     def run_excited(
-        self, run_type: Literal["init_1", "init_2", "hole"], atom_specifier
+        self,
+        run_type: Literal["init_1", "init_2", "hole"],
+        spec_run_info,
     ) -> None:
         """
         Run an excited projector or basis calculations.
@@ -878,34 +880,34 @@ class ExcitedCalc:
         ----------
             run_type : Literal['init_1', 'init_2', 'hole']
                 type of excited calculation to run
-            atom_specifier : List[int]
-                atom indices to constrain
+            spec_run_info : str
+                redirection location for STDERR of calculation
         """
 
         set_env_vars()
 
         if self.start.print_output:  # Print live output of calculation
-            for i in range(len(atom_specifier)):
+            for i in range(len(self.atom_specifier)):
                 i += 1
                 os.system(
-                    f"cd {self.start.run_loc}/{self.start.constr_atoms[0]}{i}/{self.start.run_type} "
-                    f"&& mpirun -n {self.start.nprocs} {self.start.binary} "
-                    f"| tee aims.out {self.start.spec_run_info}"
+                    f"cd {self.start.run_loc}/{self.constr_atoms[0]}{i}/"
+                    f"{self.start.run_type} && mpirun -n {self.start.nprocs} "
+                    f"{self.start.binary} | tee aims.out {spec_run_info}"
                 )
                 if run_type != "init_1" and run_type != "init_2":
                     print_ks_states(self.start.run_loc)
 
         else:
             with progressbar(
-                range(len(atom_specifier)),
+                range(len(self.atom_specifier)),
                 label=f"calculating {run_type}:",
             ) as prog_bar:
                 for i in prog_bar:
                     i += 1
                     os.system(
-                        f"cd {self.start.run_loc}/{self.start.constr_atoms[0]}{i}/"
-                        f"{run_type} && mpirun -n {self.start.nprocs} {self.start.binary}"
-                        " > aims.out {self.spec_run_info}"
+                        f"cd {self.start.run_loc}/{self.constr_atoms[0]}{i}/{run_type}"
+                        f" && mpirun -n {self.start.nprocs} {self.start.binary}"
+                        f" > aims.out {spec_run_info}"
                     )
 
             # TODO figure out how to parse STDOUT so a completed successfully calculation
