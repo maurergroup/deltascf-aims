@@ -11,7 +11,6 @@ from ase.calculators.aims import Aims
 from ase.data.pubchem import pubchem_atoms_search
 from ase.io import write
 from click import BadParameter, MissingParameter, progressbar
-
 from delta_scf.force_occupation import ForceOccupation as fo
 
 
@@ -152,7 +151,7 @@ def check_args(*args) -> None:
             raise MissingParameter(param_hint=f"'--{arg[0]}'", param_type="option")
 
 
-def check_constrained_geom(geom_file) -> bool:
+def check_constrained_geom(geom_file) -> None:
     """
     Check for any constrain_relaxation keywords in geometry.in.
 
@@ -160,33 +159,21 @@ def check_constrained_geom(geom_file) -> bool:
     ----------
         geom_file : str
             path to geometry.in file
-
-    Returns
-    -------
-        lattice_vecs : bool
-            True if lattice vectors are found, False otherwise
     """
 
-    lattice_vecs = False
-
     for line in geom_file:
-        if "lattice_vector" in line:
-            lattice_vecs = True
-
         if "constrain_relaxation" in line:
             print("'constrain_relaxation' keyword found in geometry.in")
             print("ensure that no atoms are fixed in the geometry.in file")
             print(
                 "the geometry of the structure should have already been relaxed before "
-                "any single point calculations"
+                "running single-point calculations"
             )
             print("aborting...")
             raise SystemExit
 
-    return lattice_vecs
 
-
-def check_control_k_grid(control_file) -> bool:
+def check_k_grid(control_file) -> bool:
     """
     Check if there is a k_grid in the control.in.
 
@@ -208,6 +195,25 @@ def check_control_k_grid(control_file) -> bool:
             k_grid = True
 
     return k_grid
+
+
+def check_lattice_vecs(geom_file) -> bool:
+    """
+    Check if lattice vectors are given in the geometry.in file.
+
+    Returns
+    -------
+        l_vecs : bool
+            True if lattice vectors are found, False otherwise
+    """
+
+    l_vecs = False
+
+    for line in geom_file:
+        if "lattice_vector" in line:
+            l_vecs = True
+
+    return l_vecs
 
 
 def check_params(start, include_hpc=True) -> None:
@@ -603,11 +609,11 @@ class GroundCalc:
             write(f"{self.run_loc}/geometry.in", self.atoms, format="aims")
 
         # Copy the geometry.in and control.in files to the ground directory
-        if control_inp is not None:
-            os.system(f"cp {control_inp} {self.run_loc}/ground")
+        # if control_inp is not None:
+        os.system(f"cp {control_inp.name} {self.run_loc}/ground")
 
-        if geom_inp is not None:
-            os.system(f"cp {geom_inp} {self.run_loc}/ground")
+        # if geom_inp is not None:
+        os.system(f"cp {geom_inp.name} {self.run_loc}/ground")
 
     def add_extra_basis_fns(self, constr_atom) -> None:
         """

@@ -11,7 +11,6 @@ packages = [{ include = "delta_scf" }]
 python = ">=3.10,<3.13"
 pyyaml = "^6.0"
 click = "^8.1.7"
-scipy = "^1.11.3"
 matplotlib = "^3.8.1"
 numpy = "^1.26.2"
 ase = "^3.22.1"

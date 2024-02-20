@@ -3,9 +3,9 @@
 import sys
 
 import click
+from dscf_utils.custom_click import MutuallyExclusive, MutuallyInclusive, ShowHelpSubCmd
 
 from delta_scf.aims_dscf import BasisWrapper, Process, ProjectorWrapper, Start
-from dscf_utils.custom_click import MutuallyExclusive, MutuallyInclusive, ShowHelpSubCmd
 
 
 @click.group()
@@ -192,7 +192,9 @@ def cli(
     )
 
     # start.check_for_help_arg()
-    start.check_for_geometry()
+    if len(spec_at_constr) > 0:
+        start.check_for_geometry()
+
     start.check_for_pbcs()
     start.check_ase_usage()
     start.atoms = start.create_structure()
@@ -276,7 +278,7 @@ def projector(start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_op
         start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts
     )
 
-    if start.lattice_vecs or proj.l_vecs is not None:
+    if start.found_l_vecs or start.found_k_grid:
         if proj.pbc is None:
             proj.check_periodic()
 

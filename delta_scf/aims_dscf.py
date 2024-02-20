@@ -7,16 +7,16 @@ from pathlib import Path
 from typing import List, Literal, Tuple, Union
 
 import click
+import dscf_utils.main_utils as du
 import numpy as np
 from ase import Atoms
 from ase.io import read
+from dscf_utils.main_utils import ExcitedCalc, GroundCalc
 
 import delta_scf.calc_dscf as cds
-import dscf_utils.main_utils as du
 from delta_scf.force_occupation import Basis, ForceOccupation, Projector
 from delta_scf.plot import XPSSpectrum
 from delta_scf.schmid_pseudo_voigt import broaden
-from dscf_utils.main_utils import ExcitedCalc, GroundCalc
 
 
 class Start(object):
@@ -149,37 +149,31 @@ class Start(object):
 
     def check_for_geometry(self) -> None:
         """
-        Check a geometry file exists if specific atom indices are to be constrained.
+        Check a geometry file exists.
         """
 
-        if len(self.spec_at_constr) > 0:
-            if not self.geometry_input:
-                raise click.MissingParameter(
-                    param_hint="-e/--geometry_input", param_type="option"
-                )
+        if not self.geometry_input:
+            raise click.MissingParameter(
+                param_hint="-e/--geometry_input", param_type="option"
+            )
 
     def check_for_pbcs(self) -> None:
         """
         Check for lattice vectors and k_grid in input files.
         """
 
-        found_lattice_vecs = False
+        self.found_lattice_vecs = False
         if self.geometry_input is not None:
-            found_lattice_vecs = du.check_constrained_geom(self.geometry_input)
+            du.check_constrained_geom(self.geometry_input)
+            self.found_l_vecs = du.check_lattice_vecs(self.geometry_input)
         else:
             self.geometry_input = None
-            self.lattice_vecs = None
 
-        found_k_grid = False
+        self.found_k_grid = False
         if self.control_input is not None:
-            found_k_grid = du.check_control_k_grid(self.control_input)
+            self.found_k_grid = du.check_k_grid(self.control_input)
         else:
             self.control_input = None
-
-        if found_lattice_vecs or found_k_grid:
-            self.lattice_vecs = True
-        else:
-            self.lattice_vecs = False
 
     def check_ase_usage(self) -> None:
         """
@@ -663,12 +657,6 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
                 Projector instance of ForceOccupation
         """
 
-        # Add None as a default value for k_grid if not already present
-        if "k_grid" not in self.control_opts:
-            found_k_grid = False
-        else:
-            found_k_grid = True
-
         proj.setup_init_1(self.start.basis_set, self.start.species, self.ground_control)
         proj.setup_init_2(
             self.ks_range[0],
@@ -676,7 +664,7 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
             self.start.occupation,
             self.occ_type,
             self.spin,
-            found_k_grid,
+            self.start.found_k_grid,
         )
         proj.setup_hole(
             self.ks_range[0],
@@ -684,7 +672,7 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
             self.start.occupation,
             self.occ_type,
             self.spin,
-            found_k_grid,
+            self.start.found_k_grid,
         )
 
     def _cp_restart_files(self, atom, begin, end) -> None:
@@ -805,6 +793,7 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
             self.ground_geom,
             self.control_opts,
             f"{self.start.species}/defaults_2020/{self.start.basis_set}",
+            self.start.use_extra_basis,
         )
 
         # Get the atom indices to constrain
@@ -994,24 +983,6 @@ class BasisWrapper(GroundCalc):
 
         # Convert control options to a dictionary
         control_opts = du.convert_opts_to_dict(control_opts, None)
-
-    # TODO: remove and put outside of class in ifmain
-    # def run_ground(self) -> None:
-    #     """
-    #     Run the ground state calculation.
-    #     """
-
-    #     self.run(
-    #         self.start.geom_inp,
-    #         self.start.control_inp,
-    #         self.start.constr_atom,
-    #         self.start.calc,
-    #         self.control_opts,
-    #         self.l_vecs,
-    #         self.start.print_output,
-    #         self.start.nprocs,
-    #         self.start.binary,
-    #     )
 
     def _add_control_keywords(self, fo, atom_specifier) -> None:
         """

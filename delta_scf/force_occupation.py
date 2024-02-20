@@ -26,12 +26,15 @@ class ForceOccupation:
     TODO
     """
 
-    def __init__(self, element_symbols, run_loc, geometry, ad_cont_opts, species):
+    def __init__(
+        self, element_symbols, run_loc, geometry, ad_cont_opts, species, extra_basis
+    ):
         self.element_symbols = element_symbols
         self.run_loc = run_loc
         self.geometry = geometry
         self.ad_cont_opts = ad_cont_opts
         self.species = species
+        self.extra_basis = extra_basis
 
         # Convert k_grid key to a string from a tuple
         # Writing the options for a hole calculation doesn't use ASE, so it must be
@@ -480,17 +483,17 @@ class ForceOccupation:
                         content[j:].index(f"    nucleus             {at_num}\n") + j
                     )
                     nucleus = content[nuclear_index]  # save for hole
-                    content[nuclear_index] = (
-                        f"    nucleus             {at_num + partial_charge}\n"
-                    )
+                    content[
+                        nuclear_index
+                    ] = f"    nucleus             {at_num + partial_charge}\n"
                 elif f"    nucleus      {at_num}\n" in content[j:]:
                     nuclear_index = (
                         content[j:].index(f"    nucleus      {at_num}\n") + j
                     )
                     nucleus = content[nuclear_index]  # save for hole
-                    content[nuclear_index] = (
-                        f"    nucleus      {at_num + partial_charge}\n"
-                    )
+                    content[
+                        nuclear_index
+                    ] = f"    nucleus      {at_num + partial_charge}\n"
 
                 # Add to valence orbital
                 if "#     ion occupancy\n" in content[j:]:
@@ -642,9 +645,10 @@ class Projector(ForceOccupation):
                 control_content = self.change_control_keywords(i1_control, opts)
 
                 # Add additional core-hole basis functions
-                control_content = self.add_additional_basis(
-                    self.current_path, self.elements, control_content, f"{el}1"
-                )
+                if self.extra_basis:
+                    control_content = self.add_additional_basis(
+                        self.current_path, self.elements, control_content, f"{el}1"
+                    )
 
                 (
                     self.n_index,
@@ -709,9 +713,10 @@ class Projector(ForceOccupation):
                 control_content = self.change_control_keywords(i2_control, opts)
 
                 # Add additional core-hole basis functions
-                control_content = self.add_additional_basis(
-                    self.current_path, self.elements, control_content, f"{el}1"
-                )
+                if self.extra_basis:
+                    control_content = self.add_additional_basis(
+                        self.current_path, self.elements, control_content, f"{el}1"
+                    )
 
                 # Add partial charge to the control file
                 _, _, _, control_content = self.add_partial_charge(
@@ -788,9 +793,10 @@ class Projector(ForceOccupation):
                 control_content = self.change_control_keywords(h_control, opts)
 
                 # Add additional core-hole basis functions
-                control_content = self.add_additional_basis(
-                    self.current_path, self.elements, control_content, f"{el}1"
-                )
+                if self.extra_basis:
+                    control_content = self.add_additional_basis(
+                        self.current_path, self.elements, control_content, f"{el}1"
+                    )
 
                 # Remove partial charge from the control file
                 _, _, _, control_content = self.add_partial_charge(
@@ -907,9 +913,10 @@ class Basis(ForceOccupation):
                 control_content = self.change_control_keywords(control, opts)
 
                 # Add additional core-hole basis functions
-                control_content = self.add_additional_basis(
-                    self.current_path, self.elements, control_content, f"{el}1"
-                )
+                if self.extra_basis:
+                    control_content = self.add_additional_basis(
+                        self.current_path, self.elements, control_content, f"{el}1"
+                    )
 
                 # Write the keywords and basis functions to the file
                 with open(control, "w") as write_control:
