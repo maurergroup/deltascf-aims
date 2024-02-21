@@ -7,16 +7,16 @@ from pathlib import Path
 from typing import List, Literal, Tuple, Union
 
 import click
-import dscf_utils.main_utils as du
 import numpy as np
 from ase import Atoms
 from ase.io import read
-from dscf_utils.main_utils import ExcitedCalc, GroundCalc
 
 import delta_scf.calc_dscf as cds
+import dscf_utils.main_utils as du
 from delta_scf.force_occupation import Basis, ForceOccupation, Projector
 from delta_scf.plot import XPSSpectrum
 from delta_scf.schmid_pseudo_voigt import broaden
+from dscf_utils.main_utils import ExcitedCalc, GroundCalc
 
 
 class Start(object):
@@ -71,8 +71,8 @@ class Start(object):
     -------
         check_for_help_arg()
             Print click help if --help flag is given
-        check_for_geometry()
-            Check a geometry file exists if specific atom indices are to be constrained
+        check_for_geometry_input()
+            Check that the geometry file parameter has been given
         check_for_pbcs()
             Check for lattice vectors and k_grid in input files
         check_ase_usage()
@@ -147,9 +147,9 @@ class Start(object):
 
     #     return wrapper_check_help_arg
 
-    def check_for_geometry(self) -> None:
+    def check_for_geometry_input(self) -> None:
         """
-        Check a geometry file exists.
+        Check that the geometry file parameter has been given
         """
 
         if not self.geometry_input:
@@ -167,13 +167,13 @@ class Start(object):
             du.check_constrained_geom(self.geometry_input)
             self.found_l_vecs = du.check_lattice_vecs(self.geometry_input)
         else:
-            self.geometry_input = None
+            self.found_l_vecs = False
 
         self.found_k_grid = False
         if self.control_input is not None:
             self.found_k_grid = du.check_k_grid(self.control_input)
         else:
-            self.control_input = None
+            self.found_k_grid = False
 
     def check_ase_usage(self) -> None:
         """
@@ -263,7 +263,7 @@ class Start(object):
 
         return current_path, bin_path
 
-    def bin_path_prompt(self, current_path, bin_path) -> None:
+    def bin_path_prompt(self, current_path, bin_path) -> str:
         """
         Ensure the user has entered the path to the binary. If not open the user's
         $EDITOR to allow them to enter the path.
@@ -550,8 +550,6 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
             Check that the parameters given in Start are valid
         _check_prev_runs(prev_calc, atom)
             Check if the required previous calculation has been run
-        _add_control_opts(fo, atom, calc)
-            Add any additional control options to the control file
         _cp_restart_files(atom, begin, end)
             Copy the restart files from one calculation location to another
         run_ground()
@@ -570,9 +568,8 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
     def __init__(
         self, start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts
     ):
-        # We only need to call __init__ from the GroundCalc parent class
-        # All that is defined in __init__ from ExcitedCalc is an instance of Start
-        super().__init__(
+        # Get methods from GroundCalc
+        super(ProjectorWrapper, self).__init__(
             start.run_loc,
             start.atoms,
             start.basis_set,
@@ -580,6 +577,9 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
             start.ase,
             start.hpc,
         )
+
+        # Get methods from ExcitedCalc
+        super(GroundCalc, self).__init__(start)
 
         self.start = start
         self.run_type = run_type
@@ -604,12 +604,16 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
         else:
             self.constr_atoms = self.start.constr_atom
 
-    def _calc_checks(self, current_calc, check_restart=True, check_args=False) -> None:
+    def _calc_checks(
+        self, prev_calc, current_calc, check_restart=True, check_args=False
+    ) -> None:
         """
         Perform checks before running an excited calculation.
 
         Parameters
         ----------
+            prev_calc : str
+                previous calculation that was run
             current_calc : str
                 type of excited calculation to perform
             check_restart : bool
@@ -617,9 +621,6 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
             check_args : bool
                 whether to check CLI supplied arguments or not
         """
-
-        # Check that the ground state calculation has been run
-        prev_calc = super().check_prereq_calc(current_calc, "projector")
 
         # Check that the current calculation has not already been run
         du.check_curr_prev_run(
@@ -634,7 +635,7 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
         # Check that the restart files exist from the previous calculation
         if check_restart:
             for i_atom in self.atom_specifier:
-                super().check_restart_files(prev_calc, i_atom)
+                self.check_restart_files(self.constr_atoms, prev_calc, i_atom)
 
         # Check that the constrained atoms have been given
         if current_calc != "hole":
@@ -773,7 +774,7 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
         except IndexError:
             raise click.MissingParameter(param_hint="-p/--pbc", param_type="option")
 
-    def setup_excited(self) -> str:
+    def setup_excited(self) -> Tuple[List[int], str]:
         """
         Setup files and parameters required for the init and hole calculations.
 
@@ -785,6 +786,12 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
 
         # Get element symbols to constrain
         element_symbols = self._get_element_symbols()
+
+        # Check that the prerequisite calculation has been run
+        # This has to be done outside of _calc_checks as that function requires
+        # atom_specifier which is set in a function that requires ForceOccupation to be
+        # initialised.
+        prev_calc = self.check_prereq_calc("init_1", self.constr_atoms, "projector")
 
         # Create the ForceOccupation object
         fo = ForceOccupation(
@@ -799,7 +806,7 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
         # Get the atom indices to constrain
         self.atom_specifier = self._get_atom_indices(fo)
 
-        self._calc_checks("init_1", check_restart=False, check_args=True)
+        self._calc_checks(prev_calc, "init_1", check_restart=False, check_args=True)
 
         # TODO allow this for multiple constrained atoms using n_atoms
         for atom in element_symbols:
@@ -810,9 +817,9 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
 
         spec_run_info = ""
 
-        return spec_run_info
+        return self.atom_specifier, spec_run_info
 
-    def pre_init_2(self) -> str:
+    def pre_init_2(self) -> Tuple[List[int], str]:
         """
         Prerequisite before running the 2nd init calculation.
 
@@ -825,6 +832,12 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
         # Get element symbols to constrain
         element_symbols = self._get_element_symbols()
 
+        # Check that the prerequisite calculation has been run
+        # This has to be done outside of _calc_checks as that function requires
+        # atom_specifier which is set in a function that requires ForceOccupation to be
+        # initialised.
+        prev_calc = self.check_prereq_calc("init_2", self.constr_atoms, "projector")
+
         # Create the ForceOccupation object
         fo = ForceOccupation(
             element_symbols,
@@ -832,6 +845,7 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
             self.ground_geom,
             self.control_opts,
             f"{self.start.species}/defaults_2020/{self.start.basis_set}",
+            self.start.use_extra_basis,
         )
 
         # Get the atom indices to constrain
@@ -839,24 +853,29 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
 
         # Add any additional options to the control file
         for i in range(len(self.atom_specifier)):
-            i += 1
 
             # Also check that the previous calculation has been run
-            self._calc_checks("init_2")
+            self._calc_checks(prev_calc, "init_2")
 
             if len(self.control_opts) > 0 or self.start.control_input:
-                du.add_control_opts(self.start, self.control_opts, i, "init_2")
+                du.add_control_opts(
+                    self.start,
+                    self.constr_atoms,
+                    self.control_opts,
+                    self.atom_specifier[i],
+                    "init_2",
+                )
 
             # Copy the restart files to init_2 from init_1
-            self._cp_restart_files(i, "init_1", "init_2")
+            self._cp_restart_files(self.atom_specifier[i], "init_1", "init_2")
 
         # Prevent SCF not converged errors from printing
         # It could be an issue to do this if any other errors occur
         spec_run_info = " 2>/dev/null"
 
-        return spec_run_info
+        return self.atom_specifier, spec_run_info
 
-    def pre_hole(self) -> str:
+    def pre_hole(self) -> Tuple[List[int], str]:
         """
         Prerequisite before running the hole calculation
 
@@ -869,6 +888,13 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
         # Get element symbols to constrain
         element_symbols = self._get_element_symbols()
 
+        # Check that the prerequisite calculation has been run
+        # This has to be done outside of _calc_checks as that function requires
+        # atom_specifier which is set in a function that requires ForceOccupation to be
+        # initialised.
+        if not self.start.hpc:
+            prev_calc = self.check_prereq_calc("hole", self.constr_atoms, "projector")
+
         # Create the ForceOccupation object
         fo = ForceOccupation(
             element_symbols,
@@ -876,15 +902,16 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
             self.ground_geom,
             self.control_opts,
             f"{self.start.species}/defaults_2020/{self.start.basis_set}",
+            self.start.use_extra_basis,
         )
 
         # Get the atom indices to constrain
         self.atom_specifier = self._get_atom_indices(fo)
 
         if self.start.hpc:
-            self._calc_checks("hole", check_args=True)
+            self._calc_checks(None, "hole", check_restart=False, check_args=True)
 
-            for atom in self.start.element_symbols:
+            for atom in element_symbols:
                 fo.get_electronic_structure(atom)
 
             # Setup files required for the initialisation and hole calculations
@@ -892,27 +919,33 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
             self._call_setups(proj)
 
         # Add a tag to the geometry file to identify the molecule name
-        du.add_molecule_identifier(self.start, self.atom_specifier)
+        if self.start.spec_mol is not None:
+            du.add_molecule_identifier(self.start, self.atom_specifier)
 
         if not self.start.hpc:
             # Add any additional control options to the hole control file
             for i in range(len(self.atom_specifier)):
-                i += 1
 
                 # Check for if init_2 hasn't been run
-                self._calc_checks("hole")
+                self._calc_checks(prev_calc, "hole")
 
                 if len(self.control_opts) > 0 or self.start.control_input:
-                    du.add_control_opts(self.start, self.control_opts, i, "hole")
+                    du.add_control_opts(
+                        self.start,
+                        self.constr_atoms,
+                        self.control_opts,
+                        self.atom_specifier[i],
+                        "hole",
+                    )
 
                 # Copy the restart files to hole from init_2
-                self._cp_restart_files(i, "init_2", "hole")
+                self._cp_restart_files(self.atom_specifier[i], "init_2", "hole")
 
         # Don't redirect STDERR to /dev/null as not converged errors should not occur
         # here
         spec_run_info = ""
 
-        return spec_run_info
+        return self.atom_specifier, spec_run_info
 
 
 class BasisWrapper(GroundCalc):

@@ -3,9 +3,9 @@
 import sys
 
 import click
-from dscf_utils.custom_click import MutuallyExclusive, MutuallyInclusive, ShowHelpSubCmd
 
 from delta_scf.aims_dscf import BasisWrapper, Process, ProjectorWrapper, Start
+from dscf_utils.custom_click import MutuallyExclusive, MutuallyInclusive, ShowHelpSubCmd
 
 
 @click.group()
@@ -193,7 +193,7 @@ def cli(
 
     # start.check_for_help_arg()
     if len(spec_at_constr) > 0:
-        start.check_for_geometry()
+        start.check_for_geometry_input()
 
     start.check_for_pbcs()
     start.check_ase_usage()
@@ -289,29 +289,31 @@ def projector(start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_op
         case "ground":
             proj.setup_ground(start.geometry_input, start.control_input)
 
-            if not start.hpc:  # Don't run on HPC
-                proj.run_ground(
-                    proj.control_opts,
-                    proj.l_vecs,
-                    start.print_output,
-                    start.nprocs,
-                    start.binary,
-                    start.atoms.calc,
-                )
+            proj.run_ground(
+                proj.control_opts,
+                proj.l_vecs,
+                start.use_extra_basis,
+                start.print_output,
+                start.nprocs,
+                start.binary,
+                start.atoms.calc,
+            )
 
         case "init_1":
-            spec_run_info = proj.setup_excited()
-            proj.run_excited("init_1", spec_run_info)
+            atom_specifier, spec_run_info = proj.setup_excited()
+            proj.run_excited(atom_specifier, proj.constr_atoms, "init_1", spec_run_info)
 
         case "init_2":
-            spec_run_info = proj.pre_init_2()
-            proj.run_excited("init_2", spec_run_info)
+            atom_specifier, spec_run_info = proj.pre_init_2()
+            proj.run_excited(atom_specifier, proj.constr_atoms, "init_2", spec_run_info)
 
         case "hole":
-            spec_run_info = proj.pre_hole()
+            atom_specifier, spec_run_info = proj.pre_hole()
 
             if not start.hpc:  # Don't run on HPC
-                proj.run_excited("hole", spec_run_info)
+                proj.run_excited(
+                    atom_specifier, proj.constr_atoms, "hole", spec_run_info
+                )
 
         case _:
             raise ValueError(f"Invalid run_type: {proj.run_type}")

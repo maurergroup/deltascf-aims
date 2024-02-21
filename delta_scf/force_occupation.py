@@ -81,7 +81,7 @@ class ForceOccupation:
                 if atom not in self.elements:
                     raise ValueError("invalid element specified")
 
-            print("Calculating all target atoms in geometry.in")
+            print("calculating all target atoms in geometry.in")
 
             # Constrain all atoms of the target element
             for atom in constr_atoms:
@@ -403,11 +403,16 @@ class ForceOccupation:
         divider_1 = "#==============================================================================="
         divider_2 = "################################################################################"
 
+        short_circuit = False
+
         # Change keyword lines
-        for opt in opts:
+        for i, opt in enumerate(opts):
             ident = 0
 
             for j, line in enumerate(content):
+                if short_circuit:
+                    break
+
                 spl = line.split()
 
                 if opt in spl:
@@ -429,10 +434,19 @@ class ForceOccupation:
                     content.insert(j - 1, f"{opt:<34} {opts[opt]}\n")
                     break
 
-            # TODO
             # Ensure keywords are added in all other instances
-            # if ident == 0:
-            #     content.insert(0, f"{opt:<34} {opts[opt]}\n")
+            if ident == 0:
+                short_circuit = True
+
+                if i == 0:
+                    content.append(divider_1 + "\n")
+                    content.append(f"{opt:<34} {opts[opt]}\n")
+
+                else:
+                    content.append(f"{opt:<34} {opts[opt]}\n")
+
+                if i == len(opts) - 1:
+                    content.append(divider_1 + "\n")
 
         return content
 
@@ -483,17 +497,17 @@ class ForceOccupation:
                         content[j:].index(f"    nucleus             {at_num}\n") + j
                     )
                     nucleus = content[nuclear_index]  # save for hole
-                    content[
-                        nuclear_index
-                    ] = f"    nucleus             {at_num + partial_charge}\n"
+                    content[nuclear_index] = (
+                        f"    nucleus             {at_num + partial_charge}\n"
+                    )
                 elif f"    nucleus      {at_num}\n" in content[j:]:
                     nuclear_index = (
                         content[j:].index(f"    nucleus      {at_num}\n") + j
                     )
                     nucleus = content[nuclear_index]  # save for hole
-                    content[
-                        nuclear_index
-                    ] = f"    nucleus      {at_num + partial_charge}\n"
+                    content[nuclear_index] = (
+                        f"    nucleus      {at_num + partial_charge}\n"
+                    )
 
                 # Add to valence orbital
                 if "#     ion occupancy\n" in content[j:]:

@@ -11,10 +11,11 @@ from ase.calculators.aims import Aims
 from ase.data.pubchem import pubchem_atoms_search
 from ase.io import write
 from click import BadParameter, MissingParameter, progressbar
+
 from delta_scf.force_occupation import ForceOccupation as fo
 
 
-def add_control_opts(start, control_opts, atom, calc) -> None:
+def add_control_opts(start, constr_atoms, control_opts, atom, calc) -> None:
     """
     Add additional control options to the control file.
 
@@ -22,8 +23,10 @@ def add_control_opts(start, control_opts, atom, calc) -> None:
     ----------
         start : Start
             instance of the Start class
-        control_opts : list
-            tuple of control options
+        constr_atoms : list[str]
+            list of constrained atoms
+        control_opts : dict
+            dictionary of control options
         atom : int
             atom to add the control options to
         calc : str
@@ -31,16 +34,16 @@ def add_control_opts(start, control_opts, atom, calc) -> None:
     """
 
     parsed_control_opts = fo.get_control_keywords(
-        f"{start.run_loc}/{start.constr_atoms[0]}{atom}/{calc}/control.in"
+        f"{start.run_loc}/{constr_atoms[0]}{atom}/{calc}/control.in"
     )
     mod_control_opts = fo.mod_keywords(control_opts, parsed_control_opts)
     control_content = fo.change_control_keywords(
-        f"{start.run_loc}/{start.constr_atoms[0]}{atom}/{calc}/control.in",
+        f"{start.run_loc}/{constr_atoms[0]}{atom}/{calc}/control.in",
         mod_control_opts,
     )
 
     with open(
-        f"{start.run_loc}/{start.constr_atoms[0]}{atom}/{calc}/control.in",
+        f"{start.run_loc}/{constr_atoms[0]}{atom}/{calc}/control.in",
         "w",
     ) as control_file:
         control_file.writelines(control_content)
@@ -280,13 +283,14 @@ def check_curr_prev_run(
     if os.path.isfile(search_path) and not hpc:
         warnings.warn("Calculation has already been completed")
         cont = None
-        while cont != "y" or cont != "n":
+        while cont != "y":
             cont = str(input("Do you want to continue? (y/n) ")).lower()
 
             if cont == "n":
                 print("aborting...")
                 raise SystemExit(1)
-            elif cont == "y":
+
+            if cont == "y":
                 break
 
 
@@ -319,6 +323,18 @@ def convert_opts_to_dict(opts, pbc) -> dict:
         opts_dict.update({"k_grid": pbc})
 
     return opts_dict
+
+
+def convert_tuple_key_to_str(control_opts) -> dict:
+    """
+    Convert any keys given as tuples to strings in control_opts
+    """
+
+    for i in control_opts.items():
+        if type(i[1]) == tuple:
+            control_opts[i[0]] = " ".join(str(j) for j in i[1])
+
+    return control_opts
 
 
 def create_calc(procs, binary, species, int_grid) -> Aims:
@@ -406,7 +422,7 @@ def print_ks_states(run_loc) -> None:
     """
 
     # Parse the output file
-    with open(f"{run_loc}/ground/aims.out", "r") as aims:
+    with open(f"{run_loc}/aims.out", "r") as aims:
         lines = aims.readlines()
 
     su_eigs_start_line = None
@@ -493,11 +509,14 @@ def warn_no_extra_control_opts(opts, inp) -> None:
     """
     if len(opts) < 1 and inp is None:
         warnings.warn(
-            "No control options provided, using default options which can be found in the 'control.in' file"
+            "No extra control options provided, using default options which can be "
+            "found in the 'control.in' file"
         )
 
 
-def write_control(run_loc, control_opts, atoms, int_grid, defaults) -> None:
+def write_control(
+    run_loc, control_opts, atoms, int_grid, add_extra_basis, defaults
+) -> None:
     """
     Write a control.in file
 
@@ -516,25 +535,33 @@ def write_control(run_loc, control_opts, atoms, int_grid, defaults) -> None:
     """
 
     # Firstly create the control file
-    os.system(f"touch {run_loc}/ground/control.in")
+    os.system(f"touch {run_loc}/control.in")
 
-    # Convert any keys given as tuples to strings
-    for i in control_opts.items():
-        if type(i[1]) == tuple:
-            control_opts[i[0]] = " ".join(str(j) for j in i[1])
+    control_opts = convert_tuple_key_to_str(control_opts)
 
     # Use the static method from ForceOccupation
-    lines = fo.change_control_keywords(f"{run_loc}/ground/control.in", control_opts)
+    lines = fo.change_control_keywords(f"{run_loc}/control.in", control_opts)
 
-    with open(f"{run_loc}/ground/control.in", "w") as control:
+    with open(f"{run_loc}/control.in", "w") as control:
         control.writelines(lines)
 
     # Then add the basis set
     elements = list(set(atoms.get_chemical_symbols()))
 
     for el in elements:
-        basis_set = glob.glob(f"{defaults}/ch_basis_sets/{int_grid}/*{el}_default")[0]
-        os.system(f"cat {basis_set} >> {run_loc}/ground/control.in")
+        # TODO Add extra basis functions for ground state calculations
+        # if add_extra_basis:
+        #     basis_set = glob.glob(f"{defaults}/ch_basis_sets/{int_grid}/*{el}_default")[
+        #         0
+        #     ]
+
+        #     os.system(f"cat {basis_set} >> {run_loc}/control.in")
+
+        basis_set = glob.glob(f"{defaults}/defaults_2020/{int_grid}/*{el}_default")[0]
+        os.system(f"cat {basis_set} >> {run_loc}/control.in")
+
+    # Copy it to the ground directory
+    os.system(f"cp control.in {run_loc}/ground")
 
 
 class GroundCalc:
@@ -601,19 +628,22 @@ class GroundCalc:
             control_inp : str
                 path to the control.in file
         """
+
         # Create the ground directory if it doesn't already exist
         os.system(f"mkdir -p {self.run_loc}/ground")
 
         # Write the geometry file if the system is specified through CLI
-        if geom_inp is None and control_inp is not None:
+        if geom_inp is None:
             write(f"{self.run_loc}/geometry.in", self.atoms, format="aims")
 
         # Copy the geometry.in and control.in files to the ground directory
-        # if control_inp is not None:
-        os.system(f"cp {control_inp.name} {self.run_loc}/ground")
+        if control_inp is not None:
+            # os.system(f"cp {control_inp.name} {self.run_loc}/ground")
+            os.system(f"cp control.in {self.run_loc}/ground")
 
-        # if geom_inp is not None:
-        os.system(f"cp {geom_inp.name} {self.run_loc}/ground")
+        if geom_inp is not None:
+            # os.system(f"cp {geom_inp.name} {self.run_loc}/ground")
+            os.system(f"cp geometry.in {self.run_loc}/ground")
 
     def add_extra_basis_fns(self, constr_atom) -> None:
         """
@@ -669,7 +699,7 @@ class GroundCalc:
                     f"{self.species}/ch_self.basis_sets/{self.basis_set}/"
                 )
 
-    def _with_ase(self, calc, control_opts, l_vecs) -> None:
+    def _with_ase(self, calc, control_opts, add_extra_basis, l_vecs) -> None:
         """
         Run the ground state calculation using ASE.
 
@@ -701,7 +731,12 @@ class GroundCalc:
 
             print("writing control.in file...")
             write_control(
-                self.run_loc, control_opts, self.atoms, self.basis_set, self.species
+                self.run_loc,
+                control_opts,
+                self.atoms,
+                self.basis_set,
+                add_extra_basis,
+                self.species,
             )
 
         else:
@@ -740,6 +775,7 @@ class GroundCalc:
     def run_ground(
         self,
         control_opts,
+        add_extra_basis,
         l_vecs,
         print_output,
         nprocs,
@@ -771,15 +807,15 @@ class GroundCalc:
         # Run the ground state calculation
         if os.path.isfile(f"{self.run_loc}/ground/aims.out") is False:
             if self.ase:  # Use ASE
-                GroundCalc._with_ase(self, calc, control_opts, l_vecs)
+                self._with_ase(calc, control_opts, add_extra_basis, l_vecs)
 
             elif not self.hpc:  # Don't use ASE
-                GroundCalc._without_ase(self, print_output, nprocs, binary)
+                self._without_ase(print_output, nprocs, binary)
 
             # Print the KS states from aims.out so it is easier to specify the
             # KS states for the hole calculation
             if not self.hpc:
-                print_ks_states(self.run_loc)
+                print_ks_states(f"{self.run_loc}/ground/")
 
         else:
             print("aims.out file found in ground calculation directory")
@@ -790,7 +826,7 @@ class ExcitedCalc:
     def __init__(self, start):
         self.start = start
 
-    def check_restart_files(self, prev_calc, i_atom) -> None:
+    def check_restart_files(self, constr_atoms, prev_calc, i_atom) -> None:
         """
         Check if the restart files from the previous calculation exist.
 
@@ -805,7 +841,7 @@ class ExcitedCalc:
         if (
             len(
                 glob.glob(
-                    f"{self.start.run_loc}/{self.constr_atoms[0]}"
+                    f"{self.start.run_loc}/{constr_atoms[0]}"
                     f"{i_atom}/{prev_calc}/*restart*"
                 )
             )
@@ -820,8 +856,9 @@ class ExcitedCalc:
     def check_prereq_calc(
         self,
         current_calc: Literal["init_1", "init_2", "hole"],
+        constr_atoms,
         constr_method: Literal["projector", "basis"],
-    ) -> Literal["ground", "init_1", "init_2"]:
+    ) -> Literal["ground", "init_1", "init_2"] | None:
         """
         Check if the prerequisite calculation has been run.
 
@@ -833,23 +870,39 @@ class ExcitedCalc:
                 method of constraining atoms
         """
 
+        prev_calc = None  # Placeholder until prev_calc is assigned
+        err_message = (
+            f"aims.out for {prev_calc} not found, please ensure the {prev_calc} "
+            "calculation has been run"
+        )
+
         match current_calc:
             case "init_1":
                 prev_calc = "ground"
                 search_path = f"{self.start.run_loc}/ground/aims.out"
+
             case "init_2":
                 prev_calc = "init_1"
-                search_path = (
-                    f"{self.start.run_loc}/{self.constr_atoms[0]}"
-                    f"{self.atom_specifier[0]}/init_1/aims.out"
-                )
+
+                try:
+                    search_path = glob.glob(
+                        f"{self.start.run_loc}/{constr_atoms[0]}*/init_1/aims.out"
+                    )[0]
+                except FileNotFoundError:
+                    raise FileNotFoundError(err_message)
+
             case "hole":
                 if constr_method == "projector":
                     prev_calc = "init_2"
-                    search_path = (
-                        f"{self.start.run_loc}/{self.constr_atoms[0]}"
-                        f"{self.atom_specifier[0]}/init_2/aims.out"
-                    )
+
+                    try:
+                        search_path = glob.glob(
+                            f"{self.start.run_loc}/{constr_atoms[0]}*/init_2/"
+                            "aims.out"
+                        )[0]
+                    except FileNotFoundError:
+                        raise FileNotFoundError(err_message)
+
                 if constr_method == "basis":
                     prev_calc = "ground"
                     search_path = f"{self.start.run_loc}/ground/aims.out"
@@ -867,15 +920,14 @@ class ExcitedCalc:
                     )
 
         if not os.path.isfile(search_path):
-            raise FileNotFoundError(
-                f"aims.out for {prev_calc} not found, please ensure the {prev_calc} "
-                "calculation has been run"
-            )
+            raise FileNotFoundError(err_message)
 
         return prev_calc
 
     def run_excited(
         self,
+        atom_specifier,
+        constr_atoms,
         run_type: Literal["init_1", "init_2", "hole"],
         spec_run_info,
     ) -> None:
@@ -893,27 +945,27 @@ class ExcitedCalc:
         set_env_vars()
 
         if self.start.print_output:  # Print live output of calculation
-            for i in range(len(self.atom_specifier)):
-                i += 1
+            for i in range(len(atom_specifier)):
                 os.system(
-                    f"cd {self.start.run_loc}/{self.constr_atoms[0]}{i}/"
-                    f"{self.start.run_type} && mpirun -n {self.start.nprocs} "
+                    f"cd {self.start.run_loc}/{constr_atoms[0]}{atom_specifier[i]}/"
+                    f"{run_type} && mpirun -n {self.start.nprocs} "
                     f"{self.start.binary} | tee aims.out {spec_run_info}"
                 )
                 if run_type != "init_1" and run_type != "init_2":
-                    print_ks_states(self.start.run_loc)
+                    print_ks_states(
+                        f"{self.start.run_loc}{constr_atoms[0]}{atom_specifier[i]}/{run_type}/"
+                    )
 
         else:
             with progressbar(
-                range(len(self.atom_specifier)),
+                range(len(atom_specifier)),
                 label=f"calculating {run_type}:",
             ) as prog_bar:
                 for i in prog_bar:
-                    i += 1
                     os.system(
-                        f"cd {self.start.run_loc}/{self.constr_atoms[0]}{i}/{run_type}"
-                        f" && mpirun -n {self.start.nprocs} {self.start.binary}"
-                        f" > aims.out {spec_run_info}"
+                        f"cd {self.start.run_loc}/{constr_atoms[0]}{atom_specifier[i]}"
+                        f"/{run_type}&& mpirun -n {self.start.nprocs} "
+                        f"{self.start.binary} > aims.out {spec_run_info}"
                     )
 
             # TODO figure out how to parse STDOUT so a completed successfully calculation
