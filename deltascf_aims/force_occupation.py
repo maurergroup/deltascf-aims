@@ -232,7 +232,9 @@ class ForceOccupation:
 
         # Get the additional basis set
         if "dscf_utils" in current_path.split("/"):
-            with open(f"{current_path}/../delta_scf/add_basis_functions.yml", "r") as f:
+            with open(
+                f"{current_path}/../deltascf_aims/add_basis_functions.yml", "r"
+            ) as f:
                 ad_basis = yaml.safe_load(f)
         else:
             with open(f"{current_path}/add_basis_functions.yml", "r") as f:
