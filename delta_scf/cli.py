@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
 
-import importlib.metadata
+import sys
 
 import click
 
-from delta_scf.aims_dscf import basis_wrapper, main, process, projector_wrapper
-from utils_dscf.custom_click import MutuallyExclusive as me
+from delta_scf.aims_dscf import BasisWrapper, Process, ProjectorWrapper, Start
+from dscf_utils.custom_click import MutuallyExclusive, MutuallyInclusive, ShowHelpSubCmd
 
 
 @click.group()
+# @click.argument("argument", cls=ShowHelpSubCmd)
 @click.option(
     "-h",
     "--hpc",
-    cls=me,
+    cls=MutuallyExclusive,
     mutually_exclusive=["--binary"],
     is_flag=True,
     help="setup a calculation primarily for use on a HPC cluster WITHOUT "
@@ -22,7 +23,7 @@ from utils_dscf.custom_click import MutuallyExclusive as me
     "-m",
     "--molecule",
     "spec_mol",
-    cls=me,
+    cls=MutuallyExclusive,
     mutually_exclusive=["--geometry_input"],
     type=str,
     help="molecule to be used in the calculation",
@@ -30,7 +31,7 @@ from utils_dscf.custom_click import MutuallyExclusive as me
 @click.option(
     "-e",
     "--geometry_input",
-    cls=me,
+    cls=MutuallyExclusive,
     mutually_exclusive=["--molecule"],
     nargs=1,
     type=click.File(),
@@ -46,7 +47,7 @@ from utils_dscf.custom_click import MutuallyExclusive as me
 @click.option(
     "-y",
     "--binary",
-    cls=me,
+    cls=MutuallyExclusive,
     mutually_exclusive=["hpc"],
     is_flag=True,
     help="modify the path to the FHI-aims binary",
@@ -57,13 +58,13 @@ from utils_dscf.custom_click import MutuallyExclusive as me
     default="./",
     show_default=True,
     type=click.Path(file_okay=False, dir_okay=True),
-    help="Optionally specify a custom location to run the calculation",
+    help="optionally specify a custom location to run the calculation",
 )
 @click.option(
     "-c",
     "--constrained_atom",
     "constr_atom",
-    cls=me,
+    cls=MutuallyExclusive,
     mutually_exclusive=["spec_at_constr"],
     type=str,
     # multiple=True,  # TODO: allow for multiple atoms to be constrained
@@ -73,7 +74,7 @@ from utils_dscf.custom_click import MutuallyExclusive as me
     "-s",
     "--specific_atom_constraint",
     "spec_at_constr",
-    cls=me,
+    cls=MutuallyExclusive,
     mutually_exclusive=["constr_atom"],
     multiple=True,
     type=click.IntRange(min=1, max_open=True),
@@ -103,6 +104,12 @@ from utils_dscf.custom_click import MutuallyExclusive as me
     type=click.Choice(["light", "intermediate", "tight", "really_tight"]),
     help="the basis set to use for the calculation",
 )
+@click.option(
+    "-x",
+    "--use_extra_basis",
+    is_flag=True,
+    help="add additional basis functions for the core hole",
+)
 @click.option("-g", "--graph", is_flag=True, help="print out the simulated XPS spectra")
 @click.option(
     "-p",
@@ -119,13 +126,10 @@ from utils_dscf.custom_click import MutuallyExclusive as me
     type=int,
     help="number of processors to use",
 )
-# @click.option(
-#     "-d", "--debug", is_flag=True, help="for developer use: print debug information"
-# )
-@click.version_option(importlib.metadata.version("deltascf-aims"))
 @click.pass_context
 def cli(
     ctx,
+    # argument,
     hpc,
     geometry_input,
     control_input,
@@ -137,12 +141,13 @@ def cli(
     occupation,
     n_atoms,
     basis_set,
+    use_extra_basis,
     graph,
     print_output,
     nprocs,
-    # debug,
 ):
-    """An interface to automate core-hole constrained occupation methods in
+    """
+    An interface to automate core-hole constrained occupation methods in
     FHI-aims.
 
     There is functionality to use both the older and soon-to-be deprecated
@@ -157,11 +162,18 @@ def cli(
     geometry.in and control.in can be manually created and passed to this program.
     For full documentation, please refer to the README.md.
 
-    Copyright \u00A9 2022-2023, Dylan Morgan dylan.morgan@warwick.ac.uk
+    Copyright \u00A9 2022-2024, Dylan Morgan dylan.morgan@warwick.ac.uk
     """
 
-    main(
-        ctx,
+    # TODO
+    # print(sys.argv)
+
+    # if "--help" in sys.argv:
+    #     tmp = cli.get_help(ctx)
+
+    #     print(tmp)
+
+    start = Start(
         hpc,
         geometry_input,
         control_input,
@@ -173,11 +185,34 @@ def cli(
         occupation,
         n_atoms,
         basis_set,
+        use_extra_basis,
         graph,
         print_output,
         nprocs,
-        # debug,
     )
+
+    # start.check_for_help_arg()
+    if len(spec_at_constr) > 0:
+        start.check_for_geometry_input()
+
+    start.check_for_pbcs()
+    start.check_ase_usage()
+    start.atoms = start.create_structure()
+
+    if start.constr_atom is None:
+        start.find_constr_atom_element(start.atoms)
+
+    curr_path, bin_path = start.check_for_bin()
+    bin_path = start.bin_path_prompt(curr_path, bin_path)
+    start.check_species_path(bin_path)
+
+    # Return the atoms object with a calculator
+    if start.ase:
+        start.atoms = start.add_calc(start.atoms, bin_path)
+
+    # pass the Start and Argument objects to the subcommands
+    # ctx.obj = {"argument": argument, "start": start}
+    ctx.obj = start
 
 
 @cli.command()
@@ -207,9 +242,9 @@ def cli(
     "-l",
     "--lattice_vectors",
     "l_vecs",
-    nargs=1,
-    type=list,
-    help="provide the lattice vectors in a 3x3 matrix",
+    # nargs=3,
+    # type=list,
+    help="provide the lattice vectors as a 3x3 matrix",
 )
 @click.option(
     "-s",
@@ -224,7 +259,7 @@ def cli(
     "--ks_range",
     nargs=2,
     type=click.IntRange(1),
-    help="range of Kohn-Sham states to constrain taken with 2 arguments",
+    help="range of Kohn-Sham states to constrain - taken with 2 arguments",
 )
 @click.option(
     "-c",
@@ -233,13 +268,55 @@ def cli(
     type=str,
     help="provide additional options to be used in 'control.in' in a key=value format",
 )
-@click.pass_context
-def projector(ctx, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts):
-    """Directly force occupation of the Kohn-Sham states."""
+@click.pass_obj
+def projector(start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts):
+    """
+    Force occupation through defining the Kohn-Sham states to occupy.
+    """
 
-    projector_wrapper(
-        ctx, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts
+    proj = ProjectorWrapper(
+        start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts
     )
+
+    if start.found_l_vecs or start.found_k_grid:
+        if proj.pbc is None:
+            proj.check_periodic()
+
+    if start.use_extra_basis:
+        proj.add_extra_basis_fns(start.constr_atom)
+
+    match proj.run_type:
+        case "ground":
+            proj.setup_ground(start.geometry_input, start.control_input)
+
+            proj.run_ground(
+                proj.control_opts,
+                start.use_extra_basis,
+                proj.l_vecs,
+                start.print_output,
+                start.nprocs,
+                start.binary,
+                start.atoms.calc,
+            )
+
+        case "init_1":
+            atom_specifier, spec_run_info = proj.setup_excited()
+            proj.run_excited(atom_specifier, proj.constr_atoms, "init_1", spec_run_info)
+
+        case "init_2":
+            atom_specifier, spec_run_info = proj.pre_init_2()
+            proj.run_excited(atom_specifier, proj.constr_atoms, "init_2", spec_run_info)
+
+        case "hole":
+            atom_specifier, spec_run_info = proj.pre_hole()
+
+            if not start.hpc:  # Don't run on HPC
+                proj.run_excited(
+                    atom_specifier, proj.constr_atoms, "hole", spec_run_info
+                )
+
+        case _:
+            raise ValueError(f"Invalid run_type: {proj.run_type}")
 
 
 @cli.command()
@@ -303,9 +380,9 @@ def projector(ctx, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts
     type=str,
     help="provide additional options to be used in 'control.in'",
 )
-@click.pass_context
+@click.pass_obj
 def basis(
-    ctx,
+    start,
     run_type,
     atom_index,
     occ_type,
@@ -316,10 +393,14 @@ def basis(
     ks_max,
     control_opts,
 ):
-    """Force occupation of Kohn-Sham states through basis functions."""
+    """
+    Force occupation of Kohn-Sham states through basis functions.
+    """
 
-    basis_wrapper(
-        ctx,
+    raise NotImplementedError("This method is not yet implemented")
+
+    BasisWrapper(
+        start,
         run_type,
         atom_index,
         occ_type,
@@ -353,6 +434,8 @@ def basis(
     "-a",
     "--asym_param",
     "a",
+    cls=MutuallyInclusive,
+    mutually_inclusive=["--asym"],
     default=0.2,
     type=float,
     show_default=True,
@@ -362,6 +445,8 @@ def basis(
     "-b",
     "--asym_trans_param",
     "b",
+    cls=MutuallyInclusive,
+    mutually_inclusive=["--asym"],
     default=0.0,
     type=float,
     show_default=True,
@@ -391,12 +476,28 @@ def basis(
     show_default=True,
     help="Global minimum percentage",
 )
-@click.pass_context
-def plot(ctx, intensity, asym, a, b, gl_ratio, omega, gmp):
-    """Plot the simulated XPS spectra."""
+@click.pass_obj
+def plot(start, intensity, asym, a, b, gl_ratio, omega, gmp):
+    """
+    Plot the simulated XPS spectra.
+    """
 
-    process(ctx, intensity, asym, a, b, gl_ratio, omega, gmp)
+    # Calculate peaks
+    process = Process(start, intensity, asym, a, b, gl_ratio, omega, gmp)
+    xps, element = process.calc_dscf_energies()
+
+    # Ensure peaks file is in the run location
+    if start.run_location != "./":
+        process.move_file_to_run_loc(element, "peaks")
+
+    # Broaden spectrum and write to file
+    peaks = process.call_broaden(xps)
+    process.write_spectrum_to_file(peaks, element)
+
+    if start.graph:
+        process.plot_xps(xps)
 
 
-if __name__ == "__main__":
-    cli()
+# cli.add_command(projector)
+# cli.add_command(basis)
+# cli.add_command(plot)

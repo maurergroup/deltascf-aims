@@ -1,84 +1,206 @@
-#!/usr/bin/env python3
-
+import functools
 import glob
 import os
 import sys
+import warnings
 from pathlib import Path
+from typing import List, Literal, Tuple, Union
 
 import click
+import numpy as np
 from ase import Atoms
 from ase.io import read
 
-from delta_scf.calc_dscf import CalcDeltaSCF as cds
+import delta_scf.calc_dscf as cds
+import dscf_utils.main_utils as du
 from delta_scf.force_occupation import Basis, ForceOccupation, Projector
-from delta_scf.plot import Plot
+from delta_scf.plot import XPSSpectrum
 from delta_scf.schmid_pseudo_voigt import broaden
-from utils_dscf.main_utils import MainUtils as mu
+from dscf_utils.main_utils import ExcitedCalc, GroundCalc
 
 
-def main(
-    ctx,
-    hpc,
-    geometry_input,
-    control_input,
-    binary,
-    run_location,
-    spec_mol,
-    constr_atom,
-    spec_at_constr,
-    occupation,
-    n_atoms,
-    basis_set,
-    graph,
-    print_output,
-    nprocs,
-    # debug,
-):
+class Start(object):
     """
-    Point of controlling the program flow. Options used for all methods are
-    also defined here.
+    Perform initial checks and setup for running calcultions.
+
+    ...
+
+    Attributes
+    ----------
+        hpc : bool
+            setup a calculation primarily for use on a HPC cluster WITHOUT running the
+            calculation
+        geometry_input : click.File()
+            specify a custom geometry.in instead of using a structure from PubChem or ASE
+        control_input : click.File()
+            specify a custom control.in instead of automatically generating one
+        binary : bool
+            modify the path to the FHI-aims binary
+        run_location : click.Path(file_okay=False, dir_okay=True)
+            optionally specify a custom location to run the calculation
+        spec_mol : str
+            molecule to be used in the calculation
+        constr_atom : str
+            atom to be constrained
+        spec_at_constr : click.IntRange(min=1, max_open=True)
+            atom to constrain; constrain all atoms of this element
+        occupation : float
+            occupation of the core hole
+        n_atoms : click.IntRange(1)
+            number of atoms to constrain per calculation
+        basis_set : click.choice(['light', 'intermediate', 'tight', 'really_tight'])
+            the basis set to use for the calculation
+        use_additional_basis : bool
+            whether to use additional basis functions
+        graph : bool
+            print the simulated XPS spectrum
+        print_output : bool
+            print the live output of the calculation
+        nprocs : int
+            number of processors to use
+        ase : bool
+            whether to use the ASE backend
+        atoms : Atoms
+            ASE atoms object
+        lattice_vecs : bool
+            whether lattice vectors are present in the geometry file
+        found_k_grid : bool
+            whether a k_grid is present in the control file
+
+    Methods
+    -------
+        check_for_help_arg()
+            Print click help if --help flag is given
+        check_for_geometry_input()
+            Check that the geometry file parameter has been given
+        check_for_pbcs()
+            Check for lattice vectors and k_grid in input files
+        check_ase_usage()
+            Check whether ASE should be used or not
+        create_structure(ase)
+            Initialise an ASE atoms object
+        find_constr_atom_element(atoms)
+            Find the element of the atom to perform XPS/NEXAFS for
+        check_for_bin()
+            Check if a binary is saved in ./aims_bin_loc.txt
+        bin_path_prompt(current_path, bin_path)
+            Ensure the user has entered the path to the binary
+        check_species_path(binary)
+            Check if the species_defaults directory exists in the correct location
+        atoms()
+            property method to return the ASE atoms object
+        atoms(atoms)
+            setter method to set the ASE atoms object
+        add_calc(atoms, binary)
+            Add an ASE calculator to an Atoms object
     """
 
-    # Pass global options to subcommands
-    ctx.ensure_object(dict)
+    def __init__(
+        self,
+        hpc,
+        geometry_input,
+        control_input,
+        binary,
+        run_location,
+        spec_mol,
+        constr_atom,
+        spec_at_constr,
+        occupation,
+        n_atoms,
+        basis_set,
+        use_extra_basis,
+        graph,
+        print_output,
+        nprocs,
+    ):
+        self.hpc = hpc
+        self.geometry_input = geometry_input
+        self.control_input = control_input
+        self.binary = binary
+        self.run_loc = run_location
+        self.spec_mol = spec_mol
+        self.constr_atom = constr_atom
+        self.spec_at_constr = spec_at_constr
+        self.occupation = occupation
+        self.n_atoms = n_atoms
+        self.basis_set = basis_set
+        self.use_extra_basis = use_extra_basis
+        self.graph = graph
+        self.print_output = print_output
+        self.nprocs = nprocs
 
-    # A geometry file must be given if specific atom indices are to be constrained
-    if len(spec_at_constr) > 0:
-        if not geometry_input:
+        self.ase = True
+
+    # def _check_help_arg(func):
+    #     """
+    #     Print click help if --help flag is given.
+    #     """
+
+    #     @functools.wraps(func)
+    #     def wrapper_check_help_arg(self, *args, **kwargs):
+    #         if "--help" in sys.argv:
+    #             click.help_option()
+    #         else:
+    #             func(self, *args, **kwargs)
+
+    #         return func(self, *args, **kwargs)
+
+    #     return wrapper_check_help_arg
+
+    def check_for_geometry_input(self) -> None:
+        """
+        Check that the geometry file parameter has been given
+        """
+
+        if not self.geometry_input:
             raise click.MissingParameter(
                 param_hint="-e/--geometry_input", param_type="option"
             )
 
-    # Use ASE unless both a custom geometry.in and control.in are specified
-    # Also don't use ASE if a control.in is specified
-    ase = True
-    found_lattice_vecs = False
-    if geometry_input is not None:
-        found_lattice_vecs = mu.check_geom(geometry_input)
-        ctx.obj["GEOM_INP"] = geometry_input.name
-    else:
-        ctx.obj["GEOM_INP"] = None
-        ctx.obj["LATTICE_VECS"] = None
+    def check_for_pbcs(self) -> None:
+        """
+        Check for lattice vectors and k_grid in input files.
+        """
 
-    found_k_grid = False
-    if control_input is not None:
-        ase = False
-        found_k_grid = mu.check_control(control_input)
-        ctx.obj["CONTROL_INP"] = control_input.name
-    else:
-        ctx.obj["CONTROL_INP"] = None
+        self.found_lattice_vecs = False
+        if self.geometry_input is not None:
+            du.check_constrained_geom(self.geometry_input)
+            self.found_l_vecs = du.check_lattice_vecs(self.geometry_input)
+        else:
+            self.found_l_vecs = False
 
-    if found_lattice_vecs or found_k_grid:
-        ctx.obj["LATTICE_VECS"] = True
+        self.found_k_grid = False
+        if self.control_input is not None:
+            self.found_k_grid = du.check_k_grid(self.control_input)
+        else:
+            self.found_k_grid = False
 
-    # Find the structure if not given
-    # Build the structure if given
-    atoms = Atoms()
+    def check_ase_usage(self) -> None:
+        """
+        Check whether ASE should be used or not.
+        """
 
-    if spec_mol is None and geometry_input is None:
-        if "--help" not in sys.argv:
+        if self.control_input is not None:
+            self.ase = False  # Do not use if control.in is specified
+
+    # @_check_help_arg
+    def create_structure(self) -> Union[Atoms, List[Atoms]]:
+        """
+        Initialise an ASE atoms object from geometry file if given or find from
+        databases if not.
+
+        Returns
+        -------
+            atoms : Atoms
+                ASE atoms object
+        """
+
+        atoms = Atoms()
+
+        # Find the structure if not given
+        if self.spec_mol is None and self.geometry_input is None:
             try:
-                atoms = read(f"./{run_location}/ground/geometry.in")
+                atoms = read(f"./{self.run_loc}/ground/geometry.in")
                 print(
                     "molecule argument not provided, defaulting to using existing geometry.in"
                     " file"
@@ -89,29 +211,49 @@ def main(
                     param_type="option",
                 )
 
-    elif "--help" not in sys.argv and ase:
-        if spec_mol is not None:
-            atoms = mu.build_geometry(spec_mol)
-        if geometry_input is not None:
-            atoms = read(geometry_input.name)
+        # Build the structure if given
+        elif self.ase:
+            if self.spec_mol is not None:
+                atoms = du.build_geometry(self.spec_mol)
+            if self.geometry_input is not None:
+                atoms = read(self.geometry_input.name)
 
-    # Get the constrained atom element
-    # TODO: support for multiple constrained atoms
-    if constr_atom is None:
-        # for atom in atoms:
-        #     if atom.index in spec_at_constr:
-        #         constr_atom = atom.symbol
-        #         break
-        #     else:
+        return atoms
 
-        # Currently just exit if no constrained atom is specified
-        raise click.MissingParameter(
-            param_hint="-c/--constrained_atom or -s/--specific_atom_constraint",
-            param_type="option",
-        )
+    def find_constr_atom_element(self, atoms) -> None:
+        """
+        Find the element of the atom to perform XPS/NEXAFS for.
 
-    # Check if a binary has been specified
-    if "--help" not in sys.argv:
+        Parameters
+        ----------
+            atoms : Atoms
+                ASE atoms object
+
+        Returns
+        -------
+            constr_atom : str
+                element of constr_atom
+        """
+
+        # TODO: support for multiple constrained atoms
+        for atom in atoms:
+            if atom.index in self.spec_at_constr:
+                self.constr_atom = atom.symbol
+                break
+
+    # @_check_help_arg
+    def check_for_bin(self) -> tuple[str, str]:
+        """
+        Check if a binary is saved in ./aims_bin_loc.txt.
+
+        Returns
+        -------
+            current_path : str
+                path to the current working directory
+            bin_path : str
+                path to the location of the FHI-aims binary
+        """
+
         current_path = os.path.dirname(os.path.realpath(__file__))
         with open(f"{current_path}/aims_bin_loc.txt", "r") as f:
             try:
@@ -119,9 +261,27 @@ def main(
             except IndexError:
                 bin_path = ""
 
-        # Ensure the user has entered the path to the binary
-        # If not open the user's $EDITOR to allow them to enter the path
-        if not Path(bin_path).is_file() or binary or bin_path == "":
+        return current_path, bin_path
+
+    def bin_path_prompt(self, current_path, bin_path) -> str:
+        """
+        Ensure the user has entered the path to the binary. If not open the user's
+        $EDITOR to allow them to enter the path.
+
+        Parameters
+        ----------
+            current_path : str
+                path to the current working directory
+            bin_path : str
+                path to the location of the FHI-aims binary
+
+        Returns
+        -------
+            binary : str
+                path to the location of the FHI-aims binary
+        """
+
+        if not Path(bin_path).is_file() or self.binary or bin_path == "":
             marker = (
                 "\n# Enter the path to the FHI-aims binary above this line\n"
                 "# Ensure that the binary is located in the build directory of FHIaims"
@@ -132,7 +292,7 @@ def main(
                     f.write(bin_line)
 
                 with open(f"{current_path}/aims_bin_loc.txt", "r") as f:
-                    binary = f.readlines()[0]
+                    self.binary = f.readlines()[0]
 
             else:
                 raise FileNotFoundError(
@@ -141,12 +301,28 @@ def main(
 
         elif Path(bin_path).exists():
             print(f"specified binary path: {bin_path}")
-            binary = bin_path
+            self.binary = bin_path
 
-        species = f"{Path(binary).parent.parent}/species_defaults/"
+        else:
+            raise FileNotFoundError("path to the FHI-aims binary could not be found")
 
+        return self.binary
+
+    def check_species_path(self, binary) -> None:
+        """
+        Check if the species_defaults directory exists in the correct location.
+
+        Parameters
+        ----------
+            binary : str
+                path to the location of the FHI-aims binary
+        """
+
+        self.species = f"{Path(binary).parent.parent}/species_defaults/"
+
+        # TODO: check if the warnings module could be used here
         # Check if the species_defaults directory exists in the correct location
-        if not Path(species).exists():
+        if not Path(self.species).exists():
             print(
                 "\nError: ensure the FHI-aims binary is in the 'build' directory of the FHI-aims"
                 " source code directory, and that the 'species_defaults' directory exists"
@@ -155,591 +331,797 @@ def main(
                 f"species_defaults directory not found in {Path(binary).parent.parent}"
             )
 
-        # Create the ASE calculator
-        if ase:
-            aims_calc = mu.create_calc(nprocs, binary, species, basis_set)
-            atoms.calc = aims_calc
-            ctx.obj["CALC"] = aims_calc
+    @property
+    def atoms(self):
+        """
+        ASE atoms object
 
-        # User specified context objects
-        ctx.obj["ATOMS"] = atoms
-        ctx.obj["SPEC_MOL"] = spec_mol
-        ctx.obj["BINARY"] = binary
-        ctx.obj["RUN_LOC"] = run_location
-        ctx.obj["CONSTR_ATOM"] = constr_atom
-        ctx.obj["SPEC_AT_CONSTR"] = spec_at_constr
-        ctx.obj["OCC"] = occupation
-        ctx.obj["N_ATOMS"] = n_atoms  # TODO
-        ctx.obj["BASIS_SET"] = basis_set
-        ctx.obj["GRAPH"] = graph
-        ctx.obj["PRINT"] = print_output
-        ctx.obj["NPROCS"] = nprocs
-        # ctx.obj["DEBUG"] = debug
-        ctx.obj["HPC"] = hpc
+        Returns
+        -------
+            _atoms : Atoms
+                ASE atoms object
+        """
 
-        # Context objects created in main()
-        ctx.obj["SPECIES"] = species
-        ctx.obj["ASE"] = ase
+        return self._atoms
+
+    @atoms.setter
+    def atoms(self, atoms):
+        """
+        Set the ASE atoms object
+
+        Parameters
+        ----------
+            atoms : Atoms
+                ASE atoms object
+        """
+
+        self._atoms = atoms
+
+    def add_calc(self, atoms, binary) -> Atoms:
+        """
+        Add an ASE calculator to an Atoms object.
+
+        Parameters
+        __________
+            atoms : Atoms
+                ASE atoms object
+            binary : str
+                path to the location of the FHI-aims binary
+
+        Returns
+        -------
+            atoms : Atoms
+                ASE atoms object with a calculator added
+        """
+
+        atoms.calc = du.create_calc(self.nprocs, binary, self.species, self.basis_set)
+
+        if self.print_output:
+            warnings.warn("-p/--print_output is not supported with the ASE backend")
+
+        return atoms
 
 
-def process(
-    ctx, intensity=1, asym=False, a=0.2, b=0.0, gl_ratio=0.5, omega=0.35, gmp=0.003
-):
-    """Calculate DSCF values and plot the simulated XPS spectra."""
+class Process:
+    """
+    Calculate DSCF values and plot the simulated XPS spectra.
 
-    # Calculate the delta scf energies
-    grenrgys = cds.read_ground(ctx.obj["RUN_LOC"])
-    element, excienrgys = cds.read_atoms(
-        ctx.obj["RUN_LOC"], ctx.obj["CONSTR_ATOM"], cds.contains_number
-    )
-    xps = cds.calc_delta_scf(element, grenrgys, excienrgys)
+    ...
 
-    if ctx.obj["RUN_LOC"] != "./":
-        os.system(f"mv {element}_xps_peaks.txt {ctx.obj['RUN_LOC']}")
+    Attributes
+    ----------
 
-    if ctx.obj["GRAPH"]:
-        # Apply the peak broadening
-        peaks, domain = broaden(0, 1000, intensity, gl_ratio, xps, omega, asym, a, b)
+    """
 
-        # Write out the spectrum to a text file
-        # Include bin width of 0.01 eV
+    def __init__(
+        self,
+        start,
+        gmp,
+        intensity=1,
+        asym=False,
+        a=0.2,
+        b=0.0,
+        gl_ratio=0.5,
+        omega=0.35,
+    ):
+        self.start = start
+        self.gmp = gmp
+        self.intensity = intensity
+        self.asym = asym
+        self.a = a
+        self.b = b
+        self.gl_ratio = gl_ratio
+        self.omega = omega
+
+    def calc_dscf_energies(self) -> Tuple[List[float], str]:
+        """
+        Parse absolute energies and calculate deltaSCF energies
+
+        Returns
+        -------
+            xps : List[float]
+                deltaSCF energies
+        """
+
+        grenrgys = cds.read_ground(self.start.run_location)
+        excienrgys, element = cds.read_atoms(
+            self.start.run_location, self.start.constr_atom
+        )
+        xps = cds.calc_delta_scf(self.start.constr_atom, grenrgys, excienrgys)
+
+        return xps, element
+
+    def move_file_to_run_loc(self, element, type: Literal["peaks", "spectrum"]) -> None:
+        """
+        Move either the peaks or spectrum file to the run location.
+
+        Parameters
+        ----------
+            element : str
+                element the binding energies were calculated for
+            type : Literal["peaks", "spectrum"]
+                type of file to move
+        """
+
+        os.system(f"mv {element}_xps_{type}.txt {self.start.run_loc}")
+
+    def call_broaden(self, xps) -> np.ndarray:
+        """
+        Apply pseudo-Voigt peak broadening.
+
+        Parameters
+        ----------
+            xps : List[float]
+                deltaSCF energies
+
+        Returns
+        -------
+            peaks : np.ndarray
+                broadened peaks
+        """
+
+        peaks, _ = broaden(
+            0,
+            1000,
+            self.intensity,
+            self.gl_ratio,
+            xps,
+            self.omega,
+            self.asym,
+            self.a,
+            self.b,
+        )
+
+        return peaks
+
+    def write_spectrum_to_file(self, peaks, element, bin_width=0.01) -> None:
+        """
+        Write the spectrum to a text file.
+
+        Parameters
+        ----------
+            peaks : np.ndarray
+                broadened peaks
+            element : str
+                element the binding energies were calculated for
+            bin_width : float
+                resolution of the spectral curve - lower values increase the resolution
+        """
+
         data = []
         bin_val = 0.00
-        for i, peak in enumerate(peaks):
+        for peak in peaks:
             data.append(f"{str(bin_val)} {str(peak)}\n")
-            bin_val += 0.01
+            bin_val += bin_width
 
         with open(f"{element}_xps_spectrum.txt", "w") as spec:
             spec.writelines(data)
 
-        # Move the spectrum to the run location
-        if ctx.obj["RUN_LOC"] != "./":
-            os.system(f'mv {element}_xps_spectrum.txt {ctx.obj["RUN_LOC"]}/')
+    def plot_xps(self, xps):
+        """
+        Plot the XPS spectrum and save as pdf and png files.
+
+        Parameters
+        ----------
+            xps : list
+                list of individual binding energies
+        """
+        xps_spec = XPSSpectrum(self.gmp, self.start.run_loc, self.start.constr_atom)
 
         print("\nplotting spectrum and calculating MABE...")
-        Plot.sim_xps_spectrum(
-            xps, ctx.obj["RUN_LOC"], ctx.obj["CONSTR_ATOM"], ctx.obj["AT_SPEC"][0], gmp
+
+        xps_spec.plot(xps)
+
+
+class ProjectorWrapper(GroundCalc, ExcitedCalc):
+    """
+    Force occupation of the basis functions by projecting the occupation of Kohn-Sham
+    states onto them.
+
+    ...
+
+    Attributes
+    ----------
+        start : Start
+            instance of the Start object
+        run_type : click.Choice(["ground", "init_1", "init_2", "hole"])
+            type of calculation to perform
+        occ_type : click.Choice(["deltascf_projector", "force_occupation_projector"])
+            use either the refactored or original projector keyword
+        pbc : tuple
+            k-grid for a periodic calculation
+        l_vecs : List[List[float]]
+            lattice vectors in a 3x3 matrix of floats
+        spin : click.Choice(["1", "2"])
+            spin channel of the constraint
+        ks_range : click.IntRange(1)
+            range of Kohn-Sham states to constrain
+        control_opts : Tuple[str]
+            additional control options to be added to the control.in file
+
+    Methods
+    -------
+        check_periodic()
+            Check if the lattice vectors and k_grid have been provided
+        _call_setups(proj)
+            Setup files and parameters required for the initialisation and hole
+            calculations
+        _check_params(include_hpc=True)
+            Check that the parameters given in Start are valid
+        _check_prev_runs(prev_calc, atom)
+            Check if the required previous calculation has been run
+        _cp_restart_files(atom, begin, end)
+            Copy the restart files from one calculation location to another
+        run_ground()
+            Run the ground state calculation
+        setup_excited_calcs()
+            Setup files and parameters required for the initialisation and hole
+            calculations
+        pre_init_2(fo, atom_specifier)
+            Setup everything for the 2nd init calculation
+        pre_hole(fo, atom_specifier)
+            Setup everything for the hole calculation
+        run_excited(start, atom_specifier)
+            Run the projector calculations
+    """
+
+    def __init__(
+        self, start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts
+    ):
+        # Get methods from GroundCalc
+        super(ProjectorWrapper, self).__init__(
+            start.run_loc,
+            start.atoms,
+            start.basis_set,
+            start.species,
+            start.ase,
+            start.hpc,
         )
 
+        # Get methods from ExcitedCalc
+        super(GroundCalc, self).__init__(start)
 
-def projector_wrapper(
-    ctx, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts
-):
-    """Force occupation of the Kohn-Sham states."""
+        self.start = start
+        self.run_type = run_type
+        self.occ_type = occ_type
+        self.pbc = pbc
+        self.l_vecs = l_vecs
+        self.spin = spin
+        self.ks_range = ks_range
 
-    run_loc = ctx.obj["RUN_LOC"]
-    geom_inp = ctx.obj["GEOM_INP"]
-    control_inp = ctx.obj["CONTROL_INP"]
-    atoms = ctx.obj["ATOMS"]
-    found_lattice_vecs = ctx.obj["LATTICE_VECS"]
-    basis_set = ctx.obj["BASIS_SET"]
-    ase = ctx.obj["ASE"]
-    nprocs = ctx.obj["NPROCS"]
-    binary = ctx.obj["BINARY"]
-    hpc = ctx.obj["HPC"]
-    constr_atoms = ctx.obj["CONSTR_ATOM"]
-    spec_at_constr = ctx.obj["SPEC_AT_CONSTR"]
-    spec_mol = ctx.obj["SPEC_MOL"]
-    species = ctx.obj["SPECIES"]
-    occ = ctx.obj["OCC"]
-    print_output = ctx.obj["PRINT"]
+        self.ground_geom = f"{self.start.run_loc}/ground/geometry.in"
+        self.ground_control = f"{self.start.run_loc}/ground/control.in"
 
-    if ase:
-        calc = ctx.obj["CALC"]
-    else:
-        calc = None
+        # Convert control options to a dictionary
+        self.control_opts = du.convert_opts_to_dict(control_opts, pbc)
 
-    # Used later to redirect STDERR to /dev/null to prevent printing not converged errors
-    spec_run_info = None
+        # Raise a warning if no additional control options have been specified
+        du.warn_no_extra_control_opts(self.control_opts, start.control_input)
 
-    # Raise a warning if no additional control options have been specified
-    if len(control_opts) < 1 and control_inp is None:
+        # Convert constr_atom to a list
+        if not isinstance(self.start.constr_atom, list):
+            self.constr_atoms = [self.start.constr_atom]
+        else:
+            self.constr_atoms = self.start.constr_atom
+
+    def _calc_checks(
+        self, prev_calc, current_calc, check_restart=True, check_args=False
+    ) -> None:
+        """
+        Perform checks before running an excited calculation.
+
+        Parameters
+        ----------
+            prev_calc : str
+                previous calculation that was run
+            current_calc : str
+                type of excited calculation to perform
+            check_restart : bool
+                whether to check for restart files or not
+            check_args : bool
+                whether to check CLI supplied arguments or not
+        """
+
+        # Check that the current calculation has not already been run
+        du.check_curr_prev_run(
+            self.run_type,
+            self.start.run_loc,
+            self.constr_atoms,
+            self.atom_specifier,
+            "projector",
+            self.start.hpc,
+        )
+
+        # Check that the restart files exist from the previous calculation
+        if check_restart:
+            for i_atom in self.atom_specifier:
+                self.check_restart_files(self.constr_atoms, prev_calc, i_atom)
+
+        # Check that the constrained atoms have been given
+        if current_calc != "hole":
+            du.check_params(self.start)
+        else:
+            du.check_params(self.start, include_hpc=False)
+
+        # Check required arguments have been given
+        if check_args:
+            du.check_args(("ks_range", self.ks_range))
+
+    def _call_setups(self, proj) -> None:
+        """
+        Setup files and parameters required for the initialisation and hole
+        calculations.
+
+        Parameters
+        ----------
+            proj : ForceOccupation
+                Projector instance of ForceOccupation
+        """
+
+        proj.setup_init_1(self.start.basis_set, self.start.species, self.ground_control)
+        proj.setup_init_2(
+            self.ks_range[0],
+            self.ks_range[1],
+            self.start.occupation,
+            self.occ_type,
+            self.spin,
+            self.start.found_k_grid,
+        )
+        proj.setup_hole(
+            self.ks_range[0],
+            self.ks_range[1],
+            self.start.occupation,
+            self.occ_type,
+            self.spin,
+            self.start.found_k_grid,
+        )
+
+    def _cp_restart_files(self, atom, begin, end) -> None:
+        """
+        Copy the restart files from one calculation location to another.
+
+        Parameters
+        ----------
+            atom : int
+                atom to copy the restart files for
+            begin : str
+                location to copy the restart files from
+            end : str
+                location to copy the restart files to
+        """
+
+        os.path.isfile(
+            glob.glob(
+                f"{self.start.run_loc}/{self.constr_atoms[0]}{atom}/{begin}/"
+                "*restart*"
+            )[0]
+        )
+        os.system(
+            f"cp {self.start.run_loc}/{self.constr_atoms[0]}{atom}/{begin}/"
+            f"*restart* {self.start.run_loc}/{self.constr_atoms[0]}{atom}"
+            f"/{end}/"
+        )
+
+    def _get_atom_indices(self, fo) -> List[int]:
+        """
+        Get atom indices from the ground state geometry file
+
+        Parameters
+        ----------
+            fo : object
+                ForceOccupation object
+
+        Returns
+        -------
+            atom_specifier : List[int]
+                atom indices to constrain
+        """
+        atom_specifier = fo.get_atoms(
+            self.constr_atoms, self.start.spec_at_constr, self.ground_geom
+        )
+
+        return atom_specifier
+
+    def _get_element_symbols(self) -> Union[str, List[str]]:
+        """
+        Create a list of element symbols to constrain
+
+        Returns
+        -------
+            element_symbols : List[str]
+                element symbols to constrain
+        """
+
+        if len(self.start.spec_at_constr) > 0:
+            element_symbols = du.get_element_symbols(
+                self.ground_geom, self.start.spec_at_constr
+            )[0]
+            self.constr_atoms = element_symbols
+        else:
+            element_symbols = self.constr_atoms
+
+        return element_symbols
+
+    def check_periodic(self) -> None:
+        """
+        Check if the lattice vectors and k_grid have been provided.
+        """
+
         print(
-            "\nWarning: no control options provided, using default options "
-            "which can be found in the 'control.in' file"
+            "-p/--pbc argument not given, attempting to use"
+            " k_grid from control file or previous calculation"
         )
 
-    # Convert control options to a dictionary
-    control_opts = mu.convert_opts_to_dict(control_opts, pbc)
+        # Try to parse the k-grid if other calculations have been run
+        try:
+            pbc_list = []
+            for control in glob.glob(
+                f"{self.start.run_loc}/**/control.in", recursive=True
+            ):
+                with open(control, "r") as control:
+                    for line in control:
+                        if "k_grid" in line:
+                            pbc_list.append(line.split()[1:])
 
-    # Check if the lattice vectors and k_grid have been provided
-    if found_lattice_vecs or l_vecs is not None:
-        if pbc is None:
-            print(
-                "Warning: -p/--pbc argument not given, attempting to use"
-                " k_grid from control file or previous calculation"
-            )
-
-            # Try to parse the k-grid if other calculations have been run
-            try:
-                pbc_list = []
-                for control in glob.glob(f"{run_loc}/**/control.in", recursive=True):
-                    with open(control, "r") as control:
-                        for line in control:
-                            if "k_grid" in line:
-                                pbc_list.append(line.split()[1:])
-
-                # If different k_grids have been used for different calculations, then
-                # enforce the user to provide the k_grid
-                if not pbc_list.count(pbc_list[0]) == len(pbc_list):
-                    raise click.MissingParameter(
-                        param_hint="-p/--pbc", param_type="option"
-                    )
-                else:
-                    pbc_list = tuple([int(i) for i in pbc_list[0]])
-                    control_opts["k_grid"] = pbc_list
-
-            except IndexError:
+            # If different k_grids have been used for different calculations,
+            # then enforce the user to provide the k_grid
+            if not pbc_list.count(pbc_list[0]) == len(pbc_list):
                 raise click.MissingParameter(param_hint="-p/--pbc", param_type="option")
+            else:
+                pbc_list = tuple([int(i) for i in pbc_list[0]])
+                self.control_opts["k_grid"] = pbc_list
 
-    if run_type == "ground":
-        mu.ground_calc(
-            run_loc,
-            geom_inp,
-            control_inp,
-            atoms,
-            basis_set,
-            species,
-            calc,
-            ase,
-            control_opts,
-            constr_atoms,
-            nprocs,
-            binary,
-            hpc,
-            print_output,
+        except IndexError:
+            raise click.MissingParameter(param_hint="-p/--pbc", param_type="option")
+
+    def setup_excited(self) -> Tuple[List[int], str]:
+        """
+        Setup files and parameters required for the init and hole calculations.
+
+        Returns
+        -------
+            spec_run_info : str
+                redirection location for STDERR of calculation
+        """
+
+        # Get element symbols to constrain
+        element_symbols = self._get_element_symbols()
+
+        # Check that the prerequisite calculation has been run
+        # This has to be done outside of _calc_checks as that function requires
+        # atom_specifier which is set in a function that requires ForceOccupation to be
+        # initialised.
+        prev_calc = self.check_prereq_calc("init_1", self.constr_atoms, "projector")
+
+        # Create the ForceOccupation object
+        fo = ForceOccupation(
+            element_symbols,
+            self.start.run_loc,
+            self.ground_geom,
+            self.control_opts,
+            f"{self.start.species}/defaults_2020/{self.start.basis_set}",
+            self.start.use_extra_basis,
         )
 
-        # Ground must be run separately to hole calculations
-        return
+        # Get the atom indices to constrain
+        self.atom_specifier = self._get_atom_indices(fo)
 
-    else:  # run_type != ground
-        ground_geom = f"{run_loc}/ground/geometry.in"
-        ground_control = f"{run_loc}/ground/control.in"
-
-    if len(spec_at_constr) == 0 and constr_atoms is None:
-        raise click.MissingParameter(
-            param_hint="-c/--constrained_atom or -s/--specific_atom_constraint",
-            param_type="option",
-        )
-
-    # Convert constr_atoms to a list
-    if type(constr_atoms) is not list:
-        constr_atoms = [constr_atoms]
-
-    # Create a list of element symbols to constrain
-    if len(spec_at_constr) > 0:
-        element_symbols = mu.get_element_symbols(ground_geom, spec_at_constr)[0]
-        constr_atoms = element_symbols
-    else:
-        element_symbols = constr_atoms
-
-    fo = ForceOccupation(
-        element_symbols,
-        run_loc,
-        ground_geom,
-        control_opts,
-        f"{species}/defaults_2020/{basis_set}",
-    )
-
-    # Get atom indices from the ground state geometry file
-    atom_specifier = fo.read_ground_inp(constr_atoms, spec_at_constr, ground_geom)
-
-    if run_type == "init_1":
-        if hpc:
-            raise click.BadParameter(
-                "the -h/--hpc flag is only supported for the 'hole' run type"
-            )
-
-        if len(spec_at_constr) == 0 and len(constr_atoms) == 0:
-            raise click.BadParameter(
-                "no atoms have been specified to constrain, please use "
-                "-c/--constr_atoms or -s/--spec_at_constr options"
-            )
-
-        # Check required arguments are given in main()
-        mu.check_args(("ks_range", ks_range))
+        self._calc_checks(prev_calc, "init_1", check_restart=False, check_args=True)
 
         # TODO allow this for multiple constrained atoms using n_atoms
         for atom in element_symbols:
             fo.get_electronic_structure(atom)
 
-        # Setup files required for the initialisation and hole calculations
         proj = Projector(fo)
-        proj.setup_init_1(basis_set, species, ground_control)
-        proj.setup_init_2(
-            ks_range[0], ks_range[1], occ, occ_type, spin, found_lattice_vecs
+        self._call_setups(proj)
+
+        spec_run_info = ""
+
+        return self.atom_specifier, spec_run_info
+
+    def pre_init_2(self) -> Tuple[List[int], str]:
+        """
+        Prerequisite before running the 2nd init calculation.
+
+        Returns
+        -------
+            spec_run_info : str
+                Redirection location for STDERR of calculation
+        """
+
+        # Get element symbols to constrain
+        element_symbols = self._get_element_symbols()
+
+        # Check that the prerequisite calculation has been run
+        # This has to be done outside of _calc_checks as that function requires
+        # atom_specifier which is set in a function that requires ForceOccupation to be
+        # initialised.
+        prev_calc = self.check_prereq_calc("init_2", self.constr_atoms, "projector")
+
+        # Create the ForceOccupation object
+        fo = ForceOccupation(
+            element_symbols,
+            self.start.run_loc,
+            self.ground_geom,
+            self.control_opts,
+            f"{self.start.species}/defaults_2020/{self.start.basis_set}",
+            self.start.use_extra_basis,
         )
-        proj.setup_hole(
-            ks_range[0], ks_range[1], occ, occ_type, spin, found_lattice_vecs
-        )
 
-    spec_run_info = ""
+        # Get the atom indices to constrain
+        self.atom_specifier = self._get_atom_indices(fo)
 
-    if run_type == "init_2":
-        if hpc:
-            raise click.BadParameter(
-                "the -h/--hpc flag is only supported for the 'hole' run type"
-            )
+        # Add any additional options to the control file
+        for i in range(len(self.atom_specifier)):
 
-        if len(spec_at_constr) == 0 and len(constr_atoms) == 0:
-            raise click.BadParameter(
-                "no atoms have been specified to constrain, please use "
-                "-c/--constr_atoms or -s/--spec_at_constr options"
-            )
+            # Also check that the previous calculation has been run
+            self._calc_checks(prev_calc, "init_2")
 
-        for i in range(len(atom_specifier)):
-            i += 1
-
-            # Catch for if init_1 hasn't been run
-            if len(glob.glob(f"{run_loc}/{constr_atoms[0]}{i}/init_1/*restart*")) < 1:
-                print(
-                    'init_1 restart files not found, please ensure "init_1" has been run'
+            if len(self.control_opts) > 0 or self.start.control_input:
+                du.add_control_opts(
+                    self.start,
+                    self.constr_atoms,
+                    self.control_opts,
+                    self.atom_specifier[i],
+                    "init_2",
                 )
-                raise FileNotFoundError
-
-            if len(control_opts) > 0 or control_inp:
-                # Add any additional control options to the init_2 control file
-                parsed_control_opts = fo.get_control_keywords(
-                    f"{run_loc}/{constr_atoms[0]}{i}/init_2/control.in"
-                )
-                mod_control_opts = fo.mod_keywords(control_opts, parsed_control_opts)
-                control_content = fo.change_control_keywords(
-                    f"{run_loc}/{constr_atoms[0]}{i}/init_2/control.in",
-                    mod_control_opts,
-                )
-
-                with open(
-                    f"{run_loc}/{constr_atoms[0]}{i}/init_2/control.in", "w"
-                ) as control_file:
-                    control_file.writelines(control_content)
 
             # Copy the restart files to init_2 from init_1
-            os.path.isfile(
-                glob.glob(f"{run_loc}/{constr_atoms[0]}{i}/init_1/*restart*")[0]
-            )
-            os.system(
-                f"cp {run_loc}/{constr_atoms[0]}{i}/init_1/*restart* {run_loc}/{constr_atoms[0]}{i}/init_2/"
-            )
+            self._cp_restart_files(self.atom_specifier[i], "init_1", "init_2")
 
         # Prevent SCF not converged errors from printing
+        # It could be an issue to do this if any other errors occur
         spec_run_info = " 2>/dev/null"
 
-    if run_type == "hole":
-        if len(spec_at_constr) == 0 and len(constr_atoms) == 0:
-            raise click.BadParameter(
-                "no atoms have been specified to constrain, please use the "
-                "-c/--constr_atoms or -s/--spec_at_constr options"
-            )
+        return self.atom_specifier, spec_run_info
 
-        if hpc:
-            mu.check_args(("ks_range", ks_range))
+    def pre_hole(self) -> Tuple[List[int], str]:
+        """
+        Prerequisite before running the hole calculation
+
+        Returns
+        -------
+            spec_run_info : str
+                Redirection location for STDERR of calculation
+        """
+
+        # Get element symbols to constrain
+        element_symbols = self._get_element_symbols()
+
+        # Check that the prerequisite calculation has been run
+        # This has to be done outside of _calc_checks as that function requires
+        # atom_specifier which is set in a function that requires ForceOccupation to be
+        # initialised.
+        if not self.start.hpc:
+            prev_calc = self.check_prereq_calc("hole", self.constr_atoms, "projector")
+
+        # Create the ForceOccupation object
+        fo = ForceOccupation(
+            element_symbols,
+            self.start.run_loc,
+            self.ground_geom,
+            self.control_opts,
+            f"{self.start.species}/defaults_2020/{self.start.basis_set}",
+            self.start.use_extra_basis,
+        )
+
+        # Get the atom indices to constrain
+        self.atom_specifier = self._get_atom_indices(fo)
+
+        if self.start.hpc:
+            self._calc_checks(None, "hole", check_restart=False, check_args=True)
 
             for atom in element_symbols:
                 fo.get_electronic_structure(atom)
 
             # Setup files required for the initialisation and hole calculations
             proj = Projector(fo)
-            proj.setup_init_1(basis_set, species, ground_control)
-            proj.setup_init_2(ks_range[0], ks_range[1], occ, occ_type, spin, pbc)
-            proj.setup_hole(ks_range[0], ks_range[1], occ, occ_type, spin, pbc)
+            self._call_setups(proj)
 
-        # Add molecule identifier to hole geometry.in
-        with open(
-            f"{run_loc}/{constr_atoms[0]}{atom_specifier[0]}/hole/geometry.in", "r"
-        ) as hole_geom:
-            lines = hole_geom.readlines()
+        # Add a tag to the geometry file to identify the molecule name
+        if self.start.spec_mol is not None:
+            du.add_molecule_identifier(self.start, self.atom_specifier)
 
-        lines.insert(4, f"# {spec_mol}\n")
+        if not self.start.hpc:
+            # Add any additional control options to the hole control file
+            for i in range(len(self.atom_specifier)):
 
-        with open(
-            f"{run_loc}/{constr_atoms[0]}{atom_specifier[0]}/hole/geometry.in", "w"
-        ) as hole_geom:
-            hole_geom.writelines(lines)
+                # Check for if init_2 hasn't been run
+                self._calc_checks(prev_calc, "hole")
 
-        if hpc:
-            return
-
-        # Catch for if init_2 hasn't been run
-        for i in range(len(atom_specifier)):
-            i += 1
-            if (
-                os.path.isfile(
-                    glob.glob(f"{run_loc}/{constr_atoms[0]}{i}/init_2/*restart*")[0]
-                )
-                is False
-            ):
-                print(
-                    'init_2 restart files not found, please ensure "init_2" has been run'
-                )
-                raise FileNotFoundError
-
-            if len(control_opts) > 0 or control_inp:
-                # Add any additional control options to the hole control file
-                parsed_control_opts = fo.get_control_keywords(
-                    f"{run_loc}/{constr_atoms[0]}{i}/hole/control.in"
-                )
-                mod_control_opts = fo.mod_keywords(control_opts, parsed_control_opts)
-                control_content = fo.change_control_keywords(
-                    f"{run_loc}/{constr_atoms[0]}{i}/hole/control.in", mod_control_opts
-                )
-
-                with open(
-                    f"{run_loc}/{constr_atoms[0]}{i}/hole/control.in", "w"
-                ) as control_file:
-                    control_file.writelines(control_content)
-
-            # Copy the restart files to hole from init_2
-            os.path.isfile(
-                glob.glob(f"{run_loc}/{constr_atoms[0]}{i}/init_2/*restart*")[0]
-            )
-            os.system(
-                f"cp {run_loc}/{constr_atoms[0]}{i}/init_2/*restart* {run_loc}/{constr_atoms[0]}{i}/hole/"
-            )
-
-        spec_run_info = ""
-
-    # Run the calculation with a nice progress bar if not already run
-    if (
-        run_type != "ground"
-        and os.path.isfile(
-            f"{run_loc}/{constr_atoms[0]}{atom_specifier[0]}/{run_type}/aims.out"
-        )
-        is False
-        and not hpc
-    ):
-        # Ensure that aims always runs with the following environment variables:
-        os.system("export OMP_NUM_THREADS=1")
-        os.system("export MKL_NUM_THREADS=1")
-        os.system("export MKL_DYNAMIC=FALSE")
-        os.system("ulimit -s unlimited")
-
-        if print_output:  # Print live output of calculation
-            for i in range(len(atom_specifier)):
-                i += 1
-                os.system(
-                    f"cd {run_loc}/{constr_atoms[0]}{i}/{run_type} && mpirun -n "
-                    f"{nprocs} {binary} | tee aims.out {spec_run_info}"
-                )
-
-        else:
-            with click.progressbar(
-                range(len(atom_specifier)), label=f"calculating {run_type}:"
-            ) as prog_bar:
-                for i in prog_bar:
-                    i += 1
-                    os.system(
-                        f"cd {run_loc}/{constr_atoms[0]}{i}/{run_type} && mpirun -n "
-                        f"{nprocs} {binary} > aims.out {spec_run_info}"
+                if len(self.control_opts) > 0 or self.start.control_input:
+                    du.add_control_opts(
+                        self.start,
+                        self.constr_atoms,
+                        self.control_opts,
+                        self.atom_specifier[i],
+                        "hole",
                     )
 
-        # print(f"{run_type} calculations completed successfully")
+                # Copy the restart files to hole from init_2
+                self._cp_restart_files(self.atom_specifier[i], "init_2", "hole")
 
-    elif run_type != "ground" and not hpc:
-        print(f"{run_type} calculations already completed, skipping calculation...")
+        # Don't redirect STDERR to /dev/null as not converged errors should not occur
+        # here
+        spec_run_info = ""
 
-    # These need to be passed to process()
-    ctx.obj["RUN_TYPE"] = run_type
-    ctx.obj["AT_SPEC"] = atom_specifier
-
-    # Compute the dscf energies and plot if option provided
-    if run_type == "hole":
-        process(ctx)
+        return self.atom_specifier, spec_run_info
 
 
-def basis_wrapper(
-    ctx,
-    run_type,
-    atom_index,
-    occ_type,
-    multiplicity,
-    n_qn,
-    l_qn,
-    m_qn,
-    ks_max,
-    control_opts,
-):
-    """Force occupation of the basis states."""
+class BasisWrapper(GroundCalc):
+    """
+    Force occupation of the basis states directly.
 
-    # It gets annoying to type the full context object out every time
-    run_loc = ctx.obj["RUN_LOC"]
-    geom = ctx.obj["GEOM_INP"]
-    control = ctx.obj["CONTROL_INP"]
-    spec_mol = ctx.obj["SPEC_MOL"]
-    atoms = ctx.obj["ATOMS"]
-    ase = ctx.obj["ASE"]
-    species = ctx.obj["SPECIES"]
-    basis_set = ctx.obj["BASIS_SET"]
-    nprocs = ctx.obj["NPROCS"]
-    binary = ctx.obj["BINARY"]
-    hpc = ctx.obj["HPC"]
-    constr_atoms = ctx.obj["CONSTR_ATOM"]
-    spec_at_constr = ctx.obj["SPEC_AT_CONSTR"]
-    occ = ctx.obj["OCC"]
-    print_output = ctx.obj["PRINT"]
+    ...
 
-    if ase:
-        calc = ctx.obj["CALC"]
-    else:
-        calc = None
+    Attributes
+    ----------
+        start : Start
+            instance of the Start object
+        run_type : click.Choice(["ground", "hole"])
+            type of calculation to perform
+        atom_index : click.IntRange(1)
+            atom index to constrain
+        occ_type : click.Choice(["deltascf_projector", "force_occupation_projector"])
+            use either the refactored or original projector keyword
+        multiplicity : click.IntRange(1)
+            multiplicity of the system
+        n_qn : click.IntRange(1)
+            principal quantum number
+        l_qn : click.IntRange(0)
+            angular momentum quantum number
+        m_qn : click.IntRange(-l_qn, l_qn)
+            magnetic quantum number
+        ks_max : click.IntRange(1)
+            maximum Kohn-Sham state to constrain
+        control_opts : Tuple[str]
+            additional control options to be added to the control.in file
+    """
 
-    # Raise a warning if no additional control options have been specified
-    if len(control_opts) < 1 and control is None:
-        print(
-            "\nWarning: no control options provided, using default options "
-            "which can be found in the 'control.in' file"
+    def __init__(
+        self,
+        start,
+        run_type,
+        atom_index,
+        occ_type,
+        multiplicity,
+        n_qn,
+        l_qn,
+        m_qn,
+        ks_max,
+        control_opts,
+    ):
+        super().__init__(
+            start.run_loc,
+            start.atoms,
+            start.basis_set,
+            start.species,
+            start.ase,
+            start.hpc,
         )
 
-    # Convert control options to a dictionary
-    control_opts = mu.convert_opts_to_dict(control_opts, None)
+        self.start = start
+        self.run_type = run_type
+        self.atom_index = atom_index
+        self.occ_type = occ_type
+        self.multiplicity = multiplicity
+        self.n_qn = n_qn
+        self.l_qn = l_qn
+        self.m_qn = m_qn
+        self.ks_max = ks_max
+        self.control_opts = control_opts
 
-    if run_type == "ground":
-        mu.ground_calc(
-            run_loc,
-            geom,
-            control,
-            atoms,
-            basis_set,
-            species,
-            calc,
-            ase,
-            control_opts,
-            constr_atoms,
-            nprocs,
-            binary,
-            hpc,
-            print_output,
+        # Raise a warning if no additional control options have been specified
+        du.warn_no_extra_control_opts(self.control_opts, start.control_input)
+
+        # Convert control options to a dictionary
+        control_opts = du.convert_opts_to_dict(control_opts, None)
+
+    def _add_control_keywords(self, fo, atom_specifier) -> None:
+        """
+        Add additional options to the control file.
+
+        Parameters
+        ----------
+            fo : object
+                ForceOccupation object
+            atom_specifier : List[int]
+                atom indices to constrain
+        """
+
+        # TODO allow multiple constraints using n_atoms
+        for i in range(len(atom_specifier)):
+            i += 1
+
+            if len(self.control_opts) > 0 or self.start.control:
+                du.add_control_opts(self.start, fo, self.control_opts, i, "hole")
+
+    def _add_geometry_tag(self, fo, constr_atoms, ground_geom) -> None:
+        """
+        Add the name of the molecule to the geometry file.
+
+        Parameters
+        ----------
+            fo : object
+                ForceOccupation object
+            constr_atoms : List[str]
+                atom indices to constrain
+            ground_geom : str
+                path to the ground state geometry file
+        """
+
+        # Get the atom indices from the ground state geometry file
+        atom_specifier = fo.get_atoms(
+            constr_atoms, self.start.spec_at_constr, ground_geom
         )
 
-        # Ground must be run separately to hole calculations
-        return
+        # Add the tag
+        du.add_molecule_identifier(self.start, atom_specifier)
 
-    else:  # run_type == 'hole'
-        ground_geom = f"{run_loc}/ground/geometry.in"
+    def _pre_calc_checks(self) -> None:
+        """
+        Perform checks before running the excited calculation.
+        """
 
-    if len(spec_at_constr) == 0 and constr_atoms is None:
-        raise click.MissingParameter(
-            "No atoms have been specified to constrain, please provide either"
-            " the -c/--constrained_atom or the -s/--specific_atom_constraint arguments",
-            param_type="option",
+        # Check that the ground state calculation has been run
+        du.check_ground_calc(self.start)
+
+        # Check that the constrained atoms have been given
+        du.check_params(self.start)
+
+        # Check that the required arguments have been given
+        du.check_args(
+            ("atom_index", self.atom_index),
+            ("ks_max", self.ks_max),
+            ("n_qn", self.n_qn),
+            ("l_qn", self.l_qn),
+            ("m_qn", self.m_qn),
         )
 
-    if run_type == "hole":
-        mu.check_args(
-            ("atom_index", atom_index),
-            ("ks_max", ks_max),
-            ("n_qn", n_qn),
-            ("l_qn", l_qn),
-            ("m_qn", m_qn),
-        )
+    def setup_excited_calculation(self) -> Tuple[object, List[str], str]:
+        """
+        Setup files and parameters required for the hole calculations.
 
-        if len(spec_at_constr) == 0 and len(constr_atoms) == 0:
-            raise click.BadParameter(
-                "no atoms have been specified to constrain, please use the "
-                "-c/--constr_atoms or -s/--spec_at_constr options"
-            )
+        Returns
+        -------
+            fo : object
+                ForceOccupation object
+            constr_atoms : List[str]
+                atom indices to constrain
+            ground_geom : str
+                path to the ground state geometry file
+        """
 
-        # Ensure that aims always runs with the following environment variables:
-        os.system("export OMP_NUM_THREADS=1")
-        os.system("export MKL_NUM_THREADS=1")
-        os.system("export MKL_DYNAMIC=FALSE")
-        os.system("ulimit -s unlimited")
+        ground_geom, _, constr_atoms, element_symbols = du.prepare_excited_calcs(self)
 
-        if os.path.isfile(f"{run_loc}/ground/aims.out") is False:
-            raise FileNotFoundError(
-                "\nERROR: ground aims.out not found, please ensure the ground calculation has been "
-                "run"
-            )
-
-        # Convert constr_atoms to a list
-        if type(constr_atoms) is not list:
-            constr_atoms = [constr_atoms]
-
-        # Create a list of element symbols to constrain
-        if len(spec_at_constr) > 0:
-            element_symbols = mu.get_element_symbols(ground_geom, spec_at_constr)[0]
-            constr_atoms = element_symbols
-        else:
-            element_symbols = constr_atoms
+        self._pre_calc_checks()
 
         # Create the directories required for the hole calculation
         fo = ForceOccupation(
             element_symbols,
-            run_loc,
+            self.start.run_loc,
             ground_geom,
-            control_opts,
-            f"{species}/defaults_2020/{basis_set}",
+            self.control_opts,
+            f"{self.start.species}/defaults_2020/{self.start.basis_set}",
         )
 
-        # Get atom indices from the ground state geometry file
-        atom_specifier = fo.read_ground_inp(constr_atoms, spec_at_constr, ground_geom)
-
-        if (
-            os.path.isfile(f"{run_loc}/{constr_atoms[0]}{atom_specifier[0]}/aims.out")
-            is True
-        ):
-            print("hole calculations already completed, skipping calculation...")
-
         basis = Basis(fo)
-        basis.setup_basis(multiplicity, n_qn, l_qn, m_qn, occ, ks_max, occ_type)
+        basis.setup_basis(
+            self.multiplicity,
+            self.n_qn,
+            self.l_qn,
+            self.m_qn,
+            self.start.occ,
+            self.ks_max,
+            self.occ_type,
+            self.start.basis_set,
+            self.start.species,
+        )
 
-        # Add molecule identifier to hole geometry.in
-        with open(
-            f"{run_loc}{constr_atoms[0]}{atom_specifier[0]}/geometry.in", "r"
-        ) as hole_geom:
-            lines = hole_geom.readlines()
+        # Add molecule ID to geometry file
+        self._add_geometry_tag(fo, constr_atoms, ground_geom)
 
-        lines.insert(4, f"# {spec_mol}\n")
+        # Add any additional options to the control file
+        self._add_control_keywords(fo, constr_atoms)
 
-        with open(
-            f"{run_loc}/{constr_atoms[0]}{atom_specifier[0]}/geometry.in", "w"
-        ) as hole_geom:
-            hole_geom.writelines(lines)
-
-        # TODO allow multiple constraints using n_atoms
-
-        for i in range(len(atom_specifier)):
-            i += 1
-
-            if len(control_opts) > 0 or control:
-                # Add any additional control options to the hole control file
-                parsed_control_opts = fo.get_control_keywords(
-                    f"{run_loc}/{constr_atoms[0]}{i}/control.in"
-                )
-                mod_control_opts = fo.mod_keywords(control_opts, parsed_control_opts)
-                control_content = fo.change_control_keywords(
-                    f"{run_loc}/{constr_atoms[0]}{i}/control.in", mod_control_opts
-                )
-
-                with open(
-                    f"{run_loc}/{constr_atoms[0]}{i}/control.in", "w"
-                ) as control_file:
-                    control_file.writelines(control_content)
-
-        if not hpc:  # Run the hole calculation
-            if print_output:  # Print live output of calculation
-                for i in range(len(atom_specifier)):
-                    i += 1
-                    os.system(
-                        f"cd {run_loc}/{constr_atoms[0]}{i} && mpirun -n "
-                        f"{nprocs} {binary} | tee aims.out"
-                    )
-
-            else:
-                with click.progressbar(
-                    range(len(atom_specifier)), label="calculating basis hole:"
-                ) as prog_bar:
-                    for i in prog_bar:
-                        i += 1
-                        os.system(
-                            f"cd {run_loc}/{constr_atoms[0]}{i} && mpirun -n "
-                            f"{nprocs} {binary} > aims.out"
-                        )
-
-        # These need to be passed to process()
-        ctx.obj["RUN_TYPE"] = run_type
-        ctx.obj["AT_SPEC"] = atom_specifier
-
-    # Compute the dscf energies and plot if option provided
-    if run_type == "hole":
-        process(ctx)
+        return fo, constr_atoms, ground_geom
