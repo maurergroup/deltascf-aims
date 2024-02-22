@@ -291,8 +291,8 @@ def projector(start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_op
 
             proj.run_ground(
                 proj.control_opts,
-                proj.l_vecs,
                 start.use_extra_basis,
+                proj.l_vecs,
                 start.print_output,
                 start.nprocs,
                 start.binary,
