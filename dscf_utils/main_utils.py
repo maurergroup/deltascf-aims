@@ -12,7 +12,7 @@ from ase.data.pubchem import pubchem_atoms_search
 from ase.io import write
 from click import BadParameter, MissingParameter, progressbar
 
-from delta_scf.force_occupation import ForceOccupation as fo
+from deltascf_aims.force_occupation import ForceOccupation as fo
 
 
 def add_control_opts(start, constr_atoms, control_opts, atom, calc) -> None:
@@ -663,7 +663,7 @@ class GroundCalc:
         with open(basis_file, "r") as basis_functions:
             control_content = basis_functions.readlines()
 
-        with open(f"{current_path}/../delta_scf/elements.yml", "r") as elements:
+        with open(f"{current_path}/../deltascf_aims/elements.yml", "r") as elements:
             elements = yaml.load(elements, Loader=yaml.SafeLoader)
 
         new_content = fo.add_additional_basis(

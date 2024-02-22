@@ -4,8 +4,8 @@ import sys
 
 import click
 
-from delta_scf.aims_dscf import BasisWrapper, Process, ProjectorWrapper, Start
-from dscf_utils.custom_click import MutuallyExclusive, MutuallyInclusive, ShowHelpSubCmd
+from deltascf_aims.aims_dscf import BasisWrapper, Process, ProjectorWrapper, Start
+from dscf_utils.custom_click import MutuallyExclusive, MutuallyInclusive
 
 
 @click.group()

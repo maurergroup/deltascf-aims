@@ -9,11 +9,11 @@ import numpy as np
 from ase import Atoms
 from ase.io import read
 
-import delta_scf.calc_dscf as cds
+import deltascf_aims.calc_dscf as cds
 import dscf_utils.main_utils as du
-from delta_scf.force_occupation import Basis, ForceOccupation, Projector
-from delta_scf.plot import XPSSpectrum
-from delta_scf.schmid_pseudo_voigt import broaden
+from deltascf_aims.force_occupation import Basis, ForceOccupation, Projector
+from deltascf_aims.plot import XPSSpectrum
+from deltascf_aims.schmid_pseudo_voigt import broaden
 from dscf_utils.main_utils import ExcitedCalc, GroundCalc
 
 

@@ -1,11 +1,16 @@
 [tool.poetry]
 name = "deltascf-aims"
-version = "0.7.0"
+version = "1.0.0a0"
 description = "Application to test calculation of core holes in FHI-aims"
 authors = ["Dylan Morgan <dylan.morgan@warwick.ac.uk>"]
 license = "GPL 3"
 readme = "README.md"
-packages = [{ include = "delta_scf" }]
+repository = "https://github.com/maurergroup/deltascf-aims"
+packages = [
+    { include = "deltascf_aims" },
+    { include = "dscf_utils" },
+    { include = "dscf_tests" },
+]
 
 [tool.poetry.dependencies]
 python = ">=3.10,<3.13"
@@ -15,12 +20,15 @@ matplotlib = "^3.8.1"
 numpy = "^1.26.2"
 ase = "^3.22.1"
 
+[tool.poetry.group.dev]
+optional = true
+
 [tool.poetry.group.dev.dependencies]
 pyment = "^0.3.3"
 pytest = "^7.4.3"
 
 [tool.poetry.scripts]
-deltascf = 'delta_scf.cli:cli'
+deltascf = 'deltascf_aims.cli:cli'
 
 [build-system]
 requires = ["poetry-core"]
