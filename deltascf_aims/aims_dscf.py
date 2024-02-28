@@ -146,8 +146,13 @@ class Start(object):
     #     return wrapper_check_help_arg
 
     def check_for_geometry_input(self) -> None:
-        """
-        Check that the geometry file parameter has been given
+        """Check that the geometry file parameter has been given.
+
+        Raises
+        ------
+        click.MissingParameter
+            The param_hint option has not been provided
+
         """
 
         if not self.geometry_input:
@@ -156,9 +161,7 @@ class Start(object):
             )
 
     def check_for_pbcs(self) -> None:
-        """
-        Check for lattice vectors and k_grid in input files.
-        """
+        """Check for lattice vectors and k-grid in input file"""
 
         self.found_lattice_vecs = False
         if self.geometry_input is not None:
@@ -174,23 +177,26 @@ class Start(object):
             self.found_k_grid = False
 
     def check_ase_usage(self) -> None:
-        """
-        Check whether ASE should be used or not.
-        """
+        """Check whether ASE should be used or not."""
 
         if self.control_input is not None:
             self.ase = False  # Do not use if control.in is specified
 
     # @_check_help_arg
     def create_structure(self) -> Union[Atoms, List[Atoms]]:
-        """
-        Initialise an ASE atoms object from geometry file if given or find from
-        databases if not.
+        """Initialise an ASE atoms object from geometry file if given or find databases
+        if not.
 
         Returns
         -------
-            atoms : Atoms
-                ASE atoms object
+        Union[Atoms, List[Atoms]]
+            ASE atoms object
+
+        Raises
+        ------
+        click.MissingParameter
+            The param_hint option has not been provided
+
         """
 
         atoms = Atoms()
@@ -219,18 +225,13 @@ class Start(object):
         return atoms
 
     def find_constr_atom_element(self, atoms) -> None:
-        """
-        Find the element of the atom to perform XPS/NEXAFS for.
+        """Find the element of the atom to perform XPS/NEXAFS for.
 
         Parameters
         ----------
-            atoms : Atoms
-                ASE atoms object
+        atoms : Atoms
+            Element of constr_atom
 
-        Returns
-        -------
-            constr_atom : str
-                element of constr_atom
         """
 
         # TODO: support for multiple constrained atoms
@@ -254,8 +255,13 @@ class Start(object):
 
         current_path = os.path.dirname(os.path.realpath(__file__))
         with open(f"{current_path}/aims_bin_loc.txt", "r") as f:
+            lines = f.readlines()
+            if "~" in lines[0][:-1]:
+                raise FileNotFoundError(
+                    "Please provide the full path to the FHI-aims binary"
+                )
             try:
-                bin_path = f.readlines()[0][:-1]
+                bin_path = lines[0][:-1]
             except IndexError:
                 bin_path = ""
 
@@ -282,7 +288,8 @@ class Start(object):
         if not Path(bin_path).is_file() or self.binary or bin_path == "":
             marker = (
                 "\n# Enter the path to the FHI-aims binary above this line\n"
-                "# Ensure that the binary is located in the build directory of FHIaims"
+                "# Ensure that the binary is located in the build directory of FHIaims\n"
+                "# and that the full absolute path is provided"
             )
             bin_line = click.edit(marker)
             if bin_line is not None:
@@ -577,7 +584,9 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
         )
 
         # Get methods from ExcitedCalc
-        super(GroundCalc, self).__init__(start)
+        # Ignore pyright error as I don't think it understands MRO and thinks this calls
+        # the GroundCalc __init__
+        super(GroundCalc, self).__init__(start)  # pyright: ignore
 
         self.start = start
         self.run_type = run_type
@@ -804,6 +813,8 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
         # Get the atom indices to constrain
         self.atom_specifier = self._get_atom_indices(fo)
 
+        print(self.atom_specifier)
+
         self._calc_checks(prev_calc, "init_1", check_restart=False, check_args=True)
 
         # TODO allow this for multiple constrained atoms using n_atoms
@@ -852,7 +863,6 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
         # Add any additional options to the control file
         for i in range(len(self.atom_specifier)):
 
-            # Also check that the previous calculation has been run
             self._calc_checks(prev_calc, "init_2")
 
             if len(self.control_opts) > 0 or self.start.control_input:
@@ -875,12 +885,14 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
 
     def pre_hole(self) -> Tuple[List[int], str]:
         """
-        Prerequisite before running the hole calculation
+        Prerequisite to running the hole calculation
 
         Returns
         -------
-            spec_run_info : str
-                Redirection location for STDERR of calculation
+        Tuple[List[int], str]
+            Indices for atoms as specified in geometry.in, redirection location for
+            STDERR of calculation
+
         """
 
         # Get element symbols to constrain
@@ -920,23 +932,24 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
         if self.start.spec_mol is not None:
             du.add_molecule_identifier(self.start, self.atom_specifier)
 
-        if not self.start.hpc:
-            # Add any additional control options to the hole control file
-            for i in range(len(self.atom_specifier)):
+        # Add any additional control options to the hole control file
+        for i in range(len(self.atom_specifier)):
 
-                # Check for if init_2 hasn't been run
+            # Check for if init_2 hasn't been run
+            if not self.start.hpc:
                 self._calc_checks(prev_calc, "hole")
 
-                if len(self.control_opts) > 0 or self.start.control_input:
-                    du.add_control_opts(
-                        self.start,
-                        self.constr_atoms,
-                        self.control_opts,
-                        self.atom_specifier[i],
-                        "hole",
-                    )
+            if len(self.control_opts) > 0 or self.start.control_input:
+                du.add_control_opts(
+                    self.start,
+                    self.constr_atoms,
+                    self.control_opts,
+                    self.atom_specifier[i],
+                    "hole",
+                )
 
-                # Copy the restart files to hole from init_2
+            # Copy the restart files to hole from init_2
+            if not self.start.hpc:
                 self._cp_restart_files(self.atom_specifier[i], "init_2", "hole")
 
         # Don't redirect STDERR to /dev/null as not converged errors should not occur

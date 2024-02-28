@@ -176,6 +176,56 @@ def check_constrained_geom(geom_file) -> None:
             raise SystemExit
 
 
+def check_curr_prev_run(
+    run_type: Literal["ground", "hole", "init_1", "init_2"],
+    run_loc,
+    constr_atoms,
+    atom_specifier,
+    constr_method: Literal["projector", "basis"],
+    hpc,
+) -> None:
+    """
+    Check if the current calculation has previously been run.
+
+    Parameters
+    ----------
+        run_type : Literal["ground", "hole", "init_1", "init_2"]
+            type of calculation to check for
+        run_loc : str
+            path to the calculation directory
+        constr_atoms : List[str]
+            list of constrained atoms
+        atom_specifier : List[int]
+            list of atom indices
+        constr_method : Literal["projector", "basis"]
+            method of constraining atoms
+        hpc : bool
+            whether to run on a HPC
+    """
+
+    if run_type == "ground":
+        search_path = f"{run_loc}/{run_type}/aims.out"
+    elif constr_method == "projector":
+        search_path = (
+            f"{run_loc}/{constr_atoms[0]}{atom_specifier[0]}/{run_type}/aims.out"
+        )
+    elif constr_method == "basis":
+        search_path = f"{run_loc}/{constr_atoms[0]}{atom_specifier[0]}/aims.out"
+
+    if os.path.isfile(search_path) and not hpc:
+        warnings.warn("Calculation has already been completed")
+        cont = None
+        while cont != "y":
+            cont = str(input("Do you want to continue? (y/n) ")).lower()
+
+            if cont == "n":
+                print("aborting...")
+                raise SystemExit(1)
+
+            if cont == "y":
+                break
+
+
 def check_k_grid(control_file) -> bool:
     """
     Check if there is a k_grid in the control.in.
@@ -244,54 +294,31 @@ def check_params(start, include_hpc=True) -> None:
         )
 
 
-def check_curr_prev_run(
-    run_type: Literal["ground", "hole", "init_1", "init_2"],
-    run_loc,
-    constr_atoms,
-    atom_specifier,
-    constr_method: Literal["projector", "basis"],
-    hpc,
-) -> None:
+def check_species_in_control(control_content, species) -> bool:
     """
-    Check if the current calculation has previously been run.
+    Check if the species basis set definition exists in control.in.
 
     Parameters
     ----------
-        run_type : Literal["ground", "hole", "init_1", "init_2"]
-            type of calculation to check for
-        run_loc : str
-            path to the calculation directory
-        constr_atoms : List[str]
-            list of constrained atoms
-        atom_specifier : List[int]
-            list of atom indices
-        constr_method : Literal["projector", "basis"]
-            method of constraining atoms
-        hpc : bool
-            whether to run on a HPC
+    control_content : List[str]
+        Lines from the control.in file
+    species : str
+        Element of the basis set to search for
+
+    Returns
+    -------
+    bool
+        True if the basis set for the species was found in control.in, False otherwise
+
     """
 
-    if run_type == "ground":
-        search_path = f"{run_loc}/{run_type}/aims.out"
-    elif constr_method == "projector":
-        search_path = (
-            f"{run_loc}/{constr_atoms[0]}{atom_specifier[0]}/{run_type}/aims.out"
-        )
-    elif constr_method == "basis":
-        search_path = f"{run_loc}/{constr_atoms[0]}{atom_specifier[0]}/aims.out"
+    for line in control_content:
+        spl = line.split()
 
-    if os.path.isfile(search_path) and not hpc:
-        warnings.warn("Calculation has already been completed")
-        cont = None
-        while cont != "y":
-            cont = str(input("Do you want to continue? (y/n) ")).lower()
+        if len(line) > 0 and "species" == spl[0] and species == spl[1]:
+            return True
 
-            if cont == "n":
-                print("aborting...")
-                raise SystemExit(1)
-
-            if cont == "y":
-                break
+    return False
 
 
 def convert_opts_to_dict(opts, pbc) -> dict:
@@ -518,24 +545,29 @@ def write_control(
     run_loc, control_opts, atoms, int_grid, add_extra_basis, defaults
 ) -> None:
     """
-    Write a control.in file
+    Write a control.in file.
 
     Parameters
     ----------
-        run_loc : str
-             path to the calculation directory
-        control_opts : dict
-            dictionary of control options
-        atoms : Atoms
-            ASE atoms object
-        int_grid : str
-            basis set density
-        defaults : str
-            path to species_defaults directory
+    run_loc : str
+        Path to the calculation directory
+    control_opts : dict
+        Dictionary of control options
+    atoms : Atoms
+        ASE atoms object
+    int_grid : str
+        Basis set density
+    add_extra_basis : bool
+        True if extra basis functions are to be added to the basis set, False
+        otherwise
+    defaults : str
+        Path to the species_defaults directory
+
     """
 
-    # Firstly create the control file
-    os.system(f"touch {run_loc}/control.in")
+    # Firstly create the control file if it doesn't exist
+    if not os.path.isfile(f"{run_loc}/control.in"):
+        os.system(f"touch {run_loc}/control.in")
 
     control_opts = convert_tuple_key_to_str(control_opts)
 
@@ -557,8 +589,11 @@ def write_control(
 
         #     os.system(f"cat {basis_set} >> {run_loc}/control.in")
 
-        basis_set = glob.glob(f"{defaults}/defaults_2020/{int_grid}/*{el}_default")[0]
-        os.system(f"cat {basis_set} >> {run_loc}/control.in")
+        if not check_species_in_control(lines, el):
+            basis_set = glob.glob(f"{defaults}/defaults_2020/{int_grid}/*{el}_default")[
+                0
+            ]
+            os.system(f"cat {basis_set} >> {run_loc}/control.in")
 
     # Copy it to the ground directory
     os.system(f"cp control.in {run_loc}/ground")
@@ -638,11 +673,9 @@ class GroundCalc:
 
         # Copy the geometry.in and control.in files to the ground directory
         if control_inp is not None:
-            # os.system(f"cp {control_inp.name} {self.run_loc}/ground")
             os.system(f"cp control.in {self.run_loc}/ground")
 
         if geom_inp is not None:
-            # os.system(f"cp {geom_inp.name} {self.run_loc}/ground")
             os.system(f"cp geometry.in {self.run_loc}/ground")
 
     def add_extra_basis_fns(self, constr_atom) -> None:
@@ -801,11 +834,11 @@ class GroundCalc:
                 ASE calculator object
         """
 
-        # Export environment variables
-        set_env_vars()
-
         # Run the ground state calculation
         if os.path.isfile(f"{self.run_loc}/ground/aims.out") is False:
+            if not self.hpc:
+                set_env_vars()
+
             if self.ase:  # Use ASE
                 self._with_ase(calc, control_opts, add_extra_basis, l_vecs)
 

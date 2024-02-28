@@ -126,6 +126,7 @@ from dscf_utils.custom_click import MutuallyExclusive, MutuallyInclusive
     type=int,
     help="number of processors to use",
 )
+@click.version_option()
 @click.pass_context
 def cli(
     ctx,
@@ -308,6 +309,10 @@ def projector(start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_op
             proj.run_excited(atom_specifier, proj.constr_atoms, "init_2", spec_run_info)
 
         case "hole":
+            # if start.hpc:
+            #     proj.setup_excited()
+            #     proj.pre_init_2()
+
             atom_specifier, spec_run_info = proj.pre_hole()
 
             if not start.hpc:  # Don't run on HPC
