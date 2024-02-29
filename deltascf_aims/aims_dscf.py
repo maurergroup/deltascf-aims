@@ -862,7 +862,6 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
 
         # Add any additional options to the control file
         for i in range(len(self.atom_specifier)):
-
             self._calc_checks(prev_calc, "init_2")
 
             if len(self.control_opts) > 0 or self.start.control_input:
@@ -902,8 +901,7 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
         # This has to be done outside of _calc_checks as that function requires
         # atom_specifier which is set in a function that requires ForceOccupation to be
         # initialised.
-        if not self.start.hpc:
-            prev_calc = self.check_prereq_calc("hole", self.constr_atoms, "projector")
+        prev_calc = self.check_prereq_calc("hole", self.constr_atoms, "projector")
 
         # Create the ForceOccupation object
         fo = ForceOccupation(
@@ -934,7 +932,6 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
 
         # Add any additional control options to the hole control file
         for i in range(len(self.atom_specifier)):
-
             # Check for if init_2 hasn't been run
             if not self.start.hpc:
                 self._calc_checks(prev_calc, "hole")

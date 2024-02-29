@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 
-import sys
-
 import click
 
 from deltascf_aims.aims_dscf import BasisWrapper, Process, ProjectorWrapper, Start
