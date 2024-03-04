@@ -25,7 +25,7 @@ optional = true
 
 [tool.poetry.group.dev.dependencies]
 pyment = "^0.3.3"
-pytest = "^7.4.3"
+pytest = ">=7.4.3,<9.0.0"
 
 [tool.poetry.scripts]
 deltascf = 'deltascf_aims.cli:cli'
