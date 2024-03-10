@@ -378,6 +378,7 @@ class ForceOccupation:
         for key in list(ad_cont_opts.keys()):
             opts.update({key: ad_cont_opts[key]})
 
+        print(opts)
         return opts
 
     @staticmethod
@@ -690,9 +691,9 @@ class Projector(ForceOccupation):
         ks_method = ""
         if occ_type == "force_occupation_projector":
             ks_method = "serial"
-        if occ_type == "deltascf_projector" and pbc is False:
+        if occ_type == "deltascf_projector" and not pbc:
             ks_method = "parallel"
-        if occ_type == "deltascf_projector" and pbc is True:
+        if occ_type == "deltascf_projector" and pbc:
             ks_method = "serial"
 
         # Loop over each element to constrain
@@ -761,9 +762,9 @@ class Projector(ForceOccupation):
         ks_method = ""
         if occ_type == "force_occupation_projector":
             ks_method = "serial"
-        if occ_type == "deltascf_projector" and pbc is False:
+        if occ_type == "deltascf_projector" and not pbc:
             ks_method = "parallel"
-        if occ_type == "deltascf_projector" and pbc is True:
+        if occ_type == "deltascf_projector" and pbc:
             ks_method = "serial"
 
         # Loop over each element to constrain

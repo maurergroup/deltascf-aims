@@ -67,6 +67,7 @@ class Start(object):
 
     Methods
     -------
+
         check_for_help_arg()
             Print click help if --help flag is given
         check_for_geometry_input()
@@ -619,14 +620,14 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
 
         Parameters
         ----------
-            prev_calc : str
-                previous calculation that was run
-            current_calc : str
-                type of excited calculation to perform
-            check_restart : bool
-                whether to check for restart files or not
-            check_args : bool
-                whether to check CLI supplied arguments or not
+        prev_calc : str
+            Previous calculation that should have been run
+        current_calc : str
+            Type of excited calculation that will be run
+        check_restart : bool
+            Whether to check for the existance of restart files or not
+        check_args : bool
+            Whether to check if the required CLI arguments were given or not
         """
 
         # Check that the current calculation has not already been run
@@ -729,26 +730,6 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
 
         return atom_specifier
 
-    def _get_element_symbols(self) -> Union[str, List[str]]:
-        """
-        Create a list of element symbols to constrain
-
-        Returns
-        -------
-            element_symbols : List[str]
-                element symbols to constrain
-        """
-
-        if len(self.start.spec_at_constr) > 0:
-            element_symbols = du.get_element_symbols(
-                self.ground_geom, self.start.spec_at_constr
-            )[0]
-            self.constr_atoms = element_symbols
-        else:
-            element_symbols = self.constr_atoms
-
-        return element_symbols
-
     def check_periodic(self) -> None:
         """
         Check if the lattice vectors and k_grid have been provided.
@@ -792,7 +773,9 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
         """
 
         # Get element symbols to constrain
-        element_symbols = self._get_element_symbols()
+        element_symbols = du.get_element_symbols(
+            self.ground_geom, self.start.spec_at_constr
+        )
 
         # Check that the prerequisite calculation has been run
         # This has to be done outside of _calc_checks as that function requires
@@ -812,8 +795,6 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
 
         # Get the atom indices to constrain
         self.atom_specifier = self._get_atom_indices(fo)
-
-        print(self.atom_specifier)
 
         self._calc_checks(prev_calc, "init_1", check_restart=False, check_args=True)
 
@@ -839,7 +820,9 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
         """
 
         # Get element symbols to constrain
-        element_symbols = self._get_element_symbols()
+        element_symbols = du.get_element_symbols(
+            self.ground_geom, self.start.spec_at_constr
+        )
 
         # Check that the prerequisite calculation has been run
         # This has to be done outside of _calc_checks as that function requires
@@ -895,7 +878,9 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
         """
 
         # Get element symbols to constrain
-        element_symbols = self._get_element_symbols()
+        element_symbols = du.get_element_symbols(
+            self.ground_geom, self.start.spec_at_constr
+        )
 
         # Check that the prerequisite calculation has been run
         # This has to be done outside of _calc_checks as that function requires
@@ -932,6 +917,7 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
 
         # Add any additional control options to the hole control file
         for i in range(len(self.atom_specifier)):
+
             # Check for if init_2 hasn't been run
             if not self.start.hpc:
                 self._calc_checks(prev_calc, "hole")
@@ -956,7 +942,7 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
         return self.atom_specifier, spec_run_info
 
 
-class BasisWrapper(GroundCalc):
+class BasisWrapper(GroundCalc, ExcitedCalc):
     """
     Force occupation of the basis states directly.
 
@@ -999,7 +985,7 @@ class BasisWrapper(GroundCalc):
         ks_max,
         control_opts,
     ):
-        super().__init__(
+        super(BasisWrapper, self).__init__(
             start.run_loc,
             start.atoms,
             start.basis_set,
@@ -1007,6 +993,11 @@ class BasisWrapper(GroundCalc):
             start.ase,
             start.hpc,
         )
+
+        # Get methods from ExcitedCalc
+        # Ignore pyright error as I don't think it understands MRO and thinks this calls
+        # the GroundCalc __init__
+        super(GroundCalc, self).__init__(start)  # pyright: ignore
 
         self.start = start
         self.run_type = run_type
@@ -1019,60 +1010,76 @@ class BasisWrapper(GroundCalc):
         self.ks_max = ks_max
         self.control_opts = control_opts
 
-        # Raise a warning if no additional control options have been specified
-        du.warn_no_extra_control_opts(self.control_opts, start.control_input)
+        self.ground_geom = f"{self.start.run_loc}/ground/geometry.in"
+        self.ground_control = f"{self.start.run_loc}/ground/control.in"
 
         # Convert control options to a dictionary
         control_opts = du.convert_opts_to_dict(control_opts, None)
 
-    def _add_control_keywords(self, fo, atom_specifier) -> None:
-        """
-        Add additional options to the control file.
+        # Raise a warning if no additional control options have been specified
+        du.warn_no_extra_control_opts(self.control_opts, start.control_input)
 
-        Parameters
-        ----------
-            fo : object
-                ForceOccupation object
-            atom_specifier : List[int]
-                atom indices to constrain
-        """
+        # Convert constr_atoms to a list
+        if not isinstance(self.start.constr_atom, list):
+            self.constr_atoms = [self.start.constr_atom]
+        else:
+            self.constr_atoms = self.start.constr_atom
 
-        # TODO allow multiple constraints using n_atoms
-        for i in range(len(atom_specifier)):
-            i += 1
+    # def _add_control_keywords(self, fo, atom_specifier) -> None:
+    #     """
+    #     Add additional options to the control file.
 
-            if len(self.control_opts) > 0 or self.start.control:
-                du.add_control_opts(self.start, fo, self.control_opts, i, "hole")
+    #     Parameters
+    #     ----------
+    #         fo : object
+    #             ForceOccupation object
+    #         atom_specifier : List[int]
+    #             atom indices to constrain
+    #     """
 
-    def _add_geometry_tag(self, fo, constr_atoms, ground_geom) -> None:
-        """
-        Add the name of the molecule to the geometry file.
+    #     # TODO allow multiple constraints using n_atoms
+    #     for i in range(len(atom_specifier)):
+    #         i += 1
 
-        Parameters
-        ----------
-            fo : object
-                ForceOccupation object
-            constr_atoms : List[str]
-                atom indices to constrain
-            ground_geom : str
-                path to the ground state geometry file
-        """
+    #         if len(self.control_opts) > 0 or self.start.control:
+    #             du.add_control_opts(self.start, fo, self.control_opts, i, "hole")
 
-        # Get the atom indices from the ground state geometry file
-        atom_specifier = fo.get_atoms(
-            constr_atoms, self.start.spec_at_constr, ground_geom
-        )
+    # def _add_geometry_tag(self, fo, constr_atoms, ground_geom) -> None:
+    #     """
+    #     Add the name of the molecule to the geometry file.
 
-        # Add the tag
-        du.add_molecule_identifier(self.start, atom_specifier)
+    #     Parameters
+    #     ----------
+    #         fo : object
+    #             ForceOccupation object
+    #         constr_atoms : List[str]
+    #             atom indices to constrain
+    #         ground_geom : str
+    #             path to the ground state geometry file
+    #     """
 
-    def _pre_calc_checks(self) -> None:
+    #     # Get the atom indices from the ground state geometry file
+    #     atom_specifier = fo.get_atoms(
+    #         constr_atoms, self.start.spec_at_constr, ground_geom
+    #     )
+
+    #     # Add the tag
+    #     du.add_molecule_identifier(self.start, atom_specifier)
+
+    def _calc_checks(self) -> None:
         """
         Perform checks before running the excited calculation.
         """
 
-        # Check that the ground state calculation has been run
-        du.check_ground_calc(self.start)
+        # Check that the current calculation has not already been run
+        du.check_curr_prev_run(
+            self.run_type,
+            self.start.run_loc,
+            self.constr_atoms,
+            self.atom_specifier,
+            "basis",
+            self.start.hpc,
+        )
 
         # Check that the constrained atoms have been given
         du.check_params(self.start)
@@ -1086,9 +1093,9 @@ class BasisWrapper(GroundCalc):
             ("m_qn", self.m_qn),
         )
 
-    def setup_excited_calculation(self) -> Tuple[object, List[str], str]:
+    def setup_excited(self) -> Tuple[object, List[str], str]:
         """
-        Setup files and parameters required for the hole calculations.
+        Setup files and parameters required for the hole calculation.
 
         Returns
         -------
@@ -1100,9 +1107,12 @@ class BasisWrapper(GroundCalc):
                 path to the ground state geometry file
         """
 
-        ground_geom, _, constr_atoms, element_symbols = du.prepare_excited_calcs(self)
+        # Get the element symbols to constrain
+        element_symbols = du.get_element_symbols(self.geom, self.start.spec_at_constr)
 
-        self._pre_calc_checks()
+        prev_calc = self.check_prereq_calc("hole", self.constr_atoms, "basis")
+
+        self._calc_checks()
 
         # Create the directories required for the hole calculation
         fo = ForceOccupation(

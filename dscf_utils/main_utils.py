@@ -315,7 +315,7 @@ def check_species_in_control(control_content, species) -> bool:
     for line in control_content:
         spl = line.split()
 
-        if len(line) > 0 and "species" == spl[0] and species == spl[1]:
+        if len(spl) > 0 and "species" == spl[0] and species == spl[1]:
             return True
 
     return False
@@ -397,40 +397,21 @@ def create_calc(procs, binary, species, int_grid) -> Aims:
     return aims_calc
 
 
-def defer_f_string_eval(string) -> str:
-    """
-    Defer the evaluation of f-strings.
-
-    Parameters
-    ----------
-    string : str
-        f-string to evaluate
-
-    Returns
-    -------
-    str
-        Evaluated f-string
-
-    """
-
-    return eval(f"f'{string}'")
-
-
 def get_element_symbols(geom, spec_at_constr) -> List[str]:
     """
     Find the element symbols from specified atom indices in a geometry file.
 
     Parameters
     ----------
-        geom : str
-            path to the geometry file
-        spec_at_constr : list
-            list of atom indices
+    geom : str
+        Path to the geometry file
+    spec_at_constr : List[int]
+        List of atom indices
 
     Returns
     -------
-        element_symbols : List[str]
-            list of element symbols
+    List[str]
+        List of element symbols
     """
 
     with open(geom, "r") as geom:
@@ -941,10 +922,6 @@ class ExcitedCalc:
         """
 
         prev_calc = None  # Placeholder until prev_calc is assigned
-        err_message = (
-            "aims.out for {prev_calc} not found, please ensure the "
-            "{prev_calc} calculation has been run"
-        )
 
         match current_calc:
             case "init_1":
@@ -959,7 +936,10 @@ class ExcitedCalc:
                         f"{self.start.run_loc}/{constr_atoms[0]}*/init_1/aims.out"
                     )[0]
                 except FileNotFoundError:
-                    raise FileNotFoundError(defer_f_string_eval(err_message))
+                    raise FileNotFoundError(
+                        f"aims.out for {prev_calc} not found, please ensure the "
+                        f"{prev_calc} calculation has been run"
+                    )
 
             case "hole":
                 if constr_method == "projector" and not self.start.hpc:
@@ -971,7 +951,10 @@ class ExcitedCalc:
                             "aims.out"
                         )[0]
                     except FileNotFoundError:
-                        raise FileNotFoundError(defer_f_string_eval(err_message))
+                        raise FileNotFoundError(
+                            f"aims.out for {prev_calc} not found, please ensure the "
+                            f"{prev_calc} calculation has been run"
+                        )
 
                 if constr_method == "projector" and self.start.hpc:
                     prev_calc = "ground"
@@ -994,8 +977,10 @@ class ExcitedCalc:
                     )
 
         if not os.path.isfile(search_path):
-            print(defer_f_string_eval(err_message))
-            raise FileNotFoundError(defer_f_string_eval(err_message))
+            raise FileNotFoundError(
+                f"aims.out for {prev_calc} not found, please ensure the "
+                f"{prev_calc} calculation has been run"
+            )
 
         return prev_calc
 
