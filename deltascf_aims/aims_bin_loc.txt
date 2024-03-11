@@ -1,4 +1,4 @@
-/Users/dylanmorgan/Programming/mac_projects/FHIaims/build/aims.231208.scalapack.mpi.x
+/home/dylanmorgan/Programming/projects/FHIaims/build/aims.240206.scalapack.mpi.x
 # Enter the path to the FHI-aims binary above this line
 # Ensure that the binary is located in the build directory of FHIaims
 # and that the full absolute path is provided

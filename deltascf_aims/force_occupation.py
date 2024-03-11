@@ -360,25 +360,24 @@ class ForceOccupation:
     @staticmethod
     def mod_keywords(ad_cont_opts, opts) -> dict:
         """
-        Allow users to modify and add keywords.
+        Update default or parsed keywords with user-specified keywords.
 
         Parameters
         ----------
-            ad_cont_opts : dict
-                dictionary of user-specified keywords
-            opts : dict
-                dictionary of default keywords
+        ad_cont_opts : dict
+            User-specified keywords
+        opts : dict
+            Default keywords
 
         Returns
         -------
-            opts : dict
-                dictionary of keywords
+        opts : dict
+            Keywords
         """
 
         for key in list(ad_cont_opts.keys()):
             opts.update({key: ad_cont_opts[key]})
 
-        print(opts)
         return opts
 
     @staticmethod
@@ -500,17 +499,17 @@ class ForceOccupation:
                         content[j:].index(f"    nucleus             {at_num}\n") + j
                     )
                     nucleus = content[nuclear_index]  # save for hole
-                    content[nuclear_index] = (
-                        f"    nucleus             {at_num + partial_charge}\n"
-                    )
+                    content[
+                        nuclear_index
+                    ] = f"    nucleus             {at_num + partial_charge}\n"
                 elif f"    nucleus      {at_num}\n" in content[j:]:
                     nuclear_index = (
                         content[j:].index(f"    nucleus      {at_num}\n") + j
                     )
                     nucleus = content[nuclear_index]  # save for hole
-                    content[nuclear_index] = (
-                        f"    nucleus      {at_num + partial_charge}\n"
-                    )
+                    content[
+                        nuclear_index
+                    ] = f"    nucleus      {at_num + partial_charge}\n"
 
                 # Add to valence orbital
                 if "#     ion occupancy\n" in content[j:]:
@@ -591,7 +590,7 @@ class Projector(ForceOccupation):
             "force_single_restartfile": ".true.",
         }
 
-        # Add or change user-specified keywords to the control file
+        # Add or change user-specified keywords to/in the control file
         opts = self.mod_keywords(self.ad_cont_opts, opts)
 
         # Create a new intermediate file and write basis sets to it

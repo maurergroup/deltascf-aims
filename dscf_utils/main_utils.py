@@ -4,6 +4,7 @@ import warnings
 from sys import platform
 from typing import List, Literal, Union
 
+import numpy as np
 import yaml
 from ase import Atoms
 from ase.build import molecule
@@ -21,16 +22,16 @@ def add_control_opts(start, constr_atoms, control_opts, atom, calc) -> None:
 
     Parameters
     ----------
-        start : Start
-            instance of the Start class
-        constr_atoms : list[str]
-            list of constrained atoms
-        control_opts : dict
-            dictionary of control options
-        atom : int
-            atom to add the control options to
-        calc : str
-            name of the calculation to add the control options to
+    start : Start
+        Instance of Start class
+    constr_atoms : List[str]
+        Constrained atoms
+    control_opts : dict
+        Control options
+    atom : int
+        Atom to add the control options to
+    calc : str
+        Name of the calculation to add the control options to
     """
 
     parsed_control_opts = fo.get_control_keywords(
@@ -131,12 +132,12 @@ def build_geometry(geometry) -> Union[Atoms, List[Atoms]]:
 
 def check_args(*args) -> None:
     """
-    Check if required arguments are specified.
+    Check if the required arguments have been specified.
 
-    Parameters
-    ----------
-        args : tuple
-            arbitrary number of arguments to check
+    Raises
+    ------
+    MissingParameter
+        The required parameter that hasn't been given
     """
 
     # TODO: Check that this function is working correctly
@@ -156,12 +157,17 @@ def check_args(*args) -> None:
 
 def check_constrained_geom(geom_file) -> None:
     """
-    Check for any constrain_relaxation keywords in geometry.in.
+    Check for `constrain_relaxation` keywords in the geometry.in.
 
     Parameters
     ----------
-        geom_file : str
-            path to geometry.in file
+    geom_file : str
+        Path to geometry.in file
+
+    Raises
+    ------
+    SystemExit
+        Crash the program
     """
 
     for line in geom_file:
@@ -173,7 +179,7 @@ def check_constrained_geom(geom_file) -> None:
                 "running single-point calculations"
             )
             print("aborting...")
-            raise SystemExit
+            raise SystemExit(1)
 
 
 def check_curr_prev_run(
@@ -185,22 +191,28 @@ def check_curr_prev_run(
     hpc,
 ) -> None:
     """
+
     Check if the current calculation has previously been run.
 
     Parameters
     ----------
-        run_type : Literal["ground", "hole", "init_1", "init_2"]
-            type of calculation to check for
-        run_loc : str
-            path to the calculation directory
-        constr_atoms : List[str]
-            list of constrained atoms
-        atom_specifier : List[int]
-            list of atom indices
-        constr_method : Literal["projector", "basis"]
-            method of constraining atoms
-        hpc : bool
-            whether to run on a HPC
+    run_type : Literal["ground", "hole", "init_1", "init_2"]
+        Type of calculation to check for
+    run_loc : str
+        Path to the calculation directory
+    constr_atoms : List[str]
+        Constrained atoms
+    atom_specifier : List[int]
+        List of atom indices
+    constr_method : Literal["projector", "basis"]
+        Method of constraining atom occupations
+    hpc : bool
+        Whether to run on a HPC
+
+    Raises
+    ------
+    SystemExit
+        Crash the program
     """
 
     if run_type == "ground":
@@ -256,8 +268,8 @@ def check_lattice_vecs(geom_file) -> bool:
 
     Returns
     -------
-        l_vecs : bool
-            True if lattice vectors are found, False otherwise
+    l_vecs : bool
+        True if lattice vectors are found, False otherwise
     """
 
     l_vecs = False
@@ -733,15 +745,18 @@ class GroundCalc:
                 )
 
     def _with_ase(self, calc, control_opts, add_extra_basis, l_vecs) -> None:
-        """
-        Run the ground state calculation using ASE.
+        """Run the ground state calculation using ASE.
 
         Parameters
         ----------
-            control_opts : dict
-                dictionary of control options
-            l_vecs : list
-                lattice vectors
+        calc : Aims
+            FHI-aims calculator instance
+        control_opts : dict
+            Control options
+        add_extra_basis : bool
+            Whether to add extra basis sets for a core hole
+        l_vecs : tuple
+            Lattice vectors
         """
 
         # Change the defaults if any are specified by the user
@@ -749,9 +764,23 @@ class GroundCalc:
         calc.set(**control_opts)
         control_opts = calc.parameters
 
+        # Create a 3x3 array of lattice vectors
+        l_vecs_copy = np.zeros((3, 3))
+        for i in range(3):
+            l_vecs_copy[i] = [int(j) for j in l_vecs[i].split()]
+
+        l_vecs = l_vecs_copy
+
         # Add the lattice vectors if periodic
         if l_vecs is not None:
             self.atoms.set_pbc(l_vecs)
+            # self.atoms.set_pbc(2 * np.identity(3))
+            self.atoms.set_cell(l_vecs)
+
+        # print(self.atoms.get_cell())
+        # print(self.atoms.get_pbc())
+
+        # exit(0)
 
         if self.hpc:
             # Prevent species dir from being written
@@ -820,39 +849,35 @@ class GroundCalc:
 
         Parameters
         ----------
-            control_opts : dict
-                dictionary of control options
-            l_vecs : list
-                lattice vectors
-            print_output : bool
-                whether to print the output of the calculation
-            nprocs : int
-                number of processors to use
-            binary : str
-                path to the aims binary
-            calc : Aims
-                ASE calculator object
+        control_opts : dict
+            Control options
+        add_extra_basis : bool
+            Whether to add additional basis function to the core hole
+        l_vecs : List[List[int]]
+            Lattice vectors
+        print_output : bool
+            Whether to print the output of the calculation
+        nprocs : int
+            Number of processors to use with mpirun
+        binary : str
+            Path to the FHI-aims binary
+        calc : Aims
+            Instance of an ASE calculator object
         """
 
-        # Run the ground state calculation
-        if os.path.isfile(f"{self.run_loc}/ground/aims.out") is False:
-            if not self.hpc:
-                set_env_vars()
+        if not self.hpc:  # Run the ground state calculation
+            set_env_vars()
 
-            if self.ase:  # Use ASE
-                self._with_ase(calc, control_opts, add_extra_basis, l_vecs)
+        if self.ase:  # Use ASE
+            self._with_ase(calc, control_opts, add_extra_basis, l_vecs)
 
-            elif not self.hpc:  # Don't use ASE
-                self._without_ase(print_output, nprocs, binary)
+        elif not self.hpc:  # Don't use ASE
+            self._without_ase(print_output, nprocs, binary)
 
-            # Print the KS states from aims.out so it is easier to specify the
-            # KS states for the hole calculation
-            if not self.hpc:
-                print_ks_states(f"{self.run_loc}/ground/")
-
-        else:
-            print("aims.out file found in ground calculation directory")
-            print("skipping calculation...")
+        # Print the KS states from aims.out so it is easier to specify the
+        # KS states for the hole calculation
+        if not self.hpc:
+            print_ks_states(f"{self.run_loc}/ground/")
 
 
 class ExcitedCalc:

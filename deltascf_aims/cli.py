@@ -108,7 +108,7 @@ from dscf_utils.custom_click import MutuallyExclusive, MutuallyInclusive
     is_flag=True,
     help="add additional basis functions for the core hole",
 )
-@click.option("-g", "--graph", is_flag=True, help="print out the simulated XPS spectra")
+# @click.option("-g", "--graph", is_flag=True, help="print out the simulated XPS spectra")
 @click.option(
     "-p",
     "--print_output",
@@ -141,7 +141,7 @@ def cli(
     n_atoms,
     basis_set,
     use_extra_basis,
-    graph,
+    # graph,
     print_output,
     nprocs,
 ):
@@ -185,7 +185,7 @@ def cli(
         n_atoms,
         basis_set,
         use_extra_basis,
-        graph,
+        # graph,
         print_output,
         nprocs,
     )
@@ -241,9 +241,8 @@ def cli(
     "-l",
     "--lattice_vectors",
     "l_vecs",
-    # nargs=3,
-    # type=list,
-    help="provide the lattice vectors as a 3x3 matrix",
+    nargs=3,
+    help="provide the lattice vectors as 3 vectors of length 3",
 )
 @click.option(
     "-s",
@@ -281,12 +280,20 @@ def projector(start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_op
         if proj.pbc is None:
             proj.check_periodic()
 
+    # If not ground, all the geometry.in files have been written already
+    if proj.l_vecs is not None and proj.run_type != "ground":
+        proj.add_l_vecs(start.geometry_input)
+
     if start.use_extra_basis:
         proj.add_extra_basis_fns(start.constr_atom)
 
     match proj.run_type:
         case "ground":
             proj.setup_ground(start.geometry_input, start.control_input)
+
+            # If ground, geometry.in files haven't been written until after setup_ground
+            if proj.l_vecs is not None and not start.ase:
+                proj.add_l_vecs(start.geometry_input)
 
             proj.run_ground(
                 proj.control_opts,
