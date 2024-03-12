@@ -314,10 +314,6 @@ def projector(start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_op
             proj.run_excited(atom_specifier, proj.constr_atoms, "init_2", spec_run_info)
 
         case "hole":
-            # if start.hpc:
-            #     proj.setup_excited()
-            #     proj.pre_init_2()
-
             atom_specifier, spec_run_info = proj.pre_hole()
 
             if not start.hpc:  # Don't run on HPC
@@ -407,9 +403,7 @@ def basis(
     Force occupation of Kohn-Sham states through basis functions.
     """
 
-    raise NotImplementedError("This method is not yet implemented")
-
-    BasisWrapper(
+    basis = BasisWrapper(
         start,
         run_type,
         atom_index,
@@ -421,6 +415,32 @@ def basis(
         ks_max,
         control_opts,
     )
+
+    if start.use_extra_basis:
+        basis.add_extra_basis_fns(start.constr_atom)
+
+    match basis.run_type:
+        case "ground":
+            basis.setup_ground(start.geometry_input, start.control_input)
+
+            basis.run_ground(
+                basis.control_opts,
+                start.use_extra_basis,
+                None,
+                start.print_output,
+                start.nprocs,
+                start.binary,
+                start.atoms.calc,
+            )
+
+        case "hole":
+            atom_specifier, _ = basis.setup_excited()
+
+            if not start.hpc:  # Don't run on HPC
+                basis.run_excited(atom_specifier, basis.constr_atoms, "hole", None)
+
+        case _:
+            raise ValueError(f"Invalid run_type: {basis.run_type}")
 
 
 @cli.command()
@@ -506,8 +526,3 @@ def plot(start, intensity, asym, a, b, gl_ratio, omega, gmp):
 
     if start.graph:
         process.plot_xps(xps)
-
-
-# cli.add_command(projector)
-# cli.add_command(basis)
-# cli.add_command(plot)

@@ -764,23 +764,23 @@ class GroundCalc:
         calc.set(**control_opts)
         control_opts = calc.parameters
 
-        # Create a 3x3 array of lattice vectors
-        l_vecs_copy = np.zeros((3, 3))
-        for i in range(3):
-            l_vecs_copy[i] = [int(j) for j in l_vecs[i].split()]
-
-        l_vecs = l_vecs_copy
-
-        # Add the lattice vectors if periodic
         if l_vecs is not None:
+            # Create a 3x3 array of lattice vectors
+            l_vecs_copy = np.zeros((3, 3))
+            for i in range(3):
+                l_vecs_copy[i] = [int(j) for j in l_vecs[i].split()]
+
+            l_vecs = l_vecs_copy
+
+            # Add the lattice vectors if periodic
             self.atoms.set_pbc(l_vecs)
             # self.atoms.set_pbc(2 * np.identity(3))
             self.atoms.set_cell(l_vecs)
 
-        # print(self.atoms.get_cell())
-        # print(self.atoms.get_pbc())
+            # print(self.atoms.get_cell())
+            # print(self.atoms.get_pbc())
 
-        # exit(0)
+            # exit(0)
 
         if self.hpc:
             # Prevent species dir from being written
@@ -853,7 +853,7 @@ class GroundCalc:
             Control options
         add_extra_basis : bool
             Whether to add additional basis function to the core hole
-        l_vecs : List[List[int]]
+        l_vecs : Union[Tuple[str], None]
             Lattice vectors
         print_output : bool
             Whether to print the output of the calculation
@@ -890,10 +890,18 @@ class ExcitedCalc:
 
         Parameters
         ----------
-            prev_calc : str
-                name of the previous calculation to check
-            atom : int
-                atom to check for
+        constr_atoms : List[str]
+            Atom indices to constrain
+        prev_calc : str
+            Name of the previous calculation to check
+        i_atom : int
+            Atom index to constrain
+
+        Raises
+        ------
+        FileNotFoundError
+            Unable to find restart files in the directory of the previous
+            calculation
         """
 
         if (
@@ -1017,14 +1025,18 @@ class ExcitedCalc:
         spec_run_info,
     ) -> None:
         """
-        Run an excited projector or basis calculations.
+        Run an excited state calculation.
 
         Parameters
         ----------
-            run_type : Literal['init_1', 'init_2', 'hole']
-                type of excited calculation to run
-            spec_run_info : str
-                redirection location for STDERR of calculation
+        atom_specifier : List[int]
+            List of atom indices to constrain
+        constr_atoms : List[str]
+            Constrained atoms
+        run_type : Literal["init_1", "init_2", "hole"]
+            Type of excited calculation to run
+        spec_run_info : str
+            Redirection location for STDERR of calculation
         """
 
         set_env_vars()

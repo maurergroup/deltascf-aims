@@ -991,26 +991,34 @@ class BasisWrapper(GroundCalc, ExcitedCalc):
 
     Attributes
     ----------
-        start : Start
-            instance of the Start object
-        run_type : click.Choice(["ground", "hole"])
-            type of calculation to perform
-        atom_index : click.IntRange(1)
-            atom index to constrain
-        occ_type : click.Choice(["deltascf_projector", "force_occupation_projector"])
-            use either the refactored or original projector keyword
-        multiplicity : click.IntRange(1)
-            multiplicity of the system
-        n_qn : click.IntRange(1)
-            principal quantum number
-        l_qn : click.IntRange(0)
-            angular momentum quantum number
-        m_qn : click.IntRange(-l_qn, l_qn)
-            magnetic quantum number
-        ks_max : click.IntRange(1)
-            maximum Kohn-Sham state to constrain
-        control_opts : Tuple[str]
-            additional control options to be added to the control.in file
+    start : Start
+        Instance of the Start object
+    run_type : click.Choice(["ground", "hole"])
+        Type of calculation to perform
+    atom_index : int
+        Index of the atom to constrain
+    occ_type : click.Choice(["deltascf_basis", "force_occupation_basis"])
+        Method of constraining the occupation
+    multiplicity : click.Choice(["1", "2"])
+        Spin channel of the constraint
+    n_qn : int
+        Principal quantum number for the basis function to constrain
+    l_qn : int
+        Angular momentum quantum number for the basis function to constrain
+    m_qn : int
+        Magnetic quantum number for the basis function to constrain
+    ks_max : int
+        Highest energy Kohn-Sham state to constrain
+    control_opts : Tuple[str]
+        Additional control options to be added to the control.in file
+    ground_geom : str
+        Location of the ground state geometry file
+    ground_control : str
+        Location of the ground state control file
+    constr_atoms : List[int]
+        Atom indices to constrain
+    atom_specifier : List[int]
+        Atom indices as specified in geometry.in
     """
 
     def __init__(
@@ -1066,47 +1074,6 @@ class BasisWrapper(GroundCalc, ExcitedCalc):
         else:
             self.constr_atoms = self.start.constr_atom
 
-    # def _add_control_keywords(self, fo, atom_specifier) -> None:
-    #     """
-    #     Add additional options to the control file.
-
-    #     Parameters
-    #     ----------
-    #         fo : object
-    #             ForceOccupation object
-    #         atom_specifier : List[int]
-    #             atom indices to constrain
-    #     """
-
-    #     # TODO allow multiple constraints using n_atoms
-    #     for i in range(len(atom_specifier)):
-    #         i += 1
-
-    #         if len(self.control_opts) > 0 or self.start.control:
-    #             du.add_control_opts(self.start, fo, self.control_opts, i, "hole")
-
-    # def _add_geometry_tag(self, fo, constr_atoms, ground_geom) -> None:
-    #     """
-    #     Add the name of the molecule to the geometry file.
-
-    #     Parameters
-    #     ----------
-    #         fo : object
-    #             ForceOccupation object
-    #         constr_atoms : List[str]
-    #             atom indices to constrain
-    #         ground_geom : str
-    #             path to the ground state geometry file
-    #     """
-
-    #     # Get the atom indices from the ground state geometry file
-    #     atom_specifier = fo.get_atoms(
-    #         constr_atoms, self.start.spec_at_constr, ground_geom
-    #     )
-
-    #     # Add the tag
-    #     du.add_molecule_identifier(self.start, atom_specifier)
-
     def _calc_checks(self) -> None:
         """
         Perform checks before running the excited calculation.
@@ -1134,24 +1101,24 @@ class BasisWrapper(GroundCalc, ExcitedCalc):
             ("m_qn", self.m_qn),
         )
 
-    def setup_excited(self) -> Tuple[object, List[str], str]:
+    def setup_excited(self) -> List[int]:
         """
+
         Setup files and parameters required for the hole calculation.
 
         Returns
         -------
-            fo : object
-                ForceOccupation object
-            constr_atoms : List[str]
-                atom indices to constrain
-            ground_geom : str
-                path to the ground state geometry file
+        List[int]
+            Indices for atoms as specified in geometry.in
         """
 
         # Get the element symbols to constrain
         element_symbols = du.get_element_symbols(
             self.ground_geom, self.start.spec_at_constr
         )
+
+        # Ensure that the ground calculation has been run
+        self.check_prereq_calc("hole", self.constr_atoms, "basis")
 
         # Create the directories required for the hole calculation
         fo = ForceOccupation(
@@ -1184,9 +1151,7 @@ class BasisWrapper(GroundCalc, ExcitedCalc):
         )
 
         # Add molecule ID to geometry file
-        self._add_geometry_tag(fo, constr_atoms, ground_geom)
+        if self.start.spec_mol is not None:
+            du.add_molecule_identifier(self.start, self.atom_specifier)
 
-        # Add any additional options to the control file
-        self._add_control_keywords(fo, constr_atoms)
-
-        return fo, constr_atoms, ground_geom
+        return self.atom_specifier
