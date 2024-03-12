@@ -10,6 +10,8 @@ from typing import List, Tuple, Union
 import numpy as np
 import yaml
 
+import dscf_utils.main_utils as mu
+
 
 class ForceOccupation:
     """
@@ -27,13 +29,19 @@ class ForceOccupation:
     """
 
     def __init__(
-        self, element_symbols, run_loc, geometry, ad_cont_opts, species, extra_basis
+        self,
+        element_symbols,
+        run_loc,
+        geometry,
+        ad_cont_opts,
+        atom_specifier,
+        extra_basis,
     ):
         self.element_symbols = element_symbols
         self.run_loc = run_loc
         self.geometry = geometry
         self.ad_cont_opts = ad_cont_opts
-        self.species = species
+        self.atom_specifier = atom_specifier
         self.extra_basis = extra_basis
 
         # Convert k_grid key to a string from a tuple
@@ -43,74 +51,7 @@ class ForceOccupation:
             ad_cont_opts["k_grid"] = " ".join(map(str, ad_cont_opts["k_grid"]))
 
         self.new_control = f"{self.run_loc}/ground/control.in.new"
-        self.atom_specifier = []
-
-        # Find the root directory of the package
-        self.current_path = os.path.dirname(os.path.realpath(__file__))
-
-        # All supported elements
-        with open(f"{self.current_path}/elements.yml", "r") as elements:
-            self.elements = yaml.load(elements, Loader=yaml.SafeLoader)
-
-    # TODO
-    # def read_ground_inp_el_symb
-
-    def get_atoms(self, constr_atoms, spec_at_constr, geometry_path) -> List[int]:
-        """
-        Find the number of atoms in the geometry file.
-
-        Parameters
-        ----------
-            constr_atoms : List[str]
-                list of elements to constrain
-            spec_at_constr : List[int]
-                list of atom indices to constrain
-            geometry_path : str
-                path to the geometry file
-
-        Returns
-        -------
-            atom_specifier : List[int]
-                list of atom indices to constrain
-        """
-
-        # For if the user supplied element symbols to constrain
-        if constr_atoms is not None:
-            # Check validity of specified elements
-            for atom in constr_atoms:
-                if atom not in self.elements:
-                    raise ValueError("invalid element specified")
-
-            print("calculating all target atoms in geometry.in")
-
-            # Constrain all atoms of the target element
-            for atom in constr_atoms:
-                with open(geometry_path, "r") as geom_in:
-                    atom_counter = 0
-
-                    for line in geom_in:
-                        spl = line.split()
-
-                        if len(spl) > 0 and "atom" in spl[0]:
-                            atom_counter += 1
-                            element = spl[-1]  # Identify atom
-                            identifier = spl[0]  # Extra check that line is an atom
-
-                            if "atom" in identifier and element == atom:
-                                self.atom_specifier.append(atom_counter)
-
-        # For if the user supplied atom indices to constrain
-        if len(spec_at_constr) > 0:
-            # Check validity of specified elements
-            for atom in self.element_symbols:
-                if atom not in self.elements:
-                    raise ValueError("invalid element specified")
-
-            self.atom_specifier = list(spec_at_constr)
-
-        print("specified atom indices:", self.atom_specifier)
-
-        return self.atom_specifier
+        self.elements = mu.get_all_elements()
 
     def get_electronic_structure(self, atom) -> str:
         """
@@ -499,17 +440,17 @@ class ForceOccupation:
                         content[j:].index(f"    nucleus             {at_num}\n") + j
                     )
                     nucleus = content[nuclear_index]  # save for hole
-                    content[
-                        nuclear_index
-                    ] = f"    nucleus             {at_num + partial_charge}\n"
+                    content[nuclear_index] = (
+                        f"    nucleus             {at_num + partial_charge}\n"
+                    )
                 elif f"    nucleus      {at_num}\n" in content[j:]:
                     nuclear_index = (
                         content[j:].index(f"    nucleus      {at_num}\n") + j
                     )
                     nucleus = content[nuclear_index]  # save for hole
-                    content[
-                        nuclear_index
-                    ] = f"    nucleus      {at_num + partial_charge}\n"
+                    content[nuclear_index] = (
+                        f"    nucleus      {at_num + partial_charge}\n"
+                    )
 
                 # Add to valence orbital
                 if "#     ion occupancy\n" in content[j:]:

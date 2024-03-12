@@ -108,7 +108,6 @@ class Start(object):
         n_atoms,
         basis_set,
         use_extra_basis,
-        # graph,
         print_output,
         nprocs,
     ):
@@ -124,7 +123,6 @@ class Start(object):
         self.n_atoms = n_atoms
         self.basis_set = basis_set
         self.use_extra_basis = use_extra_basis
-        # self.graph = graph
         self.print_output = print_output
         self.nprocs = nprocs
 
@@ -162,7 +160,9 @@ class Start(object):
             )
 
     def check_for_pbcs(self) -> None:
-        """Check for lattice vectors and k-grid in input file"""
+        """
+        Check for lattice vectors and k-grid in input file.
+        """
 
         self.found_lattice_vecs = False
         if self.geometry_input is not None:
@@ -177,6 +177,22 @@ class Start(object):
         else:
             self.found_k_grid = False
 
+    def check_constr_keywords(self) -> None:
+        """
+        Ensure that constr_atom or spec_at_constr are given.
+
+        Raises
+        ------
+        click.MissingParameter
+            The param_hint option has not been provided
+        """
+
+        if self.constr_atom is None and self.spec_at_constr is None:
+            raise click.MissingParameter(
+                param_hint="-c/--constrained_atom or -s/--specific_atom_constraint",
+                param_type="option",
+            )
+
     def check_ase_usage(self) -> None:
         """Check whether ASE should be used or not."""
 
@@ -185,8 +201,9 @@ class Start(object):
 
     # @_check_help_arg
     def create_structure(self) -> Union[Atoms, List[Atoms]]:
-        """Initialise an ASE atoms object from geometry file if given or find databases
-        if not.
+        """
+        Initialise an ASE atoms object from geometry file if given or find databases if
+        not.
 
         Returns
         -------
@@ -197,7 +214,6 @@ class Start(object):
         ------
         click.MissingParameter
             The param_hint option has not been provided
-
         """
 
         atoms = Atoms()
@@ -226,13 +242,13 @@ class Start(object):
         return atoms
 
     def find_constr_atom_element(self, atoms) -> None:
-        """Find the element of the atom to perform XPS/NEXAFS for.
+        """
+        Find the element of the atom to perform XPS/NEXAFS for.
 
         Parameters
         ----------
         atoms : Atoms
             Element of constr_atom
-
         """
 
         # TODO: support for multiple constrained atoms
@@ -549,15 +565,6 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
     -------
         check_periodic()
             Check if the lattice vectors and k_grid have been provided
-        _call_setups(proj)
-            Setup files and parameters required for the initialisation and hole
-            calculations
-        _check_params(include_hpc=True)
-            Check that the parameters given in Start are valid
-        _check_prev_runs(prev_calc, atom)
-            Check if the required previous calculation has been run
-        _cp_restart_files(atom, begin, end)
-            Copy the restart files from one calculation location to another
         run_ground()
             Run the ground state calculation
         setup_excited_calcs()
@@ -613,22 +620,26 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
             self.constr_atoms = self.start.constr_atom
 
     def _calc_checks(
-        self, prev_calc, current_calc, check_restart=True, check_args=False
+        self,
+        current_calc: Literal["init_1", "init_2", "hole"],
+        check_restart=True,
+        check_args=False,
     ) -> None:
         """
         Perform checks before running an excited calculation.
 
         Parameters
         ----------
-        prev_calc : str
-            Previous calculation that should have been run
-        current_calc : str
+        current_calc : Literal["init_1", "init_2", "hole"]
             Type of excited calculation that will be run
-        check_restart : bool
+        check_restart : bool, optional
             Whether to check for the existance of restart files or not
-        check_args : bool
+        check_args : bool, optional
             Whether to check if the required CLI arguments were given or not
         """
+
+        # Check that the previous calculation has been run
+        prev_calc = self.check_prereq_calc(current_calc, self.constr_atoms, "projector")
 
         # Check that the current calculation has not already been run
         du.check_curr_prev_run(
@@ -746,56 +757,42 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
         Add lattice vectors to the geometry.in file.
         """
 
+        # Read the file
         with open(geom, "r") as geom_file:
             geom_content = geom_file.readlines()
 
         # Check if the lattice vectors are already in the file
         lv_line_1 = None
-
         for i, line in enumerate(geom_content):
             if "lattice_vector" in line:
                 lv_line_1 = i
                 break
 
-        if lv_line_1 is not None:
-            geom_content[
-                lv_line_1
-            ] = f"lattice_vector {self.l_vecs[0][0]} {self.l_vecs[0][1]} {self.l_vecs[0][2]}\n"
-            geom_content[
-                lv_line_1 + 1
-            ] = f"lattice_vector {self.l_vecs[1][0]} {self.l_vecs[1][1]} {self.l_vecs[1][2]}\n"
-            geom_content[
-                lv_line_1 + 2
-            ] = f"lattice_vector {self.l_vecs[2][0]} {self.l_vecs[2][1]} {self.l_vecs[2][2]}\n"
+        # Add lattice vectors to the geometry file
+        if lv_line_1 is not None:  # Replace existing lattice vectors
+            for i in range(3):
+                geom_content[lv_line_1 + i] = (
+                    f"lattice_vector {self.l_vecs[i][0]} {self.l_vecs[i][1]} "
+                    f"{self.l_vecs[i][2]}\n"
+                )
 
-        elif self.start.ase:
-            geom_content.insert(
-                5,
-                f"lattice_vector {self.l_vecs[0][0]} {self.l_vecs[0][1]} {self.l_vecs[0][2]}\n",
-            )
-            geom_content.insert(
-                6,
-                f"lattice_vector {self.l_vecs[1][0]} {self.l_vecs[1][1]} {self.l_vecs[1][2]}\n",
-            )
-            geom_content.insert(
-                7,
-                f"lattice_vector {self.l_vecs[2][0]} {self.l_vecs[2][1]} {self.l_vecs[2][2]}\n",
-            )
+        elif self.start.ase:  # Add after ASE header
+            for i in range(5, 8):
+                geom_content.insert(
+                    i,
+                    f"lattice_vector {self.l_vecs[i-5][0]} {self.l_vecs[i-5][1]} "
+                    f" {self.l_vecs[i-5][2]}\n",
+                )
 
         else:
-            geom_content.insert(
-                0,
-                f"lattice_vector {self.l_vecs[0][0]} {self.l_vecs[0][1]} {self.l_vecs[0][2]}\n",
-            )
-            geom_content.insert(
-                1,
-                f"lattice_vector {self.l_vecs[1][0]} {self.l_vecs[1][1]} {self.l_vecs[1][2]}\n",
-            )
-            geom_content.insert(
-                2,
-                f"lattice_vector {self.l_vecs[2][0]} {self.l_vecs[2][1]} {self.l_vecs[2][2]}\n",
-            )
+            for i in range(3):  # Add to the top of the file
+                geom_content.insert(
+                    i,
+                    f"lattice_vector {self.l_vecs[i][0]} {self.l_vecs[i][1]} "
+                    f"{self.l_vecs[i][2]}\n",
+                )
 
+        # Write to the file
         with open(geom, "w") as geom_file:
             geom_file.writelines(geom_content)
 
@@ -809,16 +806,17 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
                 redirection location for STDERR of calculation
         """
 
-        # Get element symbols to constrain
+        # Get the atom indices to constrain
+        self.atom_specifier = du.get_atoms(
+            self.constr_atoms, self.start.spec_at_constr, self.ground_geom
+        )
+
+        self._calc_checks("init_1", check_restart=False, check_args=True)
+
+        # Get the element symbols to constrain
         element_symbols = du.get_element_symbols(
             self.ground_geom, self.start.spec_at_constr
         )
-
-        # Check that the prerequisite calculation has been run
-        # This has to be done outside of _calc_checks as that function requires
-        # atom_specifier which is set in a function that requires ForceOccupation to be
-        # initialised.
-        prev_calc = self.check_prereq_calc("init_1", self.constr_atoms, "projector")
 
         # Create the ForceOccupation object
         fo = ForceOccupation(
@@ -826,16 +824,9 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
             self.start.run_loc,
             self.ground_geom,
             self.control_opts,
-            f"{self.start.species}/defaults_2020/{self.start.basis_set}",
+            self.atom_specifier,
             self.start.use_extra_basis,
         )
-
-        # Get the atom indices to constrain
-        self.atom_specifier = fo.get_atoms(
-            self.constr_atoms, self.start.spec_at_constr, self.ground_geom
-        )
-
-        self._calc_checks(prev_calc, "init_1", check_restart=False, check_args=True)
 
         # TODO allow this for multiple constrained atoms using n_atoms
         for atom in element_symbols:
@@ -858,35 +849,15 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
                 Redirection location for STDERR of calculation
         """
 
-        # Get element symbols to constrain
-        element_symbols = du.get_element_symbols(
-            self.ground_geom, self.start.spec_at_constr
-        )
-
-        # Check that the prerequisite calculation has been run
-        # This has to be done outside of _calc_checks as that function requires
-        # atom_specifier which is set in a function that requires ForceOccupation to be
-        # initialised.
-        prev_calc = self.check_prereq_calc("init_2", self.constr_atoms, "projector")
-
-        # Create the ForceOccupation object
-        fo = ForceOccupation(
-            element_symbols,
-            self.start.run_loc,
-            self.ground_geom,
-            self.control_opts,
-            f"{self.start.species}/defaults_2020/{self.start.basis_set}",
-            self.start.use_extra_basis,
-        )
-
         # Get the atom indices to constrain
-        self.atom_specifier = fo.get_atoms(
+        self.atom_specifier = du.get_atoms(
             self.constr_atoms, self.start.spec_at_constr, self.ground_geom
         )
 
+        self._calc_checks("init_2")
+
         # Add any additional options to the control file
         for i in range(len(self.atom_specifier)):
-            self._calc_checks(prev_calc, "init_2")
 
             if len(self.control_opts) > 0 or self.start.control_input:
                 du.add_control_opts(
@@ -917,34 +888,32 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
             STDERR of calculation
         """
 
+        # Get the atom indices to constrain
+        self.atom_specifier = du.get_atoms(
+            self.constr_atoms, self.start.spec_at_constr, self.ground_geom
+        )
+
+        # Check for if init_2 hasn't been run
+        if not self.start.hpc:
+            self._calc_checks("hole")
+
         # Get element symbols to constrain
         element_symbols = du.get_element_symbols(
             self.ground_geom, self.start.spec_at_constr
         )
 
-        # Check that the prerequisite calculation has been run
-        # This has to be done outside of _calc_checks as that function requires
-        # atom_specifier which is set in a function that requires ForceOccupation to be
-        # initialised.
-        prev_calc = self.check_prereq_calc("hole", self.constr_atoms, "projector")
-
-        # Create the ForceOccupation object
-        fo = ForceOccupation(
-            element_symbols,
-            self.start.run_loc,
-            self.ground_geom,
-            self.control_opts,
-            f"{self.start.species}/defaults_2020/{self.start.basis_set}",
-            self.start.use_extra_basis,
-        )
-
-        # Get the atom indices to constrain
-        self.atom_specifier = fo.get_atoms(
-            self.constr_atoms, self.start.spec_at_constr, self.ground_geom
-        )
-
         if self.start.hpc:
-            self._calc_checks(None, "hole", check_restart=False, check_args=True)
+            self._calc_checks("hole", check_restart=False, check_args=True)
+
+            # Create the ForceOccupation object
+            fo = ForceOccupation(
+                element_symbols,
+                self.start.run_loc,
+                self.ground_geom,
+                self.control_opts,
+                self.atom_specifier,
+                self.start.use_extra_basis,
+            )
 
             for atom in element_symbols:
                 fo.get_electronic_structure(atom)
@@ -959,9 +928,6 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
 
         # Add any additional control options to the hole control file
         for i in range(len(self.atom_specifier)):
-            # Check for if init_2 hasn't been run
-            if not self.start.hpc:
-                self._calc_checks(prev_calc, "hole")
 
             if len(self.control_opts) > 0 or self.start.control_input:
                 du.add_control_opts(
@@ -995,8 +961,6 @@ class BasisWrapper(GroundCalc, ExcitedCalc):
         Instance of the Start object
     run_type : click.Choice(["ground", "hole"])
         Type of calculation to perform
-    atom_index : int
-        Index of the atom to constrain
     occ_type : click.Choice(["deltascf_basis", "force_occupation_basis"])
         Method of constraining the occupation
     multiplicity : click.Choice(["1", "2"])
@@ -1015,6 +979,8 @@ class BasisWrapper(GroundCalc, ExcitedCalc):
         Location of the ground state geometry file
     ground_control : str
         Location of the ground state control file
+    control_opts : Tuple[str]
+        Additional control options to be added to the control.in file
     constr_atoms : List[int]
         Atom indices to constrain
     atom_specifier : List[int]
@@ -1025,7 +991,6 @@ class BasisWrapper(GroundCalc, ExcitedCalc):
         self,
         start,
         run_type,
-        atom_index,
         occ_type,
         multiplicity,
         n_qn,
@@ -1050,7 +1015,6 @@ class BasisWrapper(GroundCalc, ExcitedCalc):
 
         self.start = start
         self.run_type = run_type
-        self.atom_index = atom_index
         self.occ_type = occ_type
         self.multiplicity = multiplicity
         self.n_qn = n_qn
@@ -1063,7 +1027,7 @@ class BasisWrapper(GroundCalc, ExcitedCalc):
         self.ground_control = f"{self.start.run_loc}/ground/control.in"
 
         # Convert control options to a dictionary
-        control_opts = du.convert_opts_to_dict(control_opts, None)
+        self.control_opts = du.convert_opts_to_dict(control_opts, None)
 
         # Raise a warning if no additional control options have been specified
         du.warn_no_extra_control_opts(self.control_opts, start.control_input)
@@ -1078,6 +1042,8 @@ class BasisWrapper(GroundCalc, ExcitedCalc):
         """
         Perform checks before running the excited calculation.
         """
+
+        self.check_prereq_calc("hole", self.constr_atoms, "basis")
 
         # Check that the current calculation has not already been run
         du.check_curr_prev_run(
@@ -1094,7 +1060,6 @@ class BasisWrapper(GroundCalc, ExcitedCalc):
 
         # Check that the required arguments have been given
         du.check_args(
-            ("atom_index", self.atom_index),
             ("ks_max", self.ks_max),
             ("n_qn", self.n_qn),
             ("l_qn", self.l_qn),
@@ -1103,7 +1068,6 @@ class BasisWrapper(GroundCalc, ExcitedCalc):
 
     def setup_excited(self) -> List[int]:
         """
-
         Setup files and parameters required for the hole calculation.
 
         Returns
@@ -1112,13 +1076,17 @@ class BasisWrapper(GroundCalc, ExcitedCalc):
             Indices for atoms as specified in geometry.in
         """
 
+        # Get the atom indices to constrain
+        self.atom_specifier = du.get_atoms(
+            self.constr_atoms, self.start.spec_at_constr, self.ground_geom
+        )
+
+        self._calc_checks()
+
         # Get the element symbols to constrain
         element_symbols = du.get_element_symbols(
             self.ground_geom, self.start.spec_at_constr
         )
-
-        # Ensure that the ground calculation has been run
-        self.check_prereq_calc("hole", self.constr_atoms, "basis")
 
         # Create the directories required for the hole calculation
         fo = ForceOccupation(
@@ -1126,16 +1094,9 @@ class BasisWrapper(GroundCalc, ExcitedCalc):
             self.start.run_loc,
             self.ground_geom,
             self.control_opts,
-            f"{self.start.species}/defaults_2020/{self.start.basis_set}",
+            self.atom_specifier,
             self.start.use_extra_basis,
         )
-
-        # Get the atom indices to constrain
-        self.atom_specifier = fo.get_atoms(
-            self.constr_atoms, self.start.spec_at_constr, self.ground_geom
-        )
-
-        self._calc_checks()
 
         basis = Basis(fo)
         basis.setup_basis(
@@ -1143,7 +1104,7 @@ class BasisWrapper(GroundCalc, ExcitedCalc):
             self.n_qn,
             self.l_qn,
             self.m_qn,
-            self.start.occ,
+            self.start.occupation,
             self.ks_max,
             self.occ_type,
             self.start.basis_set,

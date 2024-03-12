@@ -56,10 +56,10 @@ def add_molecule_identifier(start, atom_specifier) -> None:
 
     Parameters
     ----------
-        start : Start
-            instance of the Start class
-        atom_specifier : list
-            list of atom indices
+    start : Start
+        Instance of the Start class
+    atom_specifier : List[int]
+        Atom indices as given in geometry.in
     """
 
     with open(
@@ -84,18 +84,22 @@ def add_molecule_identifier(start, atom_specifier) -> None:
 
 def build_geometry(geometry) -> Union[Atoms, List[Atoms]]:
     """
-    Try various databases to create a geometry.in file.
+    Try getting geometry data from various databases to create a geometry.in file.
 
     Parameters
     ----------
-        geometry : str
-            Name or formula of the system to be created
+    geometry : str
+        Name or formula of the system to be created
 
     Returns
     -------
-        atoms : Union[Atoms, List[Atoms], None]
-            Atoms object, list of atoms objects, or None if the system is not found in
-            any database
+    atoms : Union[Atoms, List[Atoms]]
+        Atoms object, or list of atoms objects
+
+    Raises
+    ------
+    SystemExit
+        Exit the program if the system is not found in any database
     """
 
     try:
@@ -167,7 +171,7 @@ def check_constrained_geom(geom_file) -> None:
     Raises
     ------
     SystemExit
-        Crash the program
+        Exit the program if the `constrain_relaxation` keyword is found
     """
 
     for line in geom_file:
@@ -212,7 +216,7 @@ def check_curr_prev_run(
     Raises
     ------
     SystemExit
-        Crash the program
+        Exit the program if the calculation has already been run
     """
 
     if run_type == "ground":
@@ -244,13 +248,13 @@ def check_k_grid(control_file) -> bool:
 
     Parameters
     ----------
-        control_file : str
-            path to control.in file
+    control_file : str
+        Path to control.in file
 
     Returns
     -------
-        k_grid : bool
-            True if k_grid input parameter is found, False otherwise
+    k_grid : bool
+        Whether the k_grid input parameter is found
     """
 
     k_grid = False
@@ -283,14 +287,22 @@ def check_lattice_vecs(geom_file) -> bool:
 
 def check_params(start, include_hpc=True) -> None:
     """
+
     Check that the parameters given in Start are valid.
 
     Parameters
     ----------
-        start : Start
-            instance of the Start class
-        include_hpc : bool
-            include the hpc parameter in the check
+    start : Start
+        Instance of the Start class
+    include_hpc : bool, optional
+        Include the hpc parameter in the check
+
+    Raises
+    ------
+    MissingParameter
+        A required parameter has not been given
+    BadParameter
+        An incompatible parameter has been given
     """
 
     if include_hpc:
@@ -339,15 +351,15 @@ def convert_opts_to_dict(opts, pbc) -> dict:
 
     Parameters
     ----------
-        opts : tuple
-            tuple of control options
-        pbc : list
-            tuple of k-points
+    opts : tuple
+        Tuple of control options
+    pbc : list
+        Tuple of k-points
 
     Returns
     -------
-        opts_dict : dict
-            dictionary of control options
+    opts_dict : dict
+        Dictionary of control options
     """
 
     opts_dict = {}
@@ -365,8 +377,17 @@ def convert_opts_to_dict(opts, pbc) -> dict:
 
 
 def convert_tuple_key_to_str(control_opts) -> dict:
-    """
-    Convert any keys given as tuples to strings in control_opts
+    """Convert any keys given as tuples to strings in control_opts
+
+    Parameters
+    ----------
+    control_opts : dict
+        Options for the control.in file
+
+    Returns
+    -------
+    control_opts : dict
+        Ammended control.in file options
     """
 
     for i in control_opts.items():
@@ -378,23 +399,23 @@ def convert_tuple_key_to_str(control_opts) -> dict:
 
 def create_calc(procs, binary, species, int_grid) -> Aims:
     """
-    Create an ASE calculator object
+    Create an ASE calculator object.
 
     Parameters
     ----------
-        procs : int
-            number of processors to use
-        binary : str
-            path to aims binary
-        species : str
-            path to species directory
-        int_grid : str
-            basis set density
+    procs : int
+        number of processors to use
+    binary : str
+        path to aims binary
+    species : str
+        path to species directory
+    int_grid : str
+        basis set density
 
     Returns
     -------
-        aims_calc : Aims
-            ASE calculator object
+    aims_calc : Aims
+        ASE calculator object
     """
 
     # Choose some sane defaults
@@ -407,6 +428,93 @@ def create_calc(procs, binary, species, int_grid) -> Aims:
     )
 
     return aims_calc
+
+
+def get_atoms(constr_atoms, spec_at_constr, geometry_path) -> List[int]:
+    """
+    Get the atom indices to constrain from the geometry file.
+
+    Parameters
+    ----------
+        constr_atoms : List[str]
+            list of elements to constrain
+        spec_at_constr : List[int]
+            list of atom indices to constrain
+        geometry_path : str
+            path to the geometry file
+
+    Returns
+    -------
+        atom_specifier : List[int]
+            list of atom indices to constrain
+    """
+
+    elements = get_all_elements()
+    atom_specifier = []
+
+    # For if the user supplied element symbols to constrain
+    if constr_atoms is not None:
+        # Check validity of specified elements
+        for atom in constr_atoms:
+            if atom not in elements:
+                raise ValueError("invalid element specified")
+
+        print("Calculating all target atoms in geometry.in")
+
+        # Constrain all atoms of the target element
+        for atom in constr_atoms:
+            with open(geometry_path, "r") as geom_in:
+                atom_counter = 0
+
+                for line in geom_in:
+                    spl = line.split()
+
+                    if len(spl) > 0 and "atom" in spl[0]:
+                        atom_counter += 1
+                        element = spl[-1]  # Identify atom
+                        identifier = spl[0]  # Extra check that line is an atom
+
+                        if "atom" in identifier and element == atom:
+                            atom_specifier.append(atom_counter)
+
+    # For if the user supplied atom indices to constrain
+    elif len(spec_at_constr) > 0:
+        # Check validity of specified elements
+        for atom in element_symbols:
+            if atom not in elements:
+                raise ValueError("Invalid element specified")
+
+        atom_specifier = list(spec_at_constr)
+
+    else:
+        raise Click.MissingParameter(
+            param_hint="-c/--constrained_atom or -s/--specific_atom_constraint",
+            param_type="option",
+        )
+
+    print("Specified atom indices:", atom_specifier)
+
+    return atom_specifier
+
+
+def get_all_elements() -> List[str]:
+    """
+    Get a list of all element symbols supported by FHI-aims.
+
+    Returns
+    -------
+    elements : List[str]
+        Element symbols
+    """
+
+    # Find the root directory of the package
+    current_path = os.path.dirname(os.path.realpath(__file__))
+
+    # Get all supported elements in FHI-aims
+    with open(f"{current_path}/../deltascf_aims/elements.yml", "r") as elements_file:
+        elements = yaml.load(elements_file, Loader=yaml.SafeLoader)
+
+    return elements
 
 
 def get_element_symbols(geom, spec_at_constr) -> List[str]:
@@ -456,8 +564,13 @@ def print_ks_states(run_loc) -> None:
 
     Parameters
     ----------
-        run_loc : str
-            path to the calculation directory
+    run_loc : str
+        path to the calculation directory
+
+    Raises
+    ------
+    SystemExit
+        Exit the program if no KS states are found
     """
 
     # Parse the output file
@@ -519,7 +632,7 @@ def print_ks_states(run_loc) -> None:
 
 def set_env_vars() -> None:
     """
-    Set environment variables for running aims.
+    Set environment variables for running FHI-aims.
     """
 
     os.system("export OMP_NUM_THREADS=1")
@@ -540,10 +653,10 @@ def warn_no_extra_control_opts(opts, inp) -> None:
 
     Parameters
     ----------
-        opts : Tuple[str]
-            additional control options to be added to the control.in file
-        inp : click.File
-            path to custom control.in file
+    opts : Tuple[str]
+        additional control options to be added to the control.in file
+    inp : click.File
+        path to custom control.in file
 
     """
     if len(opts) < 1 and inp is None:
@@ -574,7 +687,6 @@ def write_control(
         otherwise
     defaults : str
         Path to the species_defaults directory
-
     """
 
     # Firstly create the control file if it doesn't exist
@@ -619,33 +731,27 @@ class GroundCalc:
 
     Attributes
     ----------
-        run_loc : str
-            path to the calculation directory
-        atoms : Atoms
-            ASE atoms object
-        basis_set : str
-            basis set density
-        species : str
-            path to species directory
-        ase : bool
-            whether to use ASE
-        hpc : bool
-            whether to run on a HPC
+    run_loc : str
+        path to the calculation directory
+    atoms : Atoms
+        ASE atoms object
+    basis_set : str
+        basis set density
+    species : str
+        path to species directory
+    ase : bool
+        whether to use ASE
+    hpc : bool
+        whether to run on a HPC
 
     Methods
     -------
-        _set_env_vars()
-            Set environment variables for running aims.
-        _setup_files_and_dirs(geom_inp, control_inp)
-            Setup the ground calculation files and directories.
-        add_extra_basis_fns(constr_atom)
-            Add additional basis functions to the basis set.
-        _with_ase(calc, control_opts, l_vecs)
-            Run the ground state calculation using ASE.
-        _without_ase(print_output, nprocs, binary)
-            Run the ground state calculation without ASE.
-        run(geom_inp, control_inp, constr_atom, calc, control_opts, l_vecs, print_output, nprocs, binary)
-            Run the ground state calculation.
+    setup_ground(geom_inp, control_inp)
+        Setup the ground calculation files and directories
+    add_extra_basis_fns(constr_atom)
+        Add additional basis functions to the basis set
+    run_ground(control_opts, add_extra_basis, l_vecs, print_output, nprocs, binary, calc)
+        Run the ground state calculation
     """
 
     def __init__(
@@ -670,10 +776,10 @@ class GroundCalc:
 
         Parameters
         ----------
-            geom_inp : str
-                path to the geometry.in file
-            control_inp : str
-                path to the control.in file
+        geom_inp : str
+            path to the geometry.in file
+        control_inp : str
+            path to the control.in file
         """
 
         # Create the ground directory if it doesn't already exist
@@ -696,8 +802,8 @@ class GroundCalc:
 
         Parameters
         ----------
-            constr_atom : str
-                element symbol of the constrained atom
+        constr_atom : str
+            element symbol of the constrained atom
         """
 
         basis_file = glob.glob(
@@ -810,16 +916,17 @@ class GroundCalc:
 
     def _without_ase(self, print_output, nprocs, binary) -> None:
         """
+
         Run the ground state calculation without ASE.
 
         Parameters
         ----------
-            print_output : bool
-                whether to print the output of the calculation
-            nprocs : int
-                number of processors to use
-            binary : str
-                path to the aims binary
+        print_output : bool
+            Whether to print the output of the calculation
+        nprocs : int
+            Number of processors to use with mpirun
+        binary : str
+            Path to the FHI-aims binary
         """
 
         print("running calculation...")
@@ -861,7 +968,7 @@ class GroundCalc:
             Number of processors to use with mpirun
         binary : str
             Path to the FHI-aims binary
-        calc : Aims
+        calc : Aims, optional
             Instance of an ASE calculator object
         """
 
@@ -881,10 +988,28 @@ class GroundCalc:
 
 
 class ExcitedCalc:
+    """
+    Setup and run an excited state calculation.
+
+    Attributes
+    ----------
+    start : Start
+        Instance of Start class
+
+    Methods
+    -------
+    check_restart_files(constr_atoms, prev_calc, atom)
+        Check if the restart files from the previous calculation exist
+    check_prereq_calc(current_calc, constr_atoms, constr_method)
+        Check if the prerequisite calculation has been run
+    run_excited(atom_specifier, constr_atoms, run_type, spec_run_info)
+        Run an excited state calculation
+    """
+
     def __init__(self, start):
         self.start = start
 
-    def check_restart_files(self, constr_atoms, prev_calc, i_atom) -> None:
+    def check_restart_files(self, constr_atoms, prev_calc, atom) -> None:
         """
         Check if the restart files from the previous calculation exist.
 
@@ -894,7 +1019,7 @@ class ExcitedCalc:
             Atom indices to constrain
         prev_calc : str
             Name of the previous calculation to check
-        i_atom : int
+        atom : int
             Atom index to constrain
 
         Raises
@@ -908,7 +1033,7 @@ class ExcitedCalc:
             len(
                 glob.glob(
                     f"{self.start.run_loc}/{constr_atoms[0]}"
-                    f"{i_atom}/{prev_calc}/*restart*"
+                    f"{atom}/{prev_calc}/*restart*"
                 )
             )
             < 1
@@ -951,7 +1076,6 @@ class ExcitedCalc:
             Invalid type for current_calc has been given
         ValueError
             Invalid parameter for current_calc has been given
-
         """
 
         prev_calc = None  # Placeholder until prev_calc is assigned

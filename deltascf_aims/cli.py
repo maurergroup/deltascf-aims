@@ -141,7 +141,6 @@ def cli(
     n_atoms,
     basis_set,
     use_extra_basis,
-    # graph,
     print_output,
     nprocs,
 ):
@@ -185,7 +184,6 @@ def cli(
         n_atoms,
         basis_set,
         use_extra_basis,
-        # graph,
         print_output,
         nprocs,
     )
@@ -195,6 +193,7 @@ def cli(
         start.check_for_geometry_input()
 
     start.check_for_pbcs()
+    start.check_constr_keywords()
     start.check_ase_usage()
     start.atoms = start.create_structure()
 
@@ -334,9 +333,6 @@ def projector(start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_op
     help="select the type of calculation to perform",
 )
 @click.option(
-    "-a", "--atom_index", type=int, help="index of the (first) atom to constrain"
-)
-@click.option(
     "-o",
     "--occ_type",
     default="deltascf_basis",
@@ -384,13 +380,12 @@ def projector(start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_op
     "--control_opts",
     multiple=True,
     type=str,
-    help="provide additional options to be used in 'control.in'",
+    help="provide additional options to be used in 'control.in' in a key=value format",
 )
 @click.pass_obj
 def basis(
     start,
     run_type,
-    atom_index,
     occ_type,
     spin,
     n_qn,
@@ -406,7 +401,6 @@ def basis(
     basis = BasisWrapper(
         start,
         run_type,
-        atom_index,
         occ_type,
         spin,
         n_qn,
@@ -434,7 +428,7 @@ def basis(
             )
 
         case "hole":
-            atom_specifier, _ = basis.setup_excited()
+            atom_specifier = basis.setup_excited()
 
             if not start.hpc:  # Don't run on HPC
                 basis.run_excited(atom_specifier, basis.constr_atoms, "hole", None)
