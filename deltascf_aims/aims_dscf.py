@@ -108,6 +108,7 @@ class Start(object):
         n_atoms,
         basis_set,
         use_extra_basis,
+        graph,
         print_output,
         nprocs,
     ):
@@ -123,6 +124,7 @@ class Start(object):
         self.n_atoms = n_atoms
         self.basis_set = basis_set
         self.use_extra_basis = use_extra_basis
+        self.graph = graph
         self.print_output = print_output
         self.nprocs = nprocs
 
@@ -187,7 +189,7 @@ class Start(object):
             The param_hint option has not been provided
         """
 
-        if self.constr_atom is None and self.spec_at_constr is None:
+        if self.constr_atom is None and len(self.spec_at_constr) == 0:
             raise click.MissingParameter(
                 param_hint="-c/--constrained_atom or -s/--specific_atom_constraint",
                 param_type="option",
@@ -224,7 +226,7 @@ class Start(object):
                 atoms = read(f"./{self.run_loc}/ground/geometry.in")
                 print(
                     "molecule argument not provided, defaulting to using existing geometry.in"
-                    " file"
+                    " file from the ground state calculation"
                 )
             except FileNotFoundError:
                 raise click.MissingParameter(
@@ -435,6 +437,9 @@ class Process:
         self.gl_ratio = gl_ratio
         self.omega = omega
 
+        # Ensure that the constrained atom(s) have been given
+        du.check_args(("constrained_atom", self.start.constr_atom))
+
     def calc_dscf_energies(self) -> Tuple[List[float], str]:
         """
         Parse absolute energies and calculate deltaSCF energies
@@ -445,10 +450,8 @@ class Process:
                 deltaSCF energies
         """
 
-        grenrgys = cds.read_ground(self.start.run_location)
-        excienrgys, element = cds.read_atoms(
-            self.start.run_location, self.start.constr_atom
-        )
+        grenrgys = cds.read_ground(self.start.run_loc)
+        excienrgys, element = cds.read_atoms(self.start.run_loc, self.start.constr_atom)
         xps = cds.calc_delta_scf(self.start.constr_atom, grenrgys, excienrgys)
 
         return xps, element
@@ -482,7 +485,7 @@ class Process:
                 broadened peaks
         """
 
-        peaks, _ = broaden(
+        peaks = broaden(
             0,
             1000,
             self.intensity,
@@ -720,6 +723,26 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
             f"/{end}/"
         )
 
+    def _get_element_symbols(self) -> Union[str, List[str]]:
+        """
+        Create a list of element symbols to constrain
+
+        Returns
+        -------
+        element_symbols : Union[str, List[str]]
+            Element symbols to constrain
+        """
+
+        if len(self.start.spec_at_constr) > 0:
+            element_symbols = du.get_element_symbols(
+                self.ground_geom, self.start.spec_at_constr
+            )[0]
+            self.constr_atoms = element_symbols
+        else:
+            element_symbols = self.constr_atoms
+
+        return element_symbols
+
     def check_periodic(self) -> None:
         """
         Check if the lattice vectors and k_grid have been provided.
@@ -814,9 +837,7 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
         self._calc_checks("init_1", check_restart=False, check_args=True)
 
         # Get the element symbols to constrain
-        element_symbols = du.get_element_symbols(
-            self.ground_geom, self.start.spec_at_constr
-        )
+        element_symbols = self._get_element_symbols()
 
         # Create the ForceOccupation object
         fo = ForceOccupation(
@@ -898,9 +919,7 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
             self._calc_checks("hole")
 
         # Get element symbols to constrain
-        element_symbols = du.get_element_symbols(
-            self.ground_geom, self.start.spec_at_constr
-        )
+        element_symbols = self._get_element_symbols()
 
         if self.start.hpc:
             self._calc_checks("hole", check_restart=False, check_args=True)
@@ -1066,6 +1085,26 @@ class BasisWrapper(GroundCalc, ExcitedCalc):
             ("m_qn", self.m_qn),
         )
 
+    def _get_element_symbols(self) -> Union[str, List[str]]:
+        """
+        Create a list of element symbols to constrain
+
+        Returns
+        -------
+        element_symbols : Union[str, List[str]]
+            Element symbols to constrain
+        """
+
+        if len(self.start.spec_at_constr) > 0:
+            element_symbols = du.get_element_symbols(
+                self.ground_geom, self.start.spec_at_constr
+            )[0]
+            self.constr_atoms = element_symbols
+        else:
+            element_symbols = self.constr_atoms
+
+        return element_symbols
+
     def setup_excited(self) -> List[int]:
         """
         Setup files and parameters required for the hole calculation.
@@ -1084,9 +1123,7 @@ class BasisWrapper(GroundCalc, ExcitedCalc):
         self._calc_checks()
 
         # Get the element symbols to constrain
-        element_symbols = du.get_element_symbols(
-            self.ground_geom, self.start.spec_at_constr
-        )
+        element_symbols = self._get_element_symbols()
 
         # Create the directories required for the hole calculation
         fo = ForceOccupation(

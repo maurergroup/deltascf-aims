@@ -108,7 +108,7 @@ from dscf_utils.custom_click import MutuallyExclusive, MutuallyInclusive
     is_flag=True,
     help="add additional basis functions for the core hole",
 )
-# @click.option("-g", "--graph", is_flag=True, help="print out the simulated XPS spectra")
+@click.option("-g", "--graph", is_flag=True, help="print out the simulated XPS spectra")
 @click.option(
     "-p",
     "--print_output",
@@ -141,6 +141,7 @@ def cli(
     n_atoms,
     basis_set,
     use_extra_basis,
+    graph,
     print_output,
     nprocs,
 ):
@@ -184,6 +185,7 @@ def cli(
         n_atoms,
         basis_set,
         use_extra_basis,
+        graph,
         print_output,
         nprocs,
     )
@@ -193,7 +195,6 @@ def cli(
         start.check_for_geometry_input()
 
     start.check_for_pbcs()
-    start.check_constr_keywords()
     start.check_ase_usage()
     start.atoms = start.create_structure()
 
@@ -270,6 +271,10 @@ def projector(start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_op
     """
     Force occupation through defining the Kohn-Sham states to occupy.
     """
+
+    # Do this here rather than start to avoid it being called for process which must
+    # take constr_atoms not spec_at_constr
+    start.check_constr_keywords()
 
     proj = ProjectorWrapper(
         start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts
@@ -398,6 +403,10 @@ def basis(
     Force occupation of Kohn-Sham states through basis functions.
     """
 
+    # Do this here rather than start to avoid it being called for process which must
+    # take constr_atoms not spec_at_constr
+    start.check_constr_keywords()
+
     basis = BasisWrapper(
         start,
         run_type,
@@ -431,7 +440,9 @@ def basis(
             atom_specifier = basis.setup_excited()
 
             if not start.hpc:  # Don't run on HPC
-                basis.run_excited(atom_specifier, basis.constr_atoms, "hole", None)
+                basis.run_excited(
+                    atom_specifier, basis.constr_atoms, "hole", None, basis_constr=True
+                )
 
         case _:
             raise ValueError(f"Invalid run_type: {basis.run_type}")
@@ -511,7 +522,7 @@ def plot(start, intensity, asym, a, b, gl_ratio, omega, gmp):
     xps, element = process.calc_dscf_energies()
 
     # Ensure peaks file is in the run location
-    if start.run_location != "./":
+    if start.run_loc != "./":
         process.move_file_to_run_loc(element, "peaks")
 
     # Broaden spectrum and write to file

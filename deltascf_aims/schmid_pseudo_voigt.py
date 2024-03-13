@@ -56,10 +56,13 @@ def broaden(start, stop, A, m, dirac_peaks, omega, asymmetry, a, b):
     dirac_peaks = list of dirac delta peaks
     eta = full width at half maximum (eta > 0)
     """
+
     domain = np.linspace(start, stop, 100000)
     data = np.zeros([len(domain)])
+    # TODO: fix
     for i in dirac_peaks:
         V = _schmid_pseudo_voigt(domain, A, m, i, omega, asymmetry, a, b)
+        print(V)
         data += V
 
     return data

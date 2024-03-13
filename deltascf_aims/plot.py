@@ -67,6 +67,7 @@ class XPSSpectrum:
         self.x_axis_aims = np.loadtxt(
             f"{run_loc}/{targ_at}_xps_spectrum.txt", usecols=(0)
         )
+
         self.y_axis_aims = np.loadtxt(
             f"{run_loc}/{targ_at}_xps_spectrum.txt", usecols=(1)
         )

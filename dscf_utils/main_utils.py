@@ -135,13 +135,16 @@ def build_geometry(geometry) -> Union[Atoms, List[Atoms]]:
 
 
 def check_args(*args) -> None:
-    """
-    Check if the required arguments have been specified.
+    """Check if the required arguments have been specified.
 
     Raises
     ------
     MissingParameter
-        The required parameter that hasn't been given
+        A required parameter has not been given
+
+    Examples
+    --------
+    FIXME: Add docs.
     """
 
     # TODO: Check that this function is working correctly
@@ -287,7 +290,6 @@ def check_lattice_vecs(geom_file) -> bool:
 
 def check_params(start, include_hpc=True) -> None:
     """
-
     Check that the parameters given in Start are valid.
 
     Parameters
@@ -1147,6 +1149,7 @@ class ExcitedCalc:
         constr_atoms,
         run_type: Literal["init_1", "init_2", "hole"],
         spec_run_info,
+        basis_constr=False,
     ) -> None:
         """
         Run an excited state calculation.
@@ -1161,7 +1164,13 @@ class ExcitedCalc:
             Type of excited calculation to run
         spec_run_info : str
             Redirection location for STDERR of calculation
+        basis_constr : bool, optional
+            Whether the calculation uses the basis occupation constraint method
         """
+
+        # Don't cd into hole for basis scalculation
+        if basis_constr:
+            run_type = ""
 
         set_env_vars()
 
@@ -1185,7 +1194,7 @@ class ExcitedCalc:
                 for i in prog_bar:
                     os.system(
                         f"cd {self.start.run_loc}/{constr_atoms[0]}{atom_specifier[i]}"
-                        f"/{run_type}&& mpirun -n {self.start.nprocs} "
+                        f"/{run_type} && mpirun -n {self.start.nprocs} "
                         f"{self.start.binary} > aims.out {spec_run_info}"
                     )
 
