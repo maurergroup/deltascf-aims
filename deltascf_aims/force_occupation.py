@@ -845,10 +845,10 @@ class Basis(ForceOccupation):
                 # Change control file
                 # Find species defaults location from location of binary and
                 # add basis set to control file from defaults
-                basis_set = glob.glob(
-                    f"{defaults}/defaults_2020/{basis_set}/*{el}_default"
+                basis_set_file = glob.glob(
+                    f"{defaults}/defaults_2020/{basis_set}/??_{el}_default"
                 )
-                os.system(f"cat {basis_set[0]} >> {control}")
+                os.system(f"cat {basis_set_file[0]} >> {control}")
 
                 # Change basis set label for core hole atom
                 with open(control, "r") as read_control:

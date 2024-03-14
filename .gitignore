@@ -131,5 +131,5 @@ dmypy.json
 # Others 
 runs/
 run_dir/*
-deltascf_aims/aims_bin_loc.txt
+**aims_bin_loc.txt
 **.tmp

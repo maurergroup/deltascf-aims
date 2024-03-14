@@ -439,7 +439,9 @@ def create_calc(procs, binary, species, int_grid) -> Aims:
     return aims_calc
 
 
-def get_atoms(constr_atoms, spec_at_constr, geometry_path) -> List[int]:
+def get_atoms(
+    constr_atoms, spec_at_constr, geometry_path, element_symbols
+) -> List[int]:
     """
     Get the atom indices to constrain from the geometry file.
 
@@ -451,6 +453,8 @@ def get_atoms(constr_atoms, spec_at_constr, geometry_path) -> List[int]:
             list of atom indices to constrain
         geometry_path : str
             path to the geometry file
+        element_symbols : Union[str, List[str]]
+            element symbols to constrain
 
     Returns
     -------

@@ -161,6 +161,7 @@ class XPSSpectrum:
 
         self._find_k_edge_mabe()
 
+        # Add the mean average binding energy to the plot
         plt.plot(
             np.full((len(self.aims_be_line)), self.aims_be),
             self.aims_be_line,
@@ -170,19 +171,16 @@ class XPSSpectrum:
         )
 
         # Plot the individual binding energies
-        first_dirac = True
-        for peak in xps:
-            # Include the peak in the legend if first call
-            if first_dirac is True:
-                plt.axvline(
-                    x=peak,
-                    c="#9467bd",  # Purpley colour
-                    ymax=0.25,
-                    label="Individual binding energies",
-                )
-                first_dirac = False
-            else:
-                plt.axvline(x=peak, c="#9467bd", ymax=0.25)  # Purpley colour
+        # Include the peak in the legend if first call
+        plt.axvline(
+            x=xps[0],
+            c="#9467bd",  # Purpley colour
+            ymax=0.25,
+            label="Individual binding energies",
+        )
+
+        for peak in xps[1:]:
+            plt.axvline(x=peak, c="#9467bd", ymax=0.25)  # Purpley colour
 
         self._get_spectrum_range()
 

@@ -827,15 +827,18 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
                 redirection location for STDERR of calculation
         """
 
+        # Get the element symbols to constrain
+        element_symbols = self._get_element_symbols()
+
         # Get the atom indices to constrain
         self.atom_specifier = du.get_atoms(
-            self.constr_atoms, self.start.spec_at_constr, self.ground_geom
+            self.constr_atoms,
+            self.start.spec_at_constr,
+            self.ground_geom,
+            element_symbols,
         )
 
         self._calc_checks("init_1", check_restart=False, check_args=True)
-
-        # Get the element symbols to constrain
-        element_symbols = self._get_element_symbols()
 
         # Create the ForceOccupation object
         fo = ForceOccupation(
@@ -868,9 +871,15 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
                 Redirection location for STDERR of calculation
         """
 
+        # Get the element symbols to constrain
+        element_symbols = self._get_element_symbols()
+
         # Get the atom indices to constrain
         self.atom_specifier = du.get_atoms(
-            self.constr_atoms, self.start.spec_at_constr, self.ground_geom
+            self.constr_atoms,
+            self.start.spec_at_constr,
+            self.ground_geom,
+            element_symbols,
         )
 
         self._calc_checks("init_2")
@@ -906,17 +915,20 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
             STDERR of calculation
         """
 
+        # Get element symbols to constrain
+        element_symbols = self._get_element_symbols()
+
         # Get the atom indices to constrain
         self.atom_specifier = du.get_atoms(
-            self.constr_atoms, self.start.spec_at_constr, self.ground_geom
+            self.constr_atoms,
+            self.start.spec_at_constr,
+            self.ground_geom,
+            element_symbols,
         )
 
         # Check for if init_2 hasn't been run
         if not self.start.hpc:
             self._calc_checks("hole")
-
-        # Get element symbols to constrain
-        element_symbols = self._get_element_symbols()
 
         if self.start.hpc:
             self._calc_checks("hole", check_restart=False, check_args=True)
