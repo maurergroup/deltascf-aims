@@ -1,4 +1,6 @@
+import glob
 import math
+import re
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -97,32 +99,25 @@ class XPSSpectrum:
         Calculate the range of the XPS spectrum to plot
         """
 
-        self.plot_x = np.zeros([])
-        self.plot_y = np.zeros([])
+        tmp_plot_x = np.array([])
+        tmp_plot_y = np.array([])
 
         glob_max_y = max(self.y_axis_aims)
         glob_min_y = glob_max_y * self.gmp
 
         for c, y in enumerate(self.y_axis_aims):
             if y > glob_min_y:
-                np.append(self.plot_x, self.x_axis_aims[c])
-                np.append(self.plot_y, y)
+                self.plot_x = np.append(tmp_plot_x, self.x_axis_aims[c])
+                self.plot_y = np.append(tmp_plot_y, y)
 
         # Calculate the min and max ranges
         self.x_max = math.floor(max(self.plot_x))
         self.x_min = math.ceil(min(self.plot_x))
         self.y_max = max(self.plot_y)
 
-    # TODO: don't require at_spec in below function
-
-    def get_molecule_type(self, at_spec) -> str:
+    def get_molecule_type(self) -> str:
         """
         Get the molecule type from the geometry.in file
-
-        Parameters
-        ----------
-            at_spec : str
-                atom element
 
         Returns
         -------
@@ -130,17 +125,17 @@ class XPSSpectrum:
                 molecule type
         """
 
+        # Get first directory with target atom followed by any number
+        dirs = " ".join(glob.glob(f"{self.run_loc}/{self.targ_at}*/geometry.in"))
+        match = re.findall(rf"{self.targ_at}\d+", dirs)[0]
+
         # Enable for both basis and projector file structures
         try:
-            with open(
-                f"{self.run_loc}/{self.targ_at}{at_spec}/geometry.in", "r"
-            ) as hole_geom:
+            with open(f"{self.run_loc}/{match}/geometry.in", "r") as hole_geom:
                 lines = hole_geom.readlines()
 
         except FileNotFoundError:
-            with open(
-                f"{self.run_loc}/{self.targ_at}{at_spec}/hole/geometry.in", "r"
-            ) as hole_geom:
+            with open(f"{self.run_loc}/{match}/hole/geometry.in", "r") as hole_geom:
                 lines = hole_geom.readlines()
 
         try:
@@ -202,11 +197,10 @@ class XPSSpectrum:
         plt.xticks(np.arange(self.x_min, self.x_max, 1))
         plt.legend(loc="upper right")
 
-        molecule = self.get_molecule_type(self.targ_at)
+        molecule = self.get_molecule_type()
         if molecule != "None":
             plt.title(f"XPS spectrum of {molecule}")
 
         # Save as both a pdf and png
         plt.savefig(f"{self.run_loc}/xps_spectrum.pdf")
         plt.savefig(f"{self.run_loc}/xps_spectrum.png")
-        plt.show()

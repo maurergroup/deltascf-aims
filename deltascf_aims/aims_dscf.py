@@ -108,7 +108,6 @@ class Start(object):
         n_atoms,
         basis_set,
         use_extra_basis,
-        graph,
         print_output,
         nprocs,
     ):
@@ -124,7 +123,6 @@ class Start(object):
         self.n_atoms = n_atoms
         self.basis_set = basis_set
         self.use_extra_basis = use_extra_basis
-        self.graph = graph
         self.print_output = print_output
         self.nprocs = nprocs
 
@@ -879,7 +877,6 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
 
         # Add any additional options to the control file
         for i in range(len(self.atom_specifier)):
-
             if len(self.control_opts) > 0 or self.start.control_input:
                 du.add_control_opts(
                     self.start,
@@ -947,7 +944,6 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
 
         # Add any additional control options to the hole control file
         for i in range(len(self.atom_specifier)):
-
             if len(self.control_opts) > 0 or self.start.control_input:
                 du.add_control_opts(
                     self.start,
@@ -1150,6 +1146,6 @@ class BasisWrapper(GroundCalc, ExcitedCalc):
 
         # Add molecule ID to geometry file
         if self.start.spec_mol is not None:
-            du.add_molecule_identifier(self.start, self.atom_specifier)
+            du.add_molecule_identifier(self.start, self.atom_specifier, basis=True)
 
         return self.atom_specifier

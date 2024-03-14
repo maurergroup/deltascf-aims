@@ -50,7 +50,7 @@ def add_control_opts(start, constr_atoms, control_opts, atom, calc) -> None:
         control_file.writelines(control_content)
 
 
-def add_molecule_identifier(start, atom_specifier) -> None:
+def add_molecule_identifier(start, atom_specifier, basis=False) -> None:
     """
     Add a string to the geometry.in to parse when plotting to identify it.
 
@@ -60,10 +60,17 @@ def add_molecule_identifier(start, atom_specifier) -> None:
         Instance of the Start class
     atom_specifier : List[int]
         Atom indices as given in geometry.in
+    basis : bool, optional
+        Whether a basis calculation is being run
     """
 
+    if basis:
+        hole = ""
+    else:
+        hole = "/hole"
+
     with open(
-        f"{start.run_loc}/{start.constr_atom[0]}{atom_specifier[0]}/hole/geometry.in",
+        f"{start.run_loc}/{start.constr_atom[0]}{atom_specifier[0]}{hole}/geometry.in",
         "r",
     ) as hole_geom:
         lines = hole_geom.readlines()
@@ -76,7 +83,7 @@ def add_molecule_identifier(start, atom_specifier) -> None:
     lines.insert(4, f"# {start.spec_mol}\n")
 
     with open(
-        f"{start.run_loc}/{start.constr_atom[0]}{atom_specifier[0]}/hole/geometry.in",
+        f"{start.run_loc}/{start.constr_atom[0]}{atom_specifier[0]}{hole}/geometry.in",
         "w",
     ) as hole_geom:
         hole_geom.writelines(lines)
@@ -1147,7 +1154,7 @@ class ExcitedCalc:
         self,
         atom_specifier,
         constr_atoms,
-        run_type: Literal["init_1", "init_2", "hole"],
+        run_type: Literal["init_1", "init_2", "hole", ""],
         spec_run_info,
         basis_constr=False,
     ) -> None:

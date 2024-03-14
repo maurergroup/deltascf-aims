@@ -108,7 +108,6 @@ from dscf_utils.custom_click import MutuallyExclusive, MutuallyInclusive
     is_flag=True,
     help="add additional basis functions for the core hole",
 )
-@click.option("-g", "--graph", is_flag=True, help="print out the simulated XPS spectra")
 @click.option(
     "-p",
     "--print_output",
@@ -141,7 +140,6 @@ def cli(
     n_atoms,
     basis_set,
     use_extra_basis,
-    graph,
     print_output,
     nprocs,
 ):
@@ -185,7 +183,6 @@ def cli(
         n_atoms,
         basis_set,
         use_extra_basis,
-        graph,
         print_output,
         nprocs,
     )
@@ -449,6 +446,7 @@ def basis(
 
 
 @cli.command()
+@click.option("-g", "--graph", is_flag=True, help="print out the simulated XPS spectra")
 @click.option(
     "-A",
     "--intensity",
@@ -504,7 +502,6 @@ def basis(
     help="Full width at half maximum value",
 )
 @click.option(
-    "-g",
     "--gmp",
     default=0.003,
     type=click.FloatRange(min=0, max_open=True),
@@ -512,13 +509,13 @@ def basis(
     help="Global minimum percentage",
 )
 @click.pass_obj
-def plot(start, intensity, asym, a, b, gl_ratio, omega, gmp):
+def plot(start, graph, intensity, asym, a, b, gl_ratio, omega, gmp):
     """
     Plot the simulated XPS spectra.
     """
 
     # Calculate peaks
-    process = Process(start, intensity, asym, a, b, gl_ratio, omega, gmp)
+    process = Process(start, gmp, intensity, asym, a, b, gl_ratio, omega)
     xps, element = process.calc_dscf_energies()
 
     # Ensure peaks file is in the run location
@@ -529,5 +526,5 @@ def plot(start, intensity, asym, a, b, gl_ratio, omega, gmp):
     peaks = process.call_broaden(xps)
     process.write_spectrum_to_file(peaks, element)
 
-    if start.graph:
+    if graph:
         process.plot_xps(xps)
