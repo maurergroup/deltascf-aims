@@ -1070,8 +1070,6 @@ class BasisWrapper(GroundCalc, ExcitedCalc):
         Perform checks before running the excited calculation.
         """
 
-        self.check_prereq_calc("hole", self.constr_atoms, "basis")
-
         # Check that the current calculation has not already been run
         du.check_curr_prev_run(
             self.run_type,
@@ -1123,15 +1121,21 @@ class BasisWrapper(GroundCalc, ExcitedCalc):
             Indices for atoms as specified in geometry.in
         """
 
-        # Get the atom indices to constrain
-        self.atom_specifier = du.get_atoms(
-            self.constr_atoms, self.start.spec_at_constr, self.ground_geom
-        )
-
-        self._calc_checks()
+        # Do this outside of _calc_checks as atom_specifier is needed for that function
+        self.check_prereq_calc("hole", self.constr_atoms, "basis")
 
         # Get the element symbols to constrain
         element_symbols = self._get_element_symbols()
+
+        # Get the atom indices to constrain
+        self.atom_specifier = du.get_atoms(
+            self.constr_atoms,
+            self.start.spec_at_constr,
+            self.ground_geom,
+            element_symbols,
+        )
+
+        self._calc_checks()
 
         # Create the directories required for the hole calculation
         fo = ForceOccupation(
