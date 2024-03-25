@@ -148,10 +148,6 @@ def check_args(*args) -> None:
     ------
     MissingParameter
         A required parameter has not been given
-
-    Examples
-    --------
-    FIXME: Add docs.
     """
 
     # TODO: Check that this function is working correctly
@@ -507,7 +503,7 @@ def get_atoms(
         atom_specifier = list(spec_at_constr)
 
     else:
-        raise Click.MissingParameter(
+        raise MissingParameter(
             param_hint="-c/--constrained_atom or -s/--specific_atom_constraint",
             param_type="option",
         )
