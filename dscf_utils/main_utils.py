@@ -148,10 +148,6 @@ def check_args(*args) -> None:
     ------
     MissingParameter
         A required parameter has not been given
-
-    Examples
-    --------
-    FIXME: Add docs.
     """
 
     # TODO: Check that this function is working correctly
@@ -447,19 +443,26 @@ def get_atoms(
 
     Parameters
     ----------
-        constr_atoms : List[str]
-            list of elements to constrain
-        spec_at_constr : List[int]
-            list of atom indices to constrain
-        geometry_path : str
-            path to the geometry file
-        element_symbols : Union[str, List[str]]
-            element symbols to constrain
+    constr_atoms : List[str]
+        List of elements to constrain
+    spec_at_constr : List[int]
+        List of atom indices to constrain
+    geometry_path : str
+        Path to the geometry file
+    element_symbols : Union[str, List[str]]
+        Element symbols to constrain
 
     Returns
     -------
-        atom_specifier : List[int]
-            list of atom indices to constrain
+    atom_specifier : List[int]
+        List of atom indices to constrain
+
+    Raises
+    ------
+    Click.MissingParameter
+        A required parameter has not been given
+    ValueError
+        An invalid parameter has been given
     """
 
     elements = get_all_elements()
@@ -500,7 +503,7 @@ def get_atoms(
         atom_specifier = list(spec_at_constr)
 
     else:
-        raise Click.MissingParameter(
+        raise MissingParameter(
             param_hint="-c/--constrained_atom or -s/--specific_atom_constraint",
             param_type="option",
         )
@@ -1188,8 +1191,8 @@ class ExcitedCalc:
         if self.start.print_output:  # Print live output of calculation
             for i in range(len(atom_specifier)):
                 os.system(
-                    f"cd {self.start.run_loc}/{constr_atoms[0]}{atom_specifier[i]}/"
-                    f"{run_type} && mpirun -n {self.start.nprocs} "
+                    f"cd {self.start.run_loc}/{constr_atoms[0]}{atom_specifier[i]}"
+                    f"/{run_type} && mpirun -n {self.start.nprocs} "
                     f"{self.start.binary} | tee aims.out {spec_run_info}"
                 )
                 if run_type != "init_1" and run_type != "init_2":
