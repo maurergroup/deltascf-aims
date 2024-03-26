@@ -736,7 +736,7 @@ def write_control(
             os.system(f"cat {basis_set} >> {run_loc}/control.in")
 
     # Copy it to the ground directory
-    os.system(f"cp control.in {run_loc}/ground")
+    os.system(f"cp {run_loc}/control.in {run_loc}/ground")
 
 
 class GroundCalc:
@@ -807,10 +807,10 @@ class GroundCalc:
 
         # Copy the geometry.in and control.in files to the ground directory
         if control_inp is not None:
-            os.system(f"cp control.in {self.run_loc}/ground")
+            os.system(f"cp {self.run_loc}/control.in {self.run_loc}/ground")
 
         if geom_inp is not None:
-            os.system(f"cp geometry.in {self.run_loc}/ground")
+            os.system(f"cp {self.run_loc}/geometry.in {self.run_loc}/ground")
 
     def add_extra_basis_fns(self, constr_atom) -> None:
         """
@@ -927,8 +927,12 @@ class GroundCalc:
             print("running calculation...")
             self.atoms.get_potential_energy()
             # Move files to ground directory
-            os.system(f"cp geometry.in control.in {self.run_loc}/ground/")
-            os.system(f"mv aims.out parameters.ase {self.run_loc}/ground/")
+            os.system(
+                f"cp {self.run_loc}/geometry.in {self.run_loc}/control.in {self.run_loc}/ground/"
+            )
+            os.system(
+                f"mv {self.run_loc}/aims.out {self.run_loc}/parameters.ase {self.run_loc}/ground/"
+            )
 
     def _without_ase(self, print_output, nprocs, binary) -> None:
         """
