@@ -8,8 +8,6 @@ readme = "README.md"
 repository = "https://github.com/maurergroup/deltascf-aims"
 packages = [
     { include = "deltascf_aims" },
-    { include = "dscf_utils" },
-    { include = "dscf_tests" },
 ]
 
 [tool.poetry.dependencies]
@@ -24,13 +22,18 @@ ase = "^3.22.1"
 optional = true
 
 [tool.poetry.group.dev.dependencies]
+mypy = "^1.9.0"
 pyment = "^0.3.3"
 pytest = "^7.4.3"
 ptpython = "^3.0.26"
+black = "^24.3.0"
+ruff = "^0.3.4"
 
 [tool.poetry.scripts]
-deltascf = 'deltascf_aims.cli:cli'
+deltascf = 'deltascf_aims.__main__:start'
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]

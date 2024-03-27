@@ -10,11 +10,11 @@ from ase import Atoms
 from ase.io import read
 
 import deltascf_aims.calc_dscf as cds
-import dscf_utils.main_utils as du
+import deltascf_aims.utils.main_utils as du
 from deltascf_aims.force_occupation import Basis, ForceOccupation, Projector
 from deltascf_aims.plot import XPSSpectrum
 from deltascf_aims.schmid_pseudo_voigt import broaden
-from dscf_utils.main_utils import ExcitedCalc, GroundCalc
+from deltascf_aims.utils.main_utils import ExcitedCalc, GroundCalc
 
 
 class Start(object):

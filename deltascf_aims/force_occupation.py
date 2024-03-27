@@ -10,7 +10,7 @@ from typing import List, Tuple, Union
 import numpy as np
 import yaml
 
-import dscf_utils.main_utils as mu
+import deltascf_aims.utils.main_utils as mu
 
 
 class ForceOccupation:
