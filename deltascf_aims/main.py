@@ -1,25 +1,14 @@
-import deltascf_aims.cli as cli
-from deltascf_aims.aims_dscf import BasisWrapper, Process, ProjectorWrapper, Start
-
-raise NotImplementedError()
+from deltascf_aims.aims_dscf import Basis, Process, Projector, Start
 
 
-@cli.Initialise
 def start(*args):
-
-    # TODO
-    # print(sys.argv)
-
-    # if "--help" in sys.argv:
-    #     tmp = cli.get_help(ctx)
-
-    #     print(tmp)
+    """Entry point for the CLI."""
 
     # Get context object and arguments for Start
-    ctx = list(args).pop(0)
+    args = list(args)
+    ctx = args.pop(0)
     start = Start(*args)
 
-    # start.check_for_help_arg()
     if len(start.spec_at_constr) > 0:
         start.check_for_geometry_input()
 
@@ -38,22 +27,25 @@ def start(*args):
     if start.ase:
         start.atoms = start.add_calc(start.atoms, bin_path)
 
-    # pass the Start and Argument objects to the subcommands
+    # TODO pass the Start and Argument objects to the subcommands
     # ctx.obj = {"argument": argument, "start": start}
     ctx.obj = start
 
 
-@cli.Projector
 def projector(*args):
+    """
+    Automate an FHI-aims core-level constraint calculation run using the projector
+    method.
+    """
+
+    # Get start object
+    start = args[0]
 
     # Do this here rather than start to avoid it being called for process which must
     # take constr_atoms not spec_at_constr
     start.check_constr_keywords()
 
-    proj = ProjectorWrapper(
-        # start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts
-        *args
-    )
+    proj = Projector(*args)
 
     if start.found_l_vecs or start.found_k_grid:
         if proj.pbc is None:
@@ -101,28 +93,22 @@ def projector(*args):
                 )
 
         case _:
-            raise ValueError(f"Invalid run_type: {proj.type_run}")
+            raise ValueError(f"Invalid run_type: {proj.run_type}")
 
 
-@cli.Basis
 def basis(*args):
+    """
+    Automate an FHI-aims core-level constraint calculation run using the basis method.
+    """
+
+    # Get start object
+    start = args[0]
 
     # Do this here rather than start to avoid it being called for process which must
     # take constr_atoms not spec_at_constr
     start.check_constr_keywords()
 
-    basis = BasisWrapper(
-        # start,
-        # run_type,
-        # occ_type,
-        # spin,
-        # n_qn,
-        # l_qn,
-        # m_qn,
-        # ks_max,
-        # control_opts,
-        *args
-    )
+    basis = Basis(*args)
 
     if start.use_extra_basis:
         basis.add_extra_basis_fns(start.constr_atom)
@@ -153,8 +139,13 @@ def basis(*args):
             raise ValueError(f"Invalid run_type: {basis.run_type}")
 
 
-@cli.Plot
 def plot(*args):
+    """
+    Automate the plotting of the XPS spectrum.
+    """
+
+    # Get start object
+    start = args[0]
 
     # Calculate peaks
     process = Process(*args)

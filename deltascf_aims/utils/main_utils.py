@@ -13,7 +13,7 @@ from ase.data.pubchem import pubchem_atoms_search
 from ase.io import write
 from click import BadParameter, MissingParameter, progressbar
 
-from deltascf_aims.force_occupation import ForceOccupation as fo
+import deltascf_aims.force_occupation as fo
 
 
 def add_control_opts(start, constr_atoms, control_opts, atom, calc) -> None:
@@ -34,11 +34,13 @@ def add_control_opts(start, constr_atoms, control_opts, atom, calc) -> None:
         Name of the calculation to add the control options to
     """
 
-    parsed_control_opts = fo.get_control_keywords(
+    parsed_control_opts = fo.ForceOccupation.get_control_keywords(
         f"{start.run_loc}/{constr_atoms[0]}{atom}/{calc}/control.in"
     )
-    mod_control_opts = fo.mod_keywords(control_opts, parsed_control_opts)
-    control_content = fo.change_control_keywords(
+    mod_control_opts = fo.ForceOccupation.mod_keywords(
+        control_opts, parsed_control_opts
+    )
+    control_content = fo.ForceOccupation.change_control_keywords(
         f"{start.run_loc}/{constr_atoms[0]}{atom}/{calc}/control.in",
         mod_control_opts,
     )

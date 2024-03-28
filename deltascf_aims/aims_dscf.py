@@ -10,8 +10,8 @@ from ase import Atoms
 from ase.io import read
 
 import deltascf_aims.calc_dscf as cds
+import deltascf_aims.force_occupation as force_occupation
 import deltascf_aims.utils.main_utils as du
-from deltascf_aims.force_occupation import Basis, ForceOccupation, Projector
 from deltascf_aims.plot import XPSSpectrum
 from deltascf_aims.schmid_pseudo_voigt import broaden
 from deltascf_aims.utils.main_utils import ExcitedCalc, GroundCalc
@@ -28,6 +28,8 @@ class Start(object):
         hpc : bool
             setup a calculation primarily for use on a HPC cluster WITHOUT running the
             calculation
+        spec_mol : str
+            molecule to be used in the calculation
         geometry_input : click.File()
             specify a custom geometry.in instead of using a structure from PubChem or ASE
         control_input : click.File()
@@ -36,8 +38,6 @@ class Start(object):
             modify the path to the FHI-aims binary
         run_location : click.Path(file_okay=False, dir_okay=True)
             optionally specify a custom location to run the calculation
-        spec_mol : str
-            molecule to be used in the calculation
         constr_atom : str
             atom to be constrained
         spec_at_constr : click.IntRange(min=1, max_open=True)
@@ -97,11 +97,11 @@ class Start(object):
     def __init__(
         self,
         hpc,
+        spec_mol,
         geometry_input,
         control_input,
         binary,
         run_location,
-        spec_mol,
         constr_atom,
         spec_at_constr,
         occupation,
@@ -112,11 +112,11 @@ class Start(object):
         nprocs,
     ):
         self.hpc = hpc
+        self.spec_mol = spec_mol
         self.geometry_input = geometry_input
         self.control_input = control_input
         self.binary = binary
         self.run_loc = run_location
-        self.spec_mol = spec_mol
         self.constr_atom = constr_atom
         self.spec_at_constr = spec_at_constr
         self.occupation = occupation
@@ -257,7 +257,7 @@ class Start(object):
                 self.constr_atom = atom.symbol
                 break
 
-    # @_check_help_arg
+    # TODO @_check_help_arg
     def check_for_bin(self) -> tuple[str, str]:
         """
         Check if a binary is saved in ./aims_bin_loc.txt.
@@ -273,14 +273,15 @@ class Start(object):
         current_path = os.path.dirname(os.path.realpath(__file__))
         with open(f"{current_path}/aims_bin_loc.txt", "r") as f:
             lines = f.readlines()
-            if "~" in lines[0][:-1]:
-                raise FileNotFoundError(
-                    "Please provide the full path to the FHI-aims binary"
-                )
-            try:
-                bin_path = lines[0][:-1]
-            except IndexError:
-                bin_path = ""
+
+        if "~" in lines[0][:-1] and not self.binary:
+            raise FileNotFoundError(
+                "Please provide the full path to the FHI-aims binary"
+            )
+        try:
+            bin_path = lines[0][:-1]
+        except IndexError:
+            bin_path = ""
 
         return current_path, bin_path
 
@@ -310,11 +311,17 @@ class Start(object):
             )
             bin_line = click.edit(marker)
             if bin_line is not None:
-                with open(f"{current_path}/aims_bin_loc.txt", "w") as f:
-                    f.write(bin_line)
+                if Path(str(bin_line).split()[0]).exists():
+                    with open(f"{current_path}/aims_bin_loc.txt", "w") as f:
+                        f.write(bin_line)
 
-                with open(f"{current_path}/aims_bin_loc.txt", "r") as f:
-                    self.binary = f.readlines()[0]
+                    with open(f"{current_path}/aims_bin_loc.txt", "r") as f:
+                        self.binary = f.readlines()[0]
+
+                else:
+                    raise FileNotFoundError(
+                        "the path given to the FHI-aims binary does not exist"
+                    )
 
             else:
                 raise FileNotFoundError(
@@ -536,7 +543,7 @@ class Process:
         xps_spec.plot(xps)
 
 
-class ProjectorWrapper(GroundCalc, ExcitedCalc):
+class Projector(GroundCalc, ExcitedCalc):
     """
     Force occupation of the basis functions by projecting the occupation of Kohn-Sham
     states onto them.
@@ -583,7 +590,7 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
         self, start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts
     ):
         # Get methods from GroundCalc
-        super(ProjectorWrapper, self).__init__(
+        super(Projector, self).__init__(
             start.run_loc,
             start.atoms,
             start.basis_set,
@@ -841,7 +848,7 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
         self._calc_checks("init_1", check_restart=False, check_args=True)
 
         # Create the ForceOccupation object
-        fo = ForceOccupation(
+        fo = force_occupation.ForceOccupation(
             element_symbols,
             self.start.run_loc,
             self.ground_geom,
@@ -854,7 +861,7 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
         for atom in element_symbols:
             fo.get_electronic_structure(atom)
 
-        proj = Projector(fo)
+        proj = force_occupation.Projector(fo)
         self._call_setups(proj)
 
         spec_run_info = ""
@@ -934,7 +941,7 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
             self._calc_checks("hole", check_restart=False, check_args=True)
 
             # Create the ForceOccupation object
-            fo = ForceOccupation(
+            fo = force_occupation.ForceOccupation(
                 element_symbols,
                 self.start.run_loc,
                 self.ground_geom,
@@ -947,7 +954,7 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
                 fo.get_electronic_structure(atom)
 
             # Setup files required for the initialisation and hole calculations
-            proj = Projector(fo)
+            proj = force_occupation.Projector(fo)
             self._call_setups(proj)
 
         # Add a tag to the geometry file to identify the molecule name
@@ -976,7 +983,7 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
         return self.atom_specifier, spec_run_info
 
 
-class BasisWrapper(GroundCalc, ExcitedCalc):
+class Basis(GroundCalc, ExcitedCalc):
     """
     Force occupation of the basis states directly.
 
@@ -1026,7 +1033,7 @@ class BasisWrapper(GroundCalc, ExcitedCalc):
         ks_max,
         control_opts,
     ):
-        super(BasisWrapper, self).__init__(
+        super(Basis, self).__init__(
             start.run_loc,
             start.atoms,
             start.basis_set,
@@ -1138,7 +1145,7 @@ class BasisWrapper(GroundCalc, ExcitedCalc):
         self._calc_checks()
 
         # Create the directories required for the hole calculation
-        fo = ForceOccupation(
+        fo = force_occupation.ForceOccupation(
             element_symbols,
             self.start.run_loc,
             self.ground_geom,
@@ -1147,7 +1154,7 @@ class BasisWrapper(GroundCalc, ExcitedCalc):
             self.start.use_extra_basis,
         )
 
-        basis = Basis(fo)
+        basis = force_occupation.Basis(fo)
         basis.setup_basis(
             self.multiplicity,
             self.n_qn,
