@@ -13,10 +13,16 @@ from ase.data.pubchem import pubchem_atoms_search
 from ase.io import write
 from click import BadParameter, MissingParameter, progressbar
 
-from deltascf_aims.force_occupation import ForceOccupation as fo
+import deltascf_aims.force_occupation as fo
 
 
-def add_control_opts(start, constr_atoms, control_opts, atom, calc) -> None:
+def add_control_opts(
+    start,
+    constr_atom,
+    i_atom,
+    calc,
+    control_opts,
+) -> None:
     """
     Add additional control options to the control file.
 
@@ -24,27 +30,29 @@ def add_control_opts(start, constr_atoms, control_opts, atom, calc) -> None:
     ----------
     start : Start
         Instance of Start class
-    constr_atoms : List[str]
-        Constrained atoms
-    control_opts : dict
-        Control options
-    atom : int
-        Atom to add the control options to
+    constr_atoms : str
+        Constrained atom
+    i_atom : int
+        Atom index to add the control options to
     calc : str
         Name of the calculation to add the control options to
+    control_opts : dict
+        Control options
     """
 
-    parsed_control_opts = fo.get_control_keywords(
-        f"{start.run_loc}/{constr_atoms[0]}{atom}/{calc}/control.in"
+    parsed_control_opts = fo.ForceOccupation.get_control_keywords(
+        f"{start.run_loc}/{constr_atom}{i_atom}/{calc}/control.in"
     )
-    mod_control_opts = fo.mod_keywords(control_opts, parsed_control_opts)
-    control_content = fo.change_control_keywords(
-        f"{start.run_loc}/{constr_atoms[0]}{atom}/{calc}/control.in",
+    mod_control_opts = fo.ForceOccupation.mod_keywords(
+        control_opts, parsed_control_opts
+    )
+    control_content = fo.ForceOccupation.change_control_keywords(
+        f"{start.run_loc}/{constr_atom}{i_atom}/{calc}/control.in",
         mod_control_opts,
     )
 
     with open(
-        f"{start.run_loc}/{constr_atoms[0]}{atom}/{calc}/control.in",
+        f"{start.run_loc}/{constr_atom}{i_atom}/{calc}/control.in",
         "w",
     ) as control_file:
         control_file.writelines(control_content)
@@ -527,7 +535,7 @@ def get_all_elements() -> List[str]:
     current_path = os.path.dirname(os.path.realpath(__file__))
 
     # Get all supported elements in FHI-aims
-    with open(f"{current_path}/../deltascf_aims/elements.yml", "r") as elements_file:
+    with open(f"{current_path}/../elements.yml", "r") as elements_file:
         elements = yaml.load(elements_file, Loader=yaml.SafeLoader)
 
     return elements
@@ -608,35 +616,38 @@ def print_ks_states(run_loc) -> None:
                 sd_eigs_start_line += 1
 
     # Check that KS states were found
-    if su_eigs_start_line is None:
-        print("No spin-up KS states found")
-        print("Did you run a spin polarised calculation?")
-        raise SystemExit
+    if lines[-2] == "          Have a nice day.\n":
+        if su_eigs_start_line is None:
+            print("No spin-up KS states found")
+            print("Did you run a spin polarised calculation?")
+            raise SystemExit
 
-    if sd_eigs_start_line is None:
-        print("No spin-down KS states found")
-        print("Did you run a spin polarised calculation?")
-        raise SystemExit
+        if sd_eigs_start_line is None:
+            print("No spin-down KS states found")
+            print("Did you run a spin polarised calculation?")
+            raise SystemExit
 
     su_eigs = []
     sd_eigs = []
 
     # Save the KS states into lists
-    for num, content in enumerate(lines[su_eigs_start_line + 2 :]):
-        spl = content.split()
+    if su_eigs_start_line is not None:
+        for num, content in enumerate(lines[su_eigs_start_line + 2 :]):
+            spl = content.split()
 
-        if len(spl) != 0:
-            su_eigs.append(content)
-        else:
-            break
+            if len(spl) != 0:
+                su_eigs.append(content)
+            else:
+                break
 
-    for num, content in enumerate(lines[sd_eigs_start_line + 2 :]):
-        spl = content.split()
+    if sd_eigs_start_line is not None:
+        for num, content in enumerate(lines[sd_eigs_start_line + 2 :]):
+            spl = content.split()
 
-        if len(spl) != 0:
-            sd_eigs.append(content)
-        else:
-            break
+            if len(spl) != 0:
+                sd_eigs.append(content)
+            else:
+                break
 
     # Print the KS states
     print("Spin-up KS eigenvalues:\n")
@@ -712,7 +723,9 @@ def write_control(
     control_opts = convert_tuple_key_to_str(control_opts)
 
     # Use the static method from ForceOccupation
-    lines = fo.change_control_keywords(f"{run_loc}/control.in", control_opts)
+    lines = fo.ForceOccupation.change_control_keywords(
+        f"{run_loc}/control.in", control_opts
+    )
 
     with open(f"{run_loc}/control.in", "w") as control:
         control.writelines(lines)
@@ -736,7 +749,7 @@ def write_control(
             os.system(f"cat {basis_set} >> {run_loc}/control.in")
 
     # Copy it to the ground directory
-    os.system(f"cp control.in {run_loc}/ground")
+    os.system(f"cp {run_loc}/control.in {run_loc}/ground")
 
 
 class GroundCalc:
@@ -762,7 +775,7 @@ class GroundCalc:
 
     Methods
     -------
-    setup_ground(geom_inp, control_inp)
+    setup_ground(geom_inp, control_inp, control_opts, start)
         Setup the ground calculation files and directories
     add_extra_basis_fns(constr_atom)
         Add additional basis functions to the basis set
@@ -770,15 +783,7 @@ class GroundCalc:
         Run the ground state calculation
     """
 
-    def __init__(
-        self,
-        run_loc,
-        atoms,
-        basis_set,
-        species,
-        ase,
-        hpc,
-    ):
+    def __init__(self, run_loc, atoms, basis_set, species, ase, hpc):
         self.run_loc = run_loc
         self.atoms = atoms
         self.basis_set = basis_set
@@ -786,7 +791,7 @@ class GroundCalc:
         self.ase = ase
         self.hpc = hpc
 
-    def setup_ground(self, geom_inp, control_inp) -> None:
+    def setup_ground(self, geom_inp, control_inp, control_opts, start) -> None:
         """
         Setup the ground calculation files and directories.
 
@@ -796,6 +801,10 @@ class GroundCalc:
             path to the geometry.in file
         control_inp : str
             path to the control.in file
+        control_opts : dict
+            additional options to be added to the control.in file
+        start : Start
+            instance of Start class
         """
 
         # Create the ground directory if it doesn't already exist
@@ -807,10 +816,14 @@ class GroundCalc:
 
         # Copy the geometry.in and control.in files to the ground directory
         if control_inp is not None:
-            os.system(f"cp control.in {self.run_loc}/ground")
+            os.system(f"cp {control_inp.name} {self.run_loc}/ground")
+
+            # Add any additional options to the control file
+            if len(control_opts) > 0:
+                add_control_opts(start, "", "", "ground", control_opts)
 
         if geom_inp is not None:
-            os.system(f"cp geometry.in {self.run_loc}/ground")
+            os.system(f"cp {geom_inp.name} {self.run_loc}/ground")
 
     def add_extra_basis_fns(self, constr_atom) -> None:
         """
@@ -833,7 +846,7 @@ class GroundCalc:
         with open(f"{current_path}/../deltascf_aims/elements.yml", "r") as elements:
             elements = yaml.load(elements, Loader=yaml.SafeLoader)
 
-        new_content = fo.add_additional_basis(
+        new_content = fo.ForceOccupation.add_additional_basis(
             current_path, elements, control_content, constr_atom
         )
 
@@ -896,13 +909,7 @@ class GroundCalc:
 
             # Add the lattice vectors if periodic
             self.atoms.set_pbc(l_vecs)
-            # self.atoms.set_pbc(2 * np.identity(3))
             self.atoms.set_cell(l_vecs)
-
-            # print(self.atoms.get_cell())
-            # print(self.atoms.get_pbc())
-
-            # exit(0)
 
         if self.hpc:
             # Prevent species dir from being written
@@ -927,8 +934,12 @@ class GroundCalc:
             print("running calculation...")
             self.atoms.get_potential_energy()
             # Move files to ground directory
-            os.system(f"cp geometry.in control.in {self.run_loc}/ground/")
-            os.system(f"mv aims.out parameters.ase {self.run_loc}/ground/")
+            os.system(
+                f"cp {self.run_loc}/geometry.in {self.run_loc}/control.in {self.run_loc}/ground/"
+            )
+            os.system(
+                f"mv {self.run_loc}/aims.out {self.run_loc}/parameters.ase {self.run_loc}/ground/"
+            )
 
     def _without_ase(self, print_output, nprocs, binary) -> None:
         """

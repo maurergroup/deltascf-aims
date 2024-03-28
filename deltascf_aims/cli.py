@@ -1,21 +1,19 @@
-#!/usr/bin/env python3
-
 import click
 
-from deltascf_aims.aims_dscf import BasisWrapper, Process, ProjectorWrapper, Start
-from dscf_utils.custom_click import MutuallyExclusive, MutuallyInclusive
+import deltascf_aims.main as main
+from deltascf_aims.utils.click_extras import MutuallyExclusive, MutuallyInclusive
 
 
 @click.group()
-# @click.argument("argument", cls=ShowHelpSubCmd)
+# TODO @click.argument("argument", cls=showhelpsubcmd)
 @click.option(
     "-h",
     "--hpc",
     cls=MutuallyExclusive,
     mutually_exclusive=["--binary"],
     is_flag=True,
-    help="setup a calculation primarily for use on a HPC cluster WITHOUT "
-    "running the calculation",
+    help="setup a calculation primarily for use on a hpc cluster without running "
+    "the calculation",
 )
 @click.option(
     "-m",
@@ -33,7 +31,8 @@ from dscf_utils.custom_click import MutuallyExclusive, MutuallyInclusive
     mutually_exclusive=["--molecule"],
     nargs=1,
     type=click.File(),
-    help="specify a custom geometry.in instead of using a structure from PubChem or ASE",
+    help="specify a custom geometry.in instead of using a structure from pubchem "
+    "or ase",
 )
 @click.option(
     "-i",
@@ -48,7 +47,7 @@ from dscf_utils.custom_click import MutuallyExclusive, MutuallyInclusive
     cls=MutuallyExclusive,
     mutually_exclusive=["hpc"],
     is_flag=True,
-    help="modify the path to the FHI-aims binary",
+    help="modify the path to the fhi-aims binary",
 )
 @click.option(
     "-r",
@@ -65,7 +64,7 @@ from dscf_utils.custom_click import MutuallyExclusive, MutuallyInclusive
     cls=MutuallyExclusive,
     mutually_exclusive=["spec_at_constr"],
     type=str,
-    # multiple=True,  # TODO: allow for multiple atoms to be constrained
+    # multiple=true,  # todo: allow for multiple atoms to be constrained
     help="atom to constrain; constrain all atoms of this element",
 )
 @click.option(
@@ -113,7 +112,6 @@ from dscf_utils.custom_click import MutuallyExclusive, MutuallyInclusive
     "--print_output",
     is_flag=True,
     help="print the live output of the calculation",
-    # TODO
 )
 @click.option(
     "-n",
@@ -125,15 +123,14 @@ from dscf_utils.custom_click import MutuallyExclusive, MutuallyInclusive
 )
 @click.version_option()
 @click.pass_context
-def cli(
+def initialise(
     ctx,
-    # argument,
     hpc,
+    spec_mol,
     geometry_input,
     control_input,
     binary,
     run_location,
-    spec_mol,
     constr_atom,
     spec_at_constr,
     occupation,
@@ -162,21 +159,19 @@ def cli(
     Copyright \u00A9 2022-2024, Dylan Morgan dylan.morgan@warwick.ac.uk
     """
 
-    # TODO
-    # print(sys.argv)
-
+    # TODO something like this (but check commented decorator above)
     # if "--help" in sys.argv:
-    #     tmp = cli.get_help(ctx)
+    #     click.echo(ctx.get_help())
+    #     raise SystemExit(0)
 
-    #     print(tmp)
-
-    start = Start(
+    return main.start(
+        ctx,
         hpc,
+        spec_mol,
         geometry_input,
         control_input,
         binary,
         run_location,
-        spec_mol,
         constr_atom,
         spec_at_constr,
         occupation,
@@ -187,31 +182,8 @@ def cli(
         nprocs,
     )
 
-    # start.check_for_help_arg()
-    if len(spec_at_constr) > 0:
-        start.check_for_geometry_input()
 
-    start.check_for_pbcs()
-    start.check_ase_usage()
-    start.atoms = start.create_structure()
-
-    if start.constr_atom is None:
-        start.find_constr_atom_element(start.atoms)
-
-    curr_path, bin_path = start.check_for_bin()
-    bin_path = start.bin_path_prompt(curr_path, bin_path)
-    start.check_species_path(bin_path)
-
-    # Return the atoms object with a calculator
-    if start.ase:
-        start.atoms = start.add_calc(start.atoms, bin_path)
-
-    # pass the Start and Argument objects to the subcommands
-    # ctx.obj = {"argument": argument, "start": start}
-    ctx.obj = start
-
-
-@cli.command()
+@initialise.command()
 @click.option(
     "-r",
     "--run_type",
@@ -269,64 +241,12 @@ def projector(start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_op
     Force occupation through defining the Kohn-Sham states to occupy.
     """
 
-    # Do this here rather than start to avoid it being called for process which must
-    # take constr_atoms not spec_at_constr
-    start.check_constr_keywords()
-
-    proj = ProjectorWrapper(
+    return main.projector(
         start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts
     )
 
-    if start.found_l_vecs or start.found_k_grid:
-        if proj.pbc is None:
-            proj.check_periodic()
 
-    # If not ground, all the geometry.in files have been written already
-    if proj.l_vecs is not None and proj.run_type != "ground":
-        proj.add_l_vecs(start.geometry_input)
-
-    if start.use_extra_basis:
-        proj.add_extra_basis_fns(start.constr_atom)
-
-    match proj.run_type:
-        case "ground":
-            proj.setup_ground(start.geometry_input, start.control_input)
-
-            # If ground, geometry.in files haven't been written until after setup_ground
-            if proj.l_vecs is not None and not start.ase:
-                proj.add_l_vecs(start.geometry_input)
-
-            proj.run_ground(
-                proj.control_opts,
-                start.use_extra_basis,
-                proj.l_vecs,
-                start.print_output,
-                start.nprocs,
-                start.binary,
-                start.atoms.calc,
-            )
-
-        case "init_1":
-            atom_specifier, spec_run_info = proj.setup_excited()
-            proj.run_excited(atom_specifier, proj.constr_atoms, "init_1", spec_run_info)
-
-        case "init_2":
-            atom_specifier, spec_run_info = proj.pre_init_2()
-            proj.run_excited(atom_specifier, proj.constr_atoms, "init_2", spec_run_info)
-
-        case "hole":
-            atom_specifier, spec_run_info = proj.pre_hole()
-
-            if not start.hpc:  # Don't run on HPC
-                proj.run_excited(
-                    atom_specifier, proj.constr_atoms, "hole", spec_run_info
-                )
-
-        case _:
-            raise ValueError(f"Invalid run_type: {proj.run_type}")
-
-
-@cli.command()
+@initialise.command()
 @click.option(
     "-r",
     "--run_type",
@@ -385,67 +305,17 @@ def projector(start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_op
     help="provide additional options to be used in 'control.in' in a key=value format",
 )
 @click.pass_obj
-def basis(
-    start,
-    run_type,
-    occ_type,
-    spin,
-    n_qn,
-    l_qn,
-    m_qn,
-    ks_max,
-    control_opts,
-):
+def basis(start, run_type, occ_type, spin, n_qn, l_qn, m_qn, ks_max, control_opts):
     """
-    Force occupation of Kohn-Sham states through basis functions.
+    Force occupation through basis functions.
     """
 
-    # Do this here rather than start to avoid it being called for process which must
-    # take constr_atoms not spec_at_constr
-    start.check_constr_keywords()
-
-    basis = BasisWrapper(
-        start,
-        run_type,
-        occ_type,
-        spin,
-        n_qn,
-        l_qn,
-        m_qn,
-        ks_max,
-        control_opts,
+    return main.basis(
+        start, run_type, occ_type, spin, n_qn, l_qn, m_qn, ks_max, control_opts
     )
 
-    if start.use_extra_basis:
-        basis.add_extra_basis_fns(start.constr_atom)
 
-    match basis.run_type:
-        case "ground":
-            basis.setup_ground(start.geometry_input, start.control_input)
-
-            basis.run_ground(
-                basis.control_opts,
-                start.use_extra_basis,
-                None,
-                start.print_output,
-                start.nprocs,
-                start.binary,
-                start.atoms.calc,
-            )
-
-        case "hole":
-            atom_specifier = basis.setup_excited()
-
-            if not start.hpc:  # Don't run on HPC
-                basis.run_excited(
-                    atom_specifier, basis.constr_atoms, "hole", None, basis_constr=True
-                )
-
-        case _:
-            raise ValueError(f"Invalid run_type: {basis.run_type}")
-
-
-@cli.command()
+@initialise.command()
 @click.option("-g", "--graph", is_flag=True, help="print out the simulated XPS spectra")
 @click.option(
     "-A",
@@ -514,17 +384,4 @@ def plot(start, graph, intensity, asym, a, b, gl_ratio, omega, gmp):
     Plot the simulated XPS spectra.
     """
 
-    # Calculate peaks
-    process = Process(start, gmp, intensity, asym, a, b, gl_ratio, omega)
-    xps, element = process.calc_dscf_energies()
-
-    # Ensure peaks file is in the run location
-    if start.run_loc != "./":
-        process.move_file_to_run_loc(element, "peaks")
-
-    # Broaden spectrum and write to file
-    peaks = process.call_broaden(xps)
-    process.write_spectrum_to_file(peaks, element)
-
-    if graph:
-        process.plot_xps(xps)
+    return main.plot(start, graph, intensity, asym, a, b, gl_ratio, omega, gmp)

@@ -10,7 +10,7 @@ from typing import List, Tuple, Union
 import numpy as np
 import yaml
 
-import dscf_utils.main_utils as mu
+import deltascf_aims.utils.utils as utils
 
 
 class ForceOccupation:
@@ -51,7 +51,7 @@ class ForceOccupation:
             ad_cont_opts["k_grid"] = " ".join(map(str, ad_cont_opts["k_grid"]))
 
         self.new_control = f"{self.run_loc}/ground/control.in.new"
-        self.elements = mu.get_all_elements()
+        self.elements = utils.get_all_elements()
 
     def get_electronic_structure(self, atom) -> str:
         """
@@ -722,7 +722,7 @@ class Projector(ForceOccupation):
                     "KS_method": ks_method,
                     "restart_read_only": "restart_file",
                     "force_single_restartfile": ".true.",
-                    "output": "cube spin_density",
+                    # "output": "cube spin_density",
                 }
 
                 # Add or change user-specified keywords to the control file

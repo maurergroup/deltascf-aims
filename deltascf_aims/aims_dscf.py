@@ -10,11 +10,11 @@ from ase import Atoms
 from ase.io import read
 
 import deltascf_aims.calc_dscf as cds
-import dscf_utils.main_utils as du
-from deltascf_aims.force_occupation import Basis, ForceOccupation, Projector
+import deltascf_aims.force_occupation as force_occupation
+import deltascf_aims.utils.utils as utils
 from deltascf_aims.plot import XPSSpectrum
 from deltascf_aims.schmid_pseudo_voigt import broaden
-from dscf_utils.main_utils import ExcitedCalc, GroundCalc
+from deltascf_aims.utils.utils import ExcitedCalc, GroundCalc
 
 
 class Start(object):
@@ -28,6 +28,8 @@ class Start(object):
         hpc : bool
             setup a calculation primarily for use on a HPC cluster WITHOUT running the
             calculation
+        spec_mol : str
+            molecule to be used in the calculation
         geometry_input : click.File()
             specify a custom geometry.in instead of using a structure from PubChem or ASE
         control_input : click.File()
@@ -36,8 +38,6 @@ class Start(object):
             modify the path to the FHI-aims binary
         run_location : click.Path(file_okay=False, dir_okay=True)
             optionally specify a custom location to run the calculation
-        spec_mol : str
-            molecule to be used in the calculation
         constr_atom : str
             atom to be constrained
         spec_at_constr : click.IntRange(min=1, max_open=True)
@@ -97,11 +97,11 @@ class Start(object):
     def __init__(
         self,
         hpc,
+        spec_mol,
         geometry_input,
         control_input,
         binary,
         run_location,
-        spec_mol,
         constr_atom,
         spec_at_constr,
         occupation,
@@ -112,11 +112,11 @@ class Start(object):
         nprocs,
     ):
         self.hpc = hpc
+        self.spec_mol = spec_mol
         self.geometry_input = geometry_input
         self.control_input = control_input
         self.binary = binary
         self.run_loc = run_location
-        self.spec_mol = spec_mol
         self.constr_atom = constr_atom
         self.spec_at_constr = spec_at_constr
         self.occupation = occupation
@@ -166,14 +166,14 @@ class Start(object):
 
         self.found_lattice_vecs = False
         if self.geometry_input is not None:
-            du.check_constrained_geom(self.geometry_input)
-            self.found_l_vecs = du.check_lattice_vecs(self.geometry_input)
+            utils.check_constrained_geom(self.geometry_input)
+            self.found_l_vecs = utils.check_lattice_vecs(self.geometry_input)
         else:
             self.found_l_vecs = False
 
         self.found_k_grid = False
         if self.control_input is not None:
-            self.found_k_grid = du.check_k_grid(self.control_input)
+            self.found_k_grid = utils.check_k_grid(self.control_input)
         else:
             self.found_k_grid = False
 
@@ -235,7 +235,7 @@ class Start(object):
         # Build the structure if given
         elif self.ase:
             if self.spec_mol is not None:
-                atoms = du.build_geometry(self.spec_mol)
+                atoms = utils.build_geometry(self.spec_mol)
             if self.geometry_input is not None:
                 atoms = read(self.geometry_input.name)
 
@@ -257,7 +257,7 @@ class Start(object):
                 self.constr_atom = atom.symbol
                 break
 
-    # @_check_help_arg
+    # TODO @_check_help_arg
     def check_for_bin(self) -> tuple[str, str]:
         """
         Check if a binary is saved in ./aims_bin_loc.txt.
@@ -273,14 +273,15 @@ class Start(object):
         current_path = os.path.dirname(os.path.realpath(__file__))
         with open(f"{current_path}/aims_bin_loc.txt", "r") as f:
             lines = f.readlines()
-            if "~" in lines[0][:-1]:
-                raise FileNotFoundError(
-                    "Please provide the full path to the FHI-aims binary"
-                )
-            try:
-                bin_path = lines[0][:-1]
-            except IndexError:
-                bin_path = ""
+
+        if "~" in lines[0][:-1] and not self.binary:
+            raise FileNotFoundError(
+                "Please provide the full path to the FHI-aims binary"
+            )
+        try:
+            bin_path = lines[0][:-1]
+        except IndexError:
+            bin_path = ""
 
         return current_path, bin_path
 
@@ -310,11 +311,17 @@ class Start(object):
             )
             bin_line = click.edit(marker)
             if bin_line is not None:
-                with open(f"{current_path}/aims_bin_loc.txt", "w") as f:
-                    f.write(bin_line)
+                if Path(str(bin_line).split()[0]).exists():
+                    with open(f"{current_path}/aims_bin_loc.txt", "w") as f:
+                        f.write(bin_line)
 
-                with open(f"{current_path}/aims_bin_loc.txt", "r") as f:
-                    self.binary = f.readlines()[0]
+                    with open(f"{current_path}/aims_bin_loc.txt", "r") as f:
+                        self.binary = f.readlines()[0]
+
+                else:
+                    raise FileNotFoundError(
+                        "the path given to the FHI-aims binary does not exist"
+                    )
 
             else:
                 raise FileNotFoundError(
@@ -396,7 +403,9 @@ class Start(object):
                 ASE atoms object with a calculator added
         """
 
-        atoms.calc = du.create_calc(self.nprocs, binary, self.species, self.basis_set)
+        atoms.calc = utils.create_calc(
+            self.nprocs, binary, self.species, self.basis_set
+        )
 
         if self.print_output:
             warnings.warn("-p/--print_output is not supported with the ASE backend")
@@ -436,7 +445,7 @@ class Process:
         self.omega = omega
 
         # Ensure that the constrained atom(s) have been given
-        du.check_args(("constrained_atom", self.start.constr_atom))
+        utils.check_args(("constrained_atom", self.start.constr_atom))
 
     def calc_dscf_energies(self) -> Tuple[List[float], str]:
         """
@@ -536,7 +545,7 @@ class Process:
         xps_spec.plot(xps)
 
 
-class ProjectorWrapper(GroundCalc, ExcitedCalc):
+class Projector(GroundCalc, ExcitedCalc):
     """
     Force occupation of the basis functions by projecting the occupation of Kohn-Sham
     states onto them.
@@ -583,7 +592,7 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
         self, start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts
     ):
         # Get methods from GroundCalc
-        super(ProjectorWrapper, self).__init__(
+        super(Projector, self).__init__(
             start.run_loc,
             start.atoms,
             start.basis_set,
@@ -609,10 +618,10 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
         self.ground_control = f"{self.start.run_loc}/ground/control.in"
 
         # Convert control options to a dictionary
-        self.control_opts = du.convert_opts_to_dict(control_opts, pbc)
+        self.control_opts = utils.convert_opts_to_dict(control_opts, pbc)
 
         # Raise a warning if no additional control options have been specified
-        du.warn_no_extra_control_opts(self.control_opts, start.control_input)
+        utils.warn_no_extra_control_opts(self.control_opts, start.control_input)
 
         # Convert constr_atom to a list
         if not isinstance(self.start.constr_atom, list):
@@ -643,7 +652,7 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
         prev_calc = self.check_prereq_calc(current_calc, self.constr_atoms, "projector")
 
         # Check that the current calculation has not already been run
-        du.check_curr_prev_run(
+        utils.check_curr_prev_run(
             self.run_type,
             self.start.run_loc,
             self.constr_atoms,
@@ -659,13 +668,13 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
 
         # Check that the constrained atoms have been given
         if current_calc != "hole":
-            du.check_params(self.start)
+            utils.check_params(self.start)
         else:
-            du.check_params(self.start, include_hpc=False)
+            utils.check_params(self.start, include_hpc=False)
 
         # Check required arguments have been given
         if check_args:
-            du.check_args(("ks_range", self.ks_range))
+            utils.check_args(("ks_range", self.ks_range))
 
     def _call_setups(self, proj) -> None:
         """
@@ -732,7 +741,7 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
         """
 
         if len(self.start.spec_at_constr) > 0:
-            element_symbols = du.get_element_symbols(
+            element_symbols = utils.get_element_symbols(
                 self.ground_geom, self.start.spec_at_constr
             )[0]
             self.constr_atoms = element_symbols
@@ -831,7 +840,7 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
         element_symbols = self._get_element_symbols()
 
         # Get the atom indices to constrain
-        self.atom_specifier = du.get_atoms(
+        self.atom_specifier = utils.get_atoms(
             self.constr_atoms,
             self.start.spec_at_constr,
             self.ground_geom,
@@ -841,7 +850,7 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
         self._calc_checks("init_1", check_restart=False, check_args=True)
 
         # Create the ForceOccupation object
-        fo = ForceOccupation(
+        fo = force_occupation.ForceOccupation(
             element_symbols,
             self.start.run_loc,
             self.ground_geom,
@@ -854,7 +863,7 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
         for atom in element_symbols:
             fo.get_electronic_structure(atom)
 
-        proj = Projector(fo)
+        proj = force_occupation.Projector(fo)
         self._call_setups(proj)
 
         spec_run_info = ""
@@ -875,7 +884,7 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
         element_symbols = self._get_element_symbols()
 
         # Get the atom indices to constrain
-        self.atom_specifier = du.get_atoms(
+        self.atom_specifier = utils.get_atoms(
             self.constr_atoms,
             self.start.spec_at_constr,
             self.ground_geom,
@@ -886,13 +895,13 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
 
         # Add any additional options to the control file
         for i in range(len(self.atom_specifier)):
-            if len(self.control_opts) > 0 or self.start.control_input:
-                du.add_control_opts(
+            if len(self.control_opts) > 0:
+                utils.add_control_opts(
                     self.start,
-                    self.constr_atoms,
-                    self.control_opts,
+                    self.constr_atoms[0],
                     self.atom_specifier[i],
                     "init_2",
+                    self.control_opts,
                 )
 
             # Copy the restart files to init_2 from init_1
@@ -919,7 +928,7 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
         element_symbols = self._get_element_symbols()
 
         # Get the atom indices to constrain
-        self.atom_specifier = du.get_atoms(
+        self.atom_specifier = utils.get_atoms(
             self.constr_atoms,
             self.start.spec_at_constr,
             self.ground_geom,
@@ -934,7 +943,7 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
             self._calc_checks("hole", check_restart=False, check_args=True)
 
             # Create the ForceOccupation object
-            fo = ForceOccupation(
+            fo = force_occupation.ForceOccupation(
                 element_symbols,
                 self.start.run_loc,
                 self.ground_geom,
@@ -947,22 +956,22 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
                 fo.get_electronic_structure(atom)
 
             # Setup files required for the initialisation and hole calculations
-            proj = Projector(fo)
+            proj = force_occupation.Projector(fo)
             self._call_setups(proj)
 
         # Add a tag to the geometry file to identify the molecule name
         if self.start.spec_mol is not None:
-            du.add_molecule_identifier(self.start, self.atom_specifier)
+            utils.add_molecule_identifier(self.start, self.atom_specifier)
 
         # Add any additional control options to the hole control file
         for i in range(len(self.atom_specifier)):
-            if len(self.control_opts) > 0 or self.start.control_input:
-                du.add_control_opts(
+            if len(self.control_opts) > 0:
+                utils.add_control_opts(
                     self.start,
-                    self.constr_atoms,
-                    self.control_opts,
+                    self.constr_atoms[0],
                     self.atom_specifier[i],
                     "hole",
+                    self.control_opts,
                 )
 
             # Copy the restart files to hole from init_2
@@ -976,7 +985,7 @@ class ProjectorWrapper(GroundCalc, ExcitedCalc):
         return self.atom_specifier, spec_run_info
 
 
-class BasisWrapper(GroundCalc, ExcitedCalc):
+class Basis(GroundCalc, ExcitedCalc):
     """
     Force occupation of the basis states directly.
 
@@ -1026,7 +1035,7 @@ class BasisWrapper(GroundCalc, ExcitedCalc):
         ks_max,
         control_opts,
     ):
-        super(BasisWrapper, self).__init__(
+        super(Basis, self).__init__(
             start.run_loc,
             start.atoms,
             start.basis_set,
@@ -1048,16 +1057,15 @@ class BasisWrapper(GroundCalc, ExcitedCalc):
         self.l_qn = l_qn
         self.m_qn = m_qn
         self.ks_max = ks_max
-        self.control_opts = control_opts
 
         self.ground_geom = f"{self.start.run_loc}/ground/geometry.in"
         self.ground_control = f"{self.start.run_loc}/ground/control.in"
 
         # Convert control options to a dictionary
-        self.control_opts = du.convert_opts_to_dict(control_opts, None)
+        self.control_opts = utils.convert_opts_to_dict(control_opts, None)
 
         # Raise a warning if no additional control options have been specified
-        du.warn_no_extra_control_opts(self.control_opts, start.control_input)
+        utils.warn_no_extra_control_opts(self.control_opts, start.control_input)
 
         # Convert constr_atoms to a list
         if not isinstance(self.start.constr_atom, list):
@@ -1071,7 +1079,7 @@ class BasisWrapper(GroundCalc, ExcitedCalc):
         """
 
         # Check that the current calculation has not already been run
-        du.check_curr_prev_run(
+        utils.check_curr_prev_run(
             self.run_type,
             self.start.run_loc,
             self.constr_atoms,
@@ -1081,10 +1089,10 @@ class BasisWrapper(GroundCalc, ExcitedCalc):
         )
 
         # Check that the constrained atoms have been given
-        du.check_params(self.start)
+        utils.check_params(self.start)
 
         # Check that the required arguments have been given
-        du.check_args(
+        utils.check_args(
             ("ks_max", self.ks_max),
             ("n_qn", self.n_qn),
             ("l_qn", self.l_qn),
@@ -1102,7 +1110,7 @@ class BasisWrapper(GroundCalc, ExcitedCalc):
         """
 
         if len(self.start.spec_at_constr) > 0:
-            element_symbols = du.get_element_symbols(
+            element_symbols = utils.get_element_symbols(
                 self.ground_geom, self.start.spec_at_constr
             )[0]
             self.constr_atoms = element_symbols
@@ -1128,7 +1136,7 @@ class BasisWrapper(GroundCalc, ExcitedCalc):
         element_symbols = self._get_element_symbols()
 
         # Get the atom indices to constrain
-        self.atom_specifier = du.get_atoms(
+        self.atom_specifier = utils.get_atoms(
             self.constr_atoms,
             self.start.spec_at_constr,
             self.ground_geom,
@@ -1138,7 +1146,7 @@ class BasisWrapper(GroundCalc, ExcitedCalc):
         self._calc_checks()
 
         # Create the directories required for the hole calculation
-        fo = ForceOccupation(
+        fo = force_occupation.ForceOccupation(
             element_symbols,
             self.start.run_loc,
             self.ground_geom,
@@ -1147,7 +1155,7 @@ class BasisWrapper(GroundCalc, ExcitedCalc):
             self.start.use_extra_basis,
         )
 
-        basis = Basis(fo)
+        basis = force_occupation.Basis(fo)
         basis.setup_basis(
             self.multiplicity,
             self.n_qn,
@@ -1162,6 +1170,6 @@ class BasisWrapper(GroundCalc, ExcitedCalc):
 
         # Add molecule ID to geometry file
         if self.start.spec_mol is not None:
-            du.add_molecule_identifier(self.start, self.atom_specifier, basis=True)
+            utils.add_molecule_identifier(self.start, self.atom_specifier, basis=True)
 
         return self.atom_specifier
