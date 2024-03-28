@@ -4,7 +4,7 @@ from typing import Annotated
 import numpy as np
 import numpy.typing as npt
 
-from deltascf_aims.utils.custom_hint import BetweenInclusive, GreaterThan
+from deltascf_aims.utils.hints import BetweenInclusive, GreaterThan
 
 
 def _schmid_pseudo_voigt(

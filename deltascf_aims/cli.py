@@ -1,7 +1,7 @@
 import click
 
 import deltascf_aims.main as main
-from deltascf_aims.utils.custom_click import MutuallyExclusive, MutuallyInclusive
+from deltascf_aims.utils.click_extras import MutuallyExclusive, MutuallyInclusive
 
 
 @click.group()

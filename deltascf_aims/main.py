@@ -60,7 +60,9 @@ def projector(*args):
 
     match proj.run_type:
         case "ground":
-            proj.setup_ground(start.geometry_input, start.control_input)
+            proj.setup_ground(
+                start.geometry_input, start.control_input, proj.control_opts, start
+            )
 
             # If ground, geometry.in files haven't been written until after setup_ground
             if proj.l_vecs is not None and not start.ase:
@@ -115,7 +117,9 @@ def basis(*args):
 
     match basis.run_type:
         case "ground":
-            basis.setup_ground(start.geometry_input, start.control_input)
+            basis.setup_ground(
+                start.geometry_input, start.control_input, basis.control_opts, start
+            )
 
             basis.run_ground(
                 basis.control_opts,
