@@ -109,6 +109,7 @@ class Start(object):
         basis_set,
         use_extra_basis,
         print_output,
+        force,
         nprocs,
     ):
         self.hpc = hpc
@@ -124,6 +125,7 @@ class Start(object):
         self.basis_set = basis_set
         self.use_extra_basis = use_extra_basis
         self.print_output = print_output
+        self.force = force
         self.nprocs = nprocs
 
         self.ase = True
