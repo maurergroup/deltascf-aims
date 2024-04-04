@@ -114,6 +114,12 @@ from deltascf_aims.utils.click_extras import MutuallyExclusive, MutuallyInclusiv
     help="print the live output of the calculation",
 )
 @click.option(
+    "-f",
+    "--force",
+    is_flag=True,
+    help="force the calculation to run even if it has already been run",
+)
+@click.option(
     "-n",
     "--nprocs",
     default=4,
@@ -138,6 +144,7 @@ def initialise(
     basis_set,
     use_extra_basis,
     print_output,
+    force,
     nprocs,
 ):
     """
@@ -179,6 +186,7 @@ def initialise(
         basis_set,
         use_extra_basis,
         print_output,
+        force,
         nprocs,
     )
 

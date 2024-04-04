@@ -659,6 +659,7 @@ class Projector(GroundCalc, ExcitedCalc):
             self.atom_specifier,
             "projector",
             self.start.hpc,
+            self.start.force,
         )
 
         # Check that the restart files exist from the previous calculation
@@ -1086,6 +1087,7 @@ class Basis(GroundCalc, ExcitedCalc):
             self.atom_specifier,
             "basis",
             self.start.hpc,
+            self.start.force,
         )
 
         # Check that the constrained atoms have been given

@@ -207,6 +207,7 @@ def check_curr_prev_run(
     atom_specifier,
     constr_method: Literal["projector", "basis"],
     hpc,
+    force,
 ) -> None:
     """
 
@@ -242,7 +243,7 @@ def check_curr_prev_run(
     elif constr_method == "basis":
         search_path = f"{run_loc}/{constr_atoms[0]}{atom_specifier[0]}/aims.out"
 
-    if os.path.isfile(search_path) and not hpc:
+    if os.path.isfile(search_path) and not hpc and not force:
         warnings.warn("Calculation has already been completed")
         cont = None
         while cont != "y":
