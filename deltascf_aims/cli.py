@@ -392,4 +392,4 @@ def plot(start, graph, intensity, asym, a, b, gl_ratio, omega, gmp):
     Plot the simulated XPS spectra.
     """
 
-    return main.plot(start, graph, gmp, intensity, asym, a, b, gl_ratio, omega)
+    return main.plot(start, graph, intensity, asym, a, b, gl_ratio, omega, gmp)

@@ -126,8 +126,15 @@ class XPSSpectrum:
         """
 
         # Get first directory with target atom followed by any number
-        dirs = " ".join(glob.glob(f"{self.run_loc}/{self.targ_at}*/geometry.in"))
-        match = re.findall(rf"{self.targ_at}\d+", dirs)[0]
+        # Enable for both basis and projector file structures
+        try:
+            dirs = " ".join(glob.glob(f"{self.run_loc}/{self.targ_at}*/geometry.in"))
+            match = re.findall(rf"{self.targ_at}\d+", dirs)[0]
+        except IndexError:
+            dirs = " ".join(
+                glob.glob(f"{self.run_loc}/{self.targ_at}*/hole/geometry.in")
+            )
+            match = re.findall(rf"{self.targ_at}\d+", dirs)[0]
 
         # Enable for both basis and projector file structures
         try:

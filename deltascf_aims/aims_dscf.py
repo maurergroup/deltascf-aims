@@ -429,7 +429,6 @@ class Process:
     def __init__(
         self,
         start,
-        gmp,
         graph,
         intensity=1,
         asym=False,
@@ -437,9 +436,9 @@ class Process:
         b=0.0,
         gl_ratio=0.5,
         omega=0.35,
+        gmp=0.003,
     ):
         self.start = start
-        self.gmp = gmp
         self.graph = graph
         self.intensity = intensity
         self.asym = asym
@@ -447,6 +446,7 @@ class Process:
         self.b = b
         self.gl_ratio = gl_ratio
         self.omega = omega
+        self.gmp = gmp
 
         # Ensure that the constrained atom(s) have been given
         utils.check_args(("constrained_atom", self.start.constr_atom))
