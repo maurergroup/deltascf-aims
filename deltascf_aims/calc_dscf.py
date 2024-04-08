@@ -2,7 +2,7 @@ import os
 from typing import List, Tuple
 
 
-def read_ground(calc_path) -> float:
+def read_ground_energy(calc_path) -> float:
     """
     Get the ground state energy.
 
@@ -37,7 +37,7 @@ def read_ground(calc_path) -> float:
     return grenrgys
 
 
-def contains_number(string) -> bool:
+def _contains_number(string) -> bool:
     """
     Check if a number is in a string.
 
@@ -61,7 +61,7 @@ def contains_number(string) -> bool:
     return found_string
 
 
-def read_atoms(calc_path, element) -> Tuple[List[float], str]:
+def read_excited_energy(calc_path, element) -> Tuple[List[float], str]:
     """
     Get the excited state energies.
 
@@ -84,7 +84,7 @@ def read_atoms(calc_path, element) -> Tuple[List[float], str]:
 
     # Read each core hole dir
     for directory in dir_list:
-        if element in directory and contains_number(directory) is True:
+        if element in directory and _contains_number(directory):
             # Try reading output file from basis, then projector file structure
             if os.path.exists(f"{calc_path}{directory}/aims.out"):
                 with open(
@@ -101,9 +101,6 @@ def read_atoms(calc_path, element) -> Tuple[List[float], str]:
                 # Get the energy
                 if energy in line:
                     excienrgys.append(float(line.split()[-2]))
-
-    # Remove duplicate binding energies from list
-    excienrgys = list(dict.fromkeys(excienrgys))
 
     print("Core hole calculated energies (eV):", *excienrgys, sep="\n")
 

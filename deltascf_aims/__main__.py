@@ -1,5 +1,5 @@
 import deltascf_aims.cli as cli
-from deltascf_aims.aims_dscf import BasisWrapper, Process, ProjectorWrapper, Start
+from deltascf_aims.aims_dscf import Basis, Process, Projector, Start
 
 raise NotImplementedError()
 
@@ -50,7 +50,7 @@ def projector(*args):
     # take constr_atoms not spec_at_constr
     start.check_constr_keywords()
 
-    proj = ProjectorWrapper(
+    proj = Projector(
         # start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts
         *args
     )
@@ -111,7 +111,7 @@ def basis(*args):
     # take constr_atoms not spec_at_constr
     start.check_constr_keywords()
 
-    basis = BasisWrapper(
+    basis = Basis(
         # start,
         # run_type,
         # occ_type,

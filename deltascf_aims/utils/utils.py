@@ -436,7 +436,7 @@ def create_calc(procs, binary, species, int_grid) -> Aims:
     aims_calc = Aims(
         xc="pbe",
         spin="collinear",
-        default_initial_moment=0,
+        default_initial_moment=1,
         aims_command=f"mpirun -n {procs} {binary}",
         species_dir=f"{species}/defaults_2020/{int_grid}/",
     )

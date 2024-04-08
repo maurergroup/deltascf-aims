@@ -5,7 +5,7 @@ from deltascf_aims.utils.click_extras import MutuallyExclusive, MutuallyInclusiv
 
 
 @click.group()
-# TODO @click.argument("argument", cls=showhelpsubcmd)
+# @click.argument("argument", cls=showhelpsubcmd)
 @click.option(
     "-h",
     "--hpc",
@@ -392,4 +392,4 @@ def plot(start, graph, intensity, asym, a, b, gl_ratio, omega, gmp):
     Plot the simulated XPS spectra.
     """
 
-    return main.plot(start, graph, intensity, asym, a, b, gl_ratio, omega, gmp)
+    return main.plot(start, graph, gmp, intensity, asym, a, b, gl_ratio, omega)

@@ -430,6 +430,7 @@ class Process:
         self,
         start,
         gmp,
+        graph,
         intensity=1,
         asym=False,
         a=0.2,
@@ -439,6 +440,7 @@ class Process:
     ):
         self.start = start
         self.gmp = gmp
+        self.graph = graph
         self.intensity = intensity
         self.asym = asym
         self.a = a
@@ -459,8 +461,10 @@ class Process:
                 deltaSCF energies
         """
 
-        grenrgys = cds.read_ground(self.start.run_loc)
-        excienrgys, element = cds.read_atoms(self.start.run_loc, self.start.constr_atom)
+        grenrgys = cds.read_ground_energy(self.start.run_loc)
+        excienrgys, element = cds.read_excited_energy(
+            self.start.run_loc, self.start.constr_atom
+        )
         xps = cds.calc_delta_scf(self.start.constr_atom, grenrgys, excienrgys)
 
         return xps, element

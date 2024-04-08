@@ -163,6 +163,6 @@ def plot(*args):
     peaks = process.call_broaden(xps)
     process.write_spectrum_to_file(peaks, element)
 
-    graph = args[0]
+    graph = args[1]
     if graph:
         process.plot_xps(xps)
