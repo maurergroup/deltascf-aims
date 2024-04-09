@@ -1,6 +1,7 @@
 import glob
 import math
 import re
+from typing import Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -18,10 +19,8 @@ class XPSSpectrum:
             The location of the FHI-aims run
         targ_at : str
             Atom to calculate the XPS spectrum for
-        x_axis_aims : list
-            Values of the x-axis of the XPS spectrum
-        y_axis_aims : list
-            Values of the y-axis of the XPS spectrum
+        xy_axis_aims : numpy.ndarray
+            Values of the x- and y-axis of the XPS spectrum
         aims_be : float
             Mean average binding energy of the XPS spectrum
         aims_be_line : list
@@ -66,13 +65,9 @@ class XPSSpectrum:
         self.targ_at = targ_at
 
         # Parse spectrum
-        self.x_axis_aims = np.loadtxt(
-            f"{run_loc}/{targ_at}_xps_spectrum.txt", usecols=(0)
-        )
-
-        self.y_axis_aims = np.loadtxt(
-            f"{run_loc}/{targ_at}_xps_spectrum.txt", usecols=(1)
-        )
+        self.xy_axis_aims = np.loadtxt(
+            f"{run_loc}/{targ_at}_xps_spectrum.txt", usecols=(0, 1)
+        ).T
 
     def _find_k_edge_mabe(self, output=True) -> None:
         """
@@ -84,12 +79,8 @@ class XPSSpectrum:
                 whether to print the mean average binding energy
         """
 
-        aims_y_max = self.y_axis_aims.max()
-        aims_y_max_arg = self.y_axis_aims.argmax()
-        self.aims_be = round(self.x_axis_aims[aims_y_max_arg], 4)
-        self.aims_be_line = [
-            i for i in np.linspace(-0.6, aims_y_max, num=len(self.y_axis_aims))
-        ]
+        aims_y_max_arg = self.xy_axis_aims[1].argmax()
+        self.aims_be = round(self.xy_axis_aims[0][aims_y_max_arg], 4)
 
         if output:
             print("\nFHI-aims mean average binding energy (MABE):", self.aims_be, "eV")
@@ -99,23 +90,23 @@ class XPSSpectrum:
         Calculate the range of the XPS spectrum to plot
         """
 
-        tmp_plot_x = np.array([])
-        tmp_plot_y = np.array([])
+        self.plot_x = np.array([])
+        self.plot_y = np.array([])
 
-        glob_max_y = max(self.y_axis_aims)
+        glob_max_y = max(self.xy_axis_aims[1])
         glob_min_y = glob_max_y * self.gmp
 
-        for c, y in enumerate(self.y_axis_aims):
+        for c, y in enumerate(self.xy_axis_aims[1]):
             if y > glob_min_y:
-                self.plot_x = np.append(tmp_plot_x, self.x_axis_aims[c])
-                self.plot_y = np.append(tmp_plot_y, y)
+                self.plot_x = np.append(self.plot_x, self.xy_axis_aims[0][c])
+                self.plot_y = np.append(self.plot_y, y)
 
         # Calculate the min and max ranges
         self.x_max = math.floor(max(self.plot_x))
         self.x_min = math.ceil(min(self.plot_x))
         self.y_max = max(self.plot_y)
 
-    def get_molecule_type(self) -> str:
+    def get_molecule_type(self) -> Union[str, None]:
         """
         Get the molecule type from the geometry.in file
 
@@ -130,6 +121,7 @@ class XPSSpectrum:
         try:
             dirs = " ".join(glob.glob(f"{self.run_loc}/{self.targ_at}*/geometry.in"))
             match = re.findall(rf"{self.targ_at}\d+", dirs)[0]
+
         except IndexError:
             dirs = " ".join(
                 glob.glob(f"{self.run_loc}/{self.targ_at}*/hole/geometry.in")
@@ -150,7 +142,7 @@ class XPSSpectrum:
         except IndexError:
             # If, for example, a custom geometry was used and no molecular
             # specification was made
-            molecule = "custom geometry"
+            molecule = None
 
         return molecule
 
@@ -166,12 +158,15 @@ class XPSSpectrum:
                 global minimum percentage
         """
 
+        self._get_spectrum_range()
         self._find_k_edge_mabe()
 
+        plt.figure(figsize=(10, 8))
+
         # Add the mean average binding energy to the plot
-        plt.plot(
-            np.full((len(self.aims_be_line)), self.aims_be),
-            self.aims_be_line,
+        plt.axvline(
+            x=self.aims_be,
+            ymax=self.y_max / (self.y_max + 1),
             c="grey",
             linestyle="--",
             label=f"MABE = {self.aims_be} eV",
@@ -189,23 +184,22 @@ class XPSSpectrum:
         for peak in xps[1:]:
             plt.axvline(x=peak, c="#9467bd", ymax=0.25)  # Purpley colour
 
-        self._get_spectrum_range()
-
         # Plot the spectrum
         plt.plot(self.plot_x, self.plot_y, label="Simulated XPS spectrum")
+
+        # Set general plot parameters
         plt.xlabel("Energy / eV")
         plt.ylabel("Intensity")
         plt.ylim((0, self.y_max + 1))
-        plt.xlim(
-            self.x_max, self.x_min
-        )  # Reverse to match experimental XPS conventions
+        plt.xlim(self.x_max, self.x_min)  # Reverse to match experimental XPS convention
         plt.xticks(np.arange(self.x_min, self.x_max, 1))
         plt.legend(loc="upper right")
 
+        # Add molecule name to title if given
         molecule = self.get_molecule_type()
-        if molecule != "None":
+        if molecule is not None:
             plt.title(f"XPS spectrum of {molecule}")
 
         # Save as both a pdf and png
-        plt.savefig(f"{self.run_loc}/xps_spectrum.pdf")
-        plt.savefig(f"{self.run_loc}/xps_spectrum.png")
+        plt.savefig(f"{self.run_loc}/xps_spectrum.pdf", dpi=300)
+        plt.savefig(f"{self.run_loc}/xps_spectrum.png", dpi=300)
