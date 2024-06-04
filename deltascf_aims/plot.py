@@ -1,6 +1,7 @@
 import glob
 import math
 import re
+from typing import Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -18,10 +19,8 @@ class XPSSpectrum:
             The location of the FHI-aims run
         targ_at : str
             Atom to calculate the XPS spectrum for
-        x_axis_aims : list
-            Values of the x-axis of the XPS spectrum
-        y_axis_aims : list
-            Values of the y-axis of the XPS spectrum
+        xy_axis_aims : numpy.ndarray
+            Values of the x- and y-axis of the XPS spectrum
         aims_be : float
             Mean average binding energy of the XPS spectrum
         aims_be_line : list
@@ -66,13 +65,9 @@ class XPSSpectrum:
         self.targ_at = targ_at
 
         # Parse spectrum
-        self.x_axis_aims = np.loadtxt(
-            f"{run_loc}/{targ_at}_xps_spectrum.txt", usecols=(0)
-        )
-
-        self.y_axis_aims = np.loadtxt(
-            f"{run_loc}/{targ_at}_xps_spectrum.txt", usecols=(1)
-        )
+        self.xy_axis_aims = np.loadtxt(
+            f"{run_loc}/{targ_at}_xps_spectrum.txt", usecols=(0, 1)
+        ).T
 
     def _find_k_edge_mabe(self, output=True) -> None:
         """
@@ -111,7 +106,7 @@ class XPSSpectrum:
         self.x_min = math.ceil(min(self.plot_x))
         self.y_max = max(self.plot_y)
 
-    def get_molecule_type(self) -> str:
+    def get_molecule_type(self) -> Union[str, None]:
         """
         Get the molecule type from the geometry.in file
 
@@ -126,6 +121,7 @@ class XPSSpectrum:
         try:
             dirs = " ".join(glob.glob(f"{self.run_loc}/{self.targ_at}*/geometry.in"))
             match = re.findall(rf"{self.targ_at}\d+", dirs)[0]
+
         except IndexError:
             dirs = " ".join(
                 glob.glob(f"{self.run_loc}/{self.targ_at}*/hole/geometry.in")
@@ -146,7 +142,7 @@ class XPSSpectrum:
         except IndexError:
             # If, for example, a custom geometry was used and no molecular
             # specification was made
-            molecule = "custom geometry"
+            molecule = None
 
         return molecule
 
@@ -189,6 +185,8 @@ class XPSSpectrum:
 
         # # Plot the spectrum
         plt.plot(self.plot_x, self.plot_y, label="Simulated XPS spectrum")
+
+        # Set general plot parameters
         plt.xlabel("Energy / eV")
         plt.ylabel("Intensity")
         plt.ylim((0, self.y_max + 1))
@@ -198,10 +196,11 @@ class XPSSpectrum:
         # plt.xticks(np.arange(self.x_min, self.x_max, 1))
         plt.legend(loc="upper right")
 
+        # Add molecule name to title if given
         molecule = self.get_molecule_type()
-        if molecule != "None":
+        if molecule is not None:
             plt.title(f"XPS spectrum of {molecule}")
 
         # Save as both a pdf and png
-        plt.savefig(f"{self.run_loc}/xps_spectrum.pdf")
-        plt.savefig(f"{self.run_loc}/xps_spectrum.png")
+        plt.savefig(f"{self.run_loc}/xps_spectrum.pdf", dpi=300)
+        plt.savefig(f"{self.run_loc}/xps_spectrum.png", dpi=300)
