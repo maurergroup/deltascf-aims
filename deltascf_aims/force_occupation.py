@@ -1,5 +1,3 @@
-"""Automate creation of files for FOP calculations in FHI-aims."""
-
 import glob
 import os
 import shutil
@@ -52,6 +50,31 @@ class ForceOccupation:
 
         self.new_control = f"{self.run_loc}/ground/control.in.new"
         self.elements = utils.get_all_elements()
+        self.azimuthal_refs = {"s": 1, "p": 2, "d": 3, "f": 4, "g": 5}
+
+    def calculate_highest_E_orbital(self, orb_list) -> str:
+        """
+        Determine the highest energy orbital according to the Madelung rule.
+
+        Parameters
+        ----------
+        orb_list : List[str]
+            list of orbitals
+
+        Returns
+        -------
+        str
+           highest energy orbital
+        """
+
+        madelung_1 = [int(i[0]) + self.azimuthal_refs[i[1]] for i in orb_list]
+        max_i_vals = [i for i, j in enumerate(madelung_1) if j == max(madelung_1)]
+
+        # If multiple max values, take the one with the highest n
+        max_n_vals = [int(orb_list[i][0]) for i in max_i_vals]
+        orb_list = orb_list[max_i_vals[max_n_vals.index(max(max_n_vals))]]
+
+        return f"    valence      {orb_list[0]}  {orb_list[1]}   {orb_list[2]}\n"
 
     def get_electronic_structure(self, atom) -> str:
         """
@@ -129,16 +152,9 @@ class ForceOccupation:
             # Replace the heaviest Noble gas configuration with its symbol
             s_config = s_config.replace(*noble_gas_config)
 
-        output = list(s_config.split(".").pop(-1))
-
-        # Correct transition metal atoms where the s orbital is filled before d
-        if output[1] == "d":
-            if output[2] == "4" or output[2] == "9":
-                output[0] = str(int(output[0]) + 1)
-                output[1] = "s"
-                output[2] = "1"
-
-        self.valence = f"    valence      {output[0]}  {output[1]}   {output[2]}.1\n"
+        # Find the orbital with the highest energy according to the Madelung rule
+        output = list(s_config.split(".")[1:])
+        self.valence = self.calculate_highest_E_orbital(output)
 
         return self.valence
 
@@ -393,9 +409,8 @@ class ForceOccupation:
 
         return content
 
-    @staticmethod
     def add_partial_charge(
-        content, target_atom, at_num, atom_valence, partial_charge
+        self, content, target_atom, at_num, atom_valence, partial_charge
     ) -> Tuple[int, int, str, List[str]]:
         """
         Add a partial charge to a basis set in a control.in file.
@@ -458,43 +473,24 @@ class ForceOccupation:
                     io_index = content[j:].index("#     ion occupancy\n") + j
 
                     # Check which orbital to add 0.1 to
-                    principle_qns = np.array([])
-                    azimuthal_orbs = np.array([])
-                    azimuthal_qns = np.zeros(io_index - vbs_index - 1)
-                    azimuthal_refs = {"s": 1, "p": 2, "d": 3, "f": 4, "g": 5}
+                    valence_structure = []
+                    i_orbital = []
 
-                    # Get azimuthal and principle quantum numbers
                     for count, valence_orbital in enumerate(
                         content[vbs_index + 1 : io_index]
                     ):
-                        principle_qns = np.append(
-                            principle_qns,
-                            np.array(valence_orbital.split()[1]),
-                        ).astype(int)
-                        azimuthal_orbs = np.append(
-                            azimuthal_orbs,
-                            np.array(valence_orbital.split()[2]),
-                        )
-                        azimuthal_qns[count] = azimuthal_refs[azimuthal_orbs[count]]
-                        azimuthal_qns = azimuthal_qns.astype(int)
+                        i_orbital.append(count)
+                        valence_structure.append("".join(valence_orbital.split()[1:]))
 
-                    # Find the orbital with highest principle and azimuthal qn
-                    highest_n = np.amax(principle_qns)
-                    highest_nuclear_index = np.where(principle_qns == highest_n)
-
-                    # Check for highest l if 2 orbitals have the same n
-                    if len(highest_nuclear_index[0]) > 1:
-                        highest_l = np.amax(azimuthal_qns)
-                        highest_l_index = np.where(azimuthal_qns == highest_l)
-                        addition_state = np.intersect1d(
-                            highest_nuclear_index, highest_l_index
-                        )[0]
-                    else:
-                        addition_state = highest_nuclear_index[0][0]
+                    valence = self.calculate_highest_E_orbital(valence_structure)
+                    addition_state = valence_structure.index(
+                        "".join(valence.split()[1:]) + "."
+                    )
 
                     # Add the 0.1 electron
                     valence_index = vbs_index + addition_state + 1
-                    content[valence_index] = atom_valence
+                    print(valence.strip("\n") + ".1\n")
+                    content[valence_index] = valence.strip("\n") + ".1\n"
                     break
 
         return nuclear_index, valence_index, nucleus, content
@@ -520,15 +516,12 @@ class Projector(ForceOccupation):
 
         # Default control file options
         opts = {
-            # "xc": "pbe",
-            # "spin": "collinear",
-            # "default_initial_moment": 0,
             "charge": 0.1,
             "sc_iter_limit": 500,
             "sc_init_iter": 75,
             "restart_write_only": "restart_file",
             "restart_save_iterations": 5,
-            "force_single_restartfile": ".true.",
+            # "force_single_restartfile": ".true.",
         }
 
         # Add or change user-specified keywords to/in the control file
@@ -641,16 +634,13 @@ class Projector(ForceOccupation):
             # Loop over each individual atom to constrain
             for i in self.atom_specifier:
                 opts = {
-                    # "xc": "pbe",
-                    # "spin": "collinear",
-                    # "default_initial_moment": 0,
                     "charge": 1.1,
                     "sc_iter_limit": 1,
                     occ_type: f"{ks_start} {spin} {occ} {ks_start} {ks_stop}",
                     "KS_method": ks_method,
                     "restart": "restart_file",
                     "restart_save_iterations": 1,
-                    "force_single_restartfile": ".true.",
+                    # "force_single_restartfile": ".true.",
                 }
 
                 # Add or change user-specified keywords to the control file
@@ -712,16 +702,13 @@ class Projector(ForceOccupation):
             # Loop over each individual atom to constrain
             for i in self.atom_specifier:
                 opts = {
-                    # "xc": "pbe",
-                    # "spin": "collinear",
-                    # "default_initial_moment": 0,
                     "charge": 1.0,
                     "sc_iter_limit": 500,
                     "sc_init_iter": 75,
                     occ_type: f"{ks_start} {spin} {occ} {ks_start} {ks_stop}",
                     "KS_method": ks_method,
                     "restart_read_only": "restart_file",
-                    "force_single_restartfile": ".true.",
+                    # "force_single_restartfile": ".true.",
                     # "output": "cube spin_density",
                 }
 
