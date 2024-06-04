@@ -2,8 +2,6 @@
 
 from delta_scf import __version__
 
-import pytest
-import os
 
 
 def test_version():

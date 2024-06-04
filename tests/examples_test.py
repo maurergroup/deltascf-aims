@@ -4,7 +4,6 @@ import os
 import warnings
 from pathlib import Path
 
-import pytest
 
 
 def binary_check():

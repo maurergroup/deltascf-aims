@@ -436,6 +436,7 @@ class Process:
         b=0.0,
         gl_ratio=0.5,
         omega=0.35,
+        exclude_mabe=False,
         gmp=0.003,
     ):
         self.start = start
@@ -446,6 +447,7 @@ class Process:
         self.b = b
         self.gl_ratio = gl_ratio
         self.omega = omega
+        self.exclude_mabe = exclude_mabe
         self.gmp = gmp
 
         # Ensure that the constrained atom(s) have been given
@@ -541,14 +543,14 @@ class Process:
 
         Parameters
         ----------
-            xps : list
-                list of individual binding energies
+        xps : list
+            List of individual binding energies.
         """
         xps_spec = XPSSpectrum(self.gmp, self.start.run_loc, self.start.constr_atom)
 
         print("\nplotting spectrum and calculating MABE...")
 
-        xps_spec.plot(xps)
+        xps_spec.plot(xps, self.exclude_mabe)
 
 
 class Projector(GroundCalc, ExcitedCalc):

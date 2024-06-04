@@ -53,12 +53,12 @@ class XPSSpectrum:
         """
         Parameters
         ----------
-            gmp : float
-                global minimum percentage
-            run_loc : str
-                the location of the FHI-aims run
-            targ_at : str
-                atom to calculate the XPS spectrum for
+        gmp : float
+            Global minimum percentage.
+        run_loc : str
+            The location of the FHI-aims run.
+        targ_at : str
+            Atom to calculate the XPS spectrum for.
         """
 
         self.gmp = gmp
@@ -80,16 +80,12 @@ class XPSSpectrum:
 
         Parameters
         ----------
-            output : bool
-                whether to print the mean average binding energy
+        output : bool
+            Whether to print the mean average binding energy.
         """
 
-        aims_y_max = self.y_axis_aims.max()
         aims_y_max_arg = self.y_axis_aims.argmax()
         self.aims_be = round(self.x_axis_aims[aims_y_max_arg], 4)
-        self.aims_be_line = [
-            i for i in np.linspace(-0.6, aims_y_max, num=len(self.y_axis_aims))
-        ]
 
         if output:
             print("\nFHI-aims mean average binding energy (MABE):", self.aims_be, "eV")
@@ -99,16 +95,16 @@ class XPSSpectrum:
         Calculate the range of the XPS spectrum to plot
         """
 
-        tmp_plot_x = np.array([])
-        tmp_plot_y = np.array([])
-
         glob_max_y = max(self.y_axis_aims)
         glob_min_y = glob_max_y * self.gmp
 
-        for c, y in enumerate(self.y_axis_aims):
-            if y > glob_min_y:
-                self.plot_x = np.append(tmp_plot_x, self.x_axis_aims[c])
-                self.plot_y = np.append(tmp_plot_y, y)
+        # Populate arrays with values above the global minimum
+        plot_x = np.where(self.y_axis_aims > glob_min_y, self.x_axis_aims, 0)
+        plot_y = np.where(self.y_axis_aims > glob_min_y, self.y_axis_aims, 0)
+
+        # Remove 0 values
+        self.plot_x = plot_x[plot_x != 0]
+        self.plot_y = plot_y[plot_y != 0]
 
         # Calculate the min and max ranges
         self.x_max = math.floor(max(self.plot_x))
@@ -121,8 +117,8 @@ class XPSSpectrum:
 
         Returns
         -------
-            molecule : str
-                molecule type
+        molecule : str
+            Molecule type.
         """
 
         # Get first directory with target atom followed by any number
@@ -154,28 +150,28 @@ class XPSSpectrum:
 
         return molecule
 
-    def plot(self, xps) -> None:
+    def plot(self, xps, exclude_mabe=False) -> None:
         """
         Plot the XPS spectrum and save as pdf and png files.
 
         Parameters
         ----------
-            xps : list
-                list of individual binding energies
-            gmp : float
-                global minimum percentage
+        xps : list
+            List of individual binding energies.
+        exclude_mabe : bool
+            Whether to exclude the mean average binding energy from the plot.
         """
 
-        self._find_k_edge_mabe()
-
         # Add the mean average binding energy to the plot
-        plt.plot(
-            np.full((len(self.aims_be_line)), self.aims_be),
-            self.aims_be_line,
-            c="grey",
-            linestyle="--",
-            label=f"MABE = {self.aims_be} eV",
-        )
+        if not exclude_mabe:
+            self._find_k_edge_mabe()
+
+            plt.axvline(
+                self.aims_be,
+                c="grey",
+                linestyle="--",
+                label=f"MABE = {self.aims_be} eV",
+            )
 
         # Plot the individual binding energies
         # Include the peak in the legend if first call
@@ -191,7 +187,7 @@ class XPSSpectrum:
 
         self._get_spectrum_range()
 
-        # Plot the spectrum
+        # # Plot the spectrum
         plt.plot(self.plot_x, self.plot_y, label="Simulated XPS spectrum")
         plt.xlabel("Energy / eV")
         plt.ylabel("Intensity")
@@ -199,7 +195,7 @@ class XPSSpectrum:
         plt.xlim(
             self.x_max, self.x_min
         )  # Reverse to match experimental XPS conventions
-        plt.xticks(np.arange(self.x_min, self.x_max, 1))
+        # plt.xticks(np.arange(self.x_min, self.x_max, 1))
         plt.legend(loc="upper right")
 
         molecule = self.get_molecule_type()

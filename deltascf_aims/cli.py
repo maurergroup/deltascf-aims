@@ -380,6 +380,13 @@ def basis(start, run_type, occ_type, spin, n_qn, l_qn, m_qn, ks_max, control_opt
     help="Full width at half maximum value",
 )
 @click.option(
+    "-e",
+    "--exclude_mabe",
+    is_flag=True,
+    default=False,
+    help="Exclude the mean average binding energy from the plot",
+)
+@click.option(
     "--gmp",
     default=0.003,
     type=click.FloatRange(min=0, max_open=True),
@@ -387,9 +394,11 @@ def basis(start, run_type, occ_type, spin, n_qn, l_qn, m_qn, ks_max, control_opt
     help="Global minimum percentage",
 )
 @click.pass_obj
-def plot(start, graph, intensity, asym, a, b, gl_ratio, omega, gmp):
+def plot(start, graph, intensity, asym, a, b, gl_ratio, omega, exclude_mabe, gmp):
     """
     Plot the simulated XPS spectra.
     """
 
-    return main.plot(start, graph, intensity, asym, a, b, gl_ratio, omega, gmp)
+    return main.plot(
+        start, graph, intensity, asym, a, b, gl_ratio, omega, exclude_mabe, gmp
+    )
