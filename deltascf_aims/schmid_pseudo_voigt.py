@@ -1,4 +1,3 @@
-import math
 from typing import Annotated
 
 import numpy as np
@@ -49,7 +48,7 @@ def _schmid_pseudo_voigt(
     """
 
     if asymmetry is False:
-        V = A * (1 - m) * np.sqrt((4 * np.log(2)) / (math.pi * omega**2)) * np.exp(
+        V = A * (1 - m) * np.sqrt((4 * np.log(2)) / (np.pi * omega**2)) * np.exp(
             -(4 * np.log(2) / omega**2) * (domain - E) ** 2
         ) + A * m * (1 / (2 * np.pi)) * (omega / ((omega / 2) ** 2 + (domain - E) ** 2))
 

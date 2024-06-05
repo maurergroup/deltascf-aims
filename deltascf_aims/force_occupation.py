@@ -74,7 +74,7 @@ class ForceOccupation:
         max_n_vals = [int(orb_list[i][0]) for i in max_i_vals]
         orb_list = orb_list[max_i_vals[max_n_vals.index(max(max_n_vals))]]
 
-        return f"    valence      {orb_list[0]}  {orb_list[1]}   {orb_list[2]}\n"
+        return f"    valence      {orb_list[0]}  {orb_list[1]}   {orb_list[2:]}\n"
 
     def get_electronic_structure(self, atom) -> str:
         """
@@ -279,13 +279,13 @@ class ForceOccupation:
 
         Parameters
         ----------
-            control : str
-                path to the control file
+        control : str
+            path to the control file
 
         Returns
         -------
-            opts : dict
-                dictionary of keywords in the control file
+        opts : dict
+            dictionary of keywords in the control file
         """
 
         # Find and replace keywords in control file
@@ -484,13 +484,12 @@ class ForceOccupation:
 
                     valence = self.calculate_highest_E_orbital(valence_structure)
                     addition_state = valence_structure.index(
-                        "".join(valence.split()[1:]) + "."
+                        "".join(valence.split()[1:])
                     )
 
                     # Add the 0.1 electron
                     valence_index = vbs_index + addition_state + 1
-                    print(valence.strip("\n") + ".1\n")
-                    content[valence_index] = valence.strip("\n") + ".1\n"
+                    content[valence_index] = valence.strip("\n") + "1\n"
                     break
 
         return nuclear_index, valence_index, nucleus, content

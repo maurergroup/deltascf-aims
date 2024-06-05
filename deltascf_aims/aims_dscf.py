@@ -640,8 +640,8 @@ class Projector(GroundCalc, ExcitedCalc):
     def _calc_checks(
         self,
         current_calc: Literal["init_1", "init_2", "hole"],
-        check_restart=True,
-        check_args=False,
+        check_restart: bool = True,
+        check_args: bool = False,
     ) -> None:
         """
         Perform checks before running an excited calculation.

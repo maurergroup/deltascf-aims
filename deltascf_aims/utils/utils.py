@@ -40,6 +40,11 @@ def add_control_opts(
         Control options
     """
 
+    # Convert non-string array-type structures to strings
+    for key, opt in zip(control_opts.keys(), control_opts.values()):
+        if not isinstance(opt, str):  # Must be list, tuple, or set
+            control_opts[key] = " ".join(str(i) for i in opt)
+
     parsed_control_opts = fo.ForceOccupation.get_control_keywords(
         f"{start.run_loc}/{constr_atom}{i_atom}/{calc}/control.in"
     )
