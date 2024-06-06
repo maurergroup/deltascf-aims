@@ -83,7 +83,7 @@ def add_molecule_identifier(start, atom_specifier, basis=False) -> None:
         hole = "/hole"
 
     with open(
-        f"{start.run_loc}/{start.constr_atom[0]}{atom_specifier[0]}{hole}/geometry.in",
+        f"{start.run_loc}/{start.constr_atom}{atom_specifier[0]}{hole}/geometry.in",
         "r",
     ) as hole_geom:
         lines = hole_geom.readlines()
@@ -96,7 +96,7 @@ def add_molecule_identifier(start, atom_specifier, basis=False) -> None:
     lines.insert(4, f"# {start.spec_mol}\n")
 
     with open(
-        f"{start.run_loc}/{start.constr_atom[0]}{atom_specifier[0]}{hole}/geometry.in",
+        f"{start.run_loc}/{start.constr_atom}{atom_specifier[0]}{hole}/geometry.in",
         "w",
     ) as hole_geom:
         hole_geom.writelines(lines)
