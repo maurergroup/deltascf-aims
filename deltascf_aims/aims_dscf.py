@@ -429,22 +429,26 @@ class Process:
     def __init__(
         self,
         start,
-        gmp,
+        graph,
         intensity=1,
         asym=False,
         a=0.2,
         b=0.0,
         gl_ratio=0.5,
         omega=0.35,
+        exclude_mabe=False,
+        gmp=0.003,
     ):
         self.start = start
-        self.gmp = gmp
+        self.graph = graph
         self.intensity = intensity
         self.asym = asym
         self.a = a
         self.b = b
         self.gl_ratio = gl_ratio
         self.omega = omega
+        self.exclude_mabe = exclude_mabe
+        self.gmp = gmp
 
         # Ensure that the constrained atom(s) have been given
         utils.check_args(("constrained_atom", self.start.constr_atom))
@@ -459,8 +463,10 @@ class Process:
                 deltaSCF energies
         """
 
-        grenrgys = cds.read_ground(self.start.run_loc)
-        excienrgys, element = cds.read_atoms(self.start.run_loc, self.start.constr_atom)
+        grenrgys = cds.read_ground_energy(self.start.run_loc)
+        excienrgys, element = cds.read_excited_energy(
+            self.start.run_loc, self.start.constr_atom
+        )
         xps = cds.calc_delta_scf(self.start.constr_atom, grenrgys, excienrgys)
 
         return xps, element
@@ -537,14 +543,14 @@ class Process:
 
         Parameters
         ----------
-            xps : list
-                list of individual binding energies
+        xps : list
+            List of individual binding energies.
         """
         xps_spec = XPSSpectrum(self.gmp, self.start.run_loc, self.start.constr_atom)
 
         print("\nplotting spectrum and calculating MABE...")
 
-        xps_spec.plot(xps)
+        xps_spec.plot(xps, self.exclude_mabe)
 
 
 class Projector(GroundCalc, ExcitedCalc):
@@ -634,8 +640,8 @@ class Projector(GroundCalc, ExcitedCalc):
     def _calc_checks(
         self,
         current_calc: Literal["init_1", "init_2", "hole"],
-        check_restart=True,
-        check_args=False,
+        check_restart: bool = True,
+        check_args: bool = False,
     ) -> None:
         """
         Perform checks before running an excited calculation.

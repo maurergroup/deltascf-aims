@@ -40,6 +40,11 @@ def add_control_opts(
         Control options
     """
 
+    # Convert non-string array-type structures to strings
+    for key, opt in zip(control_opts.keys(), control_opts.values()):
+        if not isinstance(opt, str):  # Must be list, tuple, or set
+            control_opts[key] = " ".join(str(i) for i in opt)
+
     parsed_control_opts = fo.ForceOccupation.get_control_keywords(
         f"{start.run_loc}/{constr_atom}{i_atom}/{calc}/control.in"
     )
@@ -436,7 +441,7 @@ def create_calc(procs, binary, species, int_grid) -> Aims:
     aims_calc = Aims(
         xc="pbe",
         spin="collinear",
-        default_initial_moment=0,
+        default_initial_moment=1,
         aims_command=f"mpirun -n {procs} {binary}",
         species_dir=f"{species}/defaults_2020/{int_grid}/",
     )
