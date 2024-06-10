@@ -16,7 +16,7 @@ pyyaml = "^6.0"
 click = "^8.1.7"
 numpy = "^1.26.2"
 matplotlib = "^3.8.4"
-ase = "3.22.1"
+ase = "3.23.0"
 
 [tool.poetry.group.dev]
 optional = true
