@@ -48,7 +48,7 @@ class XPSSpectrum:
             Plot the XPS spectrum and save as pdf and png files.
     """
 
-    def __init__(self, gmp, run_loc, targ_at) -> None:
+    def __init__(self, gmp, run_loc, targ_at, print_name=True) -> None:
         """
         Parameters
         ----------
@@ -58,11 +58,14 @@ class XPSSpectrum:
             The location of the FHI-aims run.
         targ_at : str
             Atom to calculate the XPS spectrum for.
+        print_name : bool
+            Whether to seach for the molecule name in the calculation input files.
         """
 
         self.gmp = gmp
         self.run_loc = run_loc
         self.targ_at = targ_at
+        self.print_name = print_name
 
         # Parse spectrum
         self.xy_axis_aims = np.loadtxt(
@@ -79,8 +82,8 @@ class XPSSpectrum:
             Whether to print the mean average binding energy.
         """
 
-        aims_y_max_arg = self.y_axis_aims.argmax()
-        self.aims_be = round(self.x_axis_aims[aims_y_max_arg], 4)
+        aims_y_max_arg = self.xy_axis_aims[1].argmax()
+        self.aims_be = round(self.xy_axis_aims[0][aims_y_max_arg], 4)
 
         if output:
             print("\nFHI-aims mean average binding energy (MABE):", self.aims_be, "eV")
@@ -90,12 +93,12 @@ class XPSSpectrum:
         Calculate the range of the XPS spectrum to plot
         """
 
-        glob_max_y = max(self.y_axis_aims)
+        glob_max_y = max(self.xy_axis_aims[1])
         glob_min_y = glob_max_y * self.gmp
 
         # Populate arrays with values above the global minimum
-        plot_x = np.where(self.y_axis_aims > glob_min_y, self.x_axis_aims, 0)
-        plot_y = np.where(self.y_axis_aims > glob_min_y, self.y_axis_aims, 0)
+        plot_x = np.where(self.xy_axis_aims[1] > glob_min_y, self.xy_axis_aims[0], 0)
+        plot_y = np.where(self.xy_axis_aims[1] > glob_min_y, self.xy_axis_aims[1], 0)
 
         # Remove 0 values
         self.plot_x = plot_x[plot_x != 0]
@@ -183,7 +186,7 @@ class XPSSpectrum:
 
         self._get_spectrum_range()
 
-        # # Plot the spectrum
+        # Plot the spectrum
         plt.plot(self.plot_x, self.plot_y, label="Simulated XPS spectrum")
 
         # Set general plot parameters
@@ -197,9 +200,10 @@ class XPSSpectrum:
         plt.legend(loc="upper right")
 
         # Add molecule name to title if given
-        molecule = self.get_molecule_type()
-        if molecule is not None:
-            plt.title(f"XPS spectrum of {molecule}")
+        if self.print_name:
+            molecule = self.get_molecule_type()
+            if molecule is not None:
+                plt.title(f"XPS spectrum of {molecule}")
 
         # Save as both a pdf and png
         plt.savefig(f"{self.run_loc}/xps_spectrum.pdf", dpi=300)
