@@ -83,7 +83,7 @@ def add_molecule_identifier(start, atom_specifier, basis=False) -> None:
         hole = "/hole"
 
     with open(
-        f"{start.run_loc}/{start.constr_atom[0]}{atom_specifier[0]}{hole}/geometry.in",
+        f"{start.run_loc}/{start.constr_atom}{atom_specifier[0]}{hole}/geometry.in",
         "r",
     ) as hole_geom:
         lines = hole_geom.readlines()
@@ -96,7 +96,7 @@ def add_molecule_identifier(start, atom_specifier, basis=False) -> None:
     lines.insert(4, f"# {start.spec_mol}\n")
 
     with open(
-        f"{start.run_loc}/{start.constr_atom[0]}{atom_specifier[0]}{hole}/geometry.in",
+        f"{start.run_loc}/{start.constr_atom}{atom_specifier[0]}{hole}/geometry.in",
         "w",
     ) as hole_geom:
         hole_geom.writelines(lines)
@@ -305,7 +305,7 @@ def check_lattice_vecs(geom_file) -> bool:
     return l_vecs
 
 
-def check_params(start, include_hpc=True) -> None:
+def check_params(start, include_hpc=False) -> None:
     """
     Check that the parameters given in Start are valid.
 
@@ -541,7 +541,7 @@ def get_all_elements() -> List[str]:
     current_path = os.path.dirname(os.path.realpath(__file__))
 
     # Get all supported elements in FHI-aims
-    with open(f"{current_path}/../elements.yml", "r") as elements_file:
+    with open(f"{current_path}/elements.yml", "r") as elements_file:
         elements = yaml.load(elements_file, Loader=yaml.SafeLoader)
 
     return elements
@@ -841,6 +841,8 @@ class GroundCalc:
             element symbol of the constrained atom
         """
 
+        print(f"{self.species}/defaults_2020/{self.basis_set}/*{constr_atom}_default")
+
         basis_file = glob.glob(
             f"{self.species}/defaults_2020/{self.basis_set}/*{constr_atom}_default"
         )[0]
@@ -849,11 +851,11 @@ class GroundCalc:
         with open(basis_file, "r") as basis_functions:
             control_content = basis_functions.readlines()
 
-        with open(f"{current_path}/../deltascf_aims/elements.yml", "r") as elements:
+        with open(f"{current_path}/elements.yml", "r") as elements:
             elements = yaml.load(elements, Loader=yaml.SafeLoader)
 
         new_content = fo.ForceOccupation.add_additional_basis(
-            current_path, elements, control_content, constr_atom
+            elements, control_content, constr_atom
         )
 
         # Create a new directory for modified basis sets

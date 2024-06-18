@@ -41,6 +41,7 @@ class ForceOccupation:
         self.ad_cont_opts = ad_cont_opts
         self.atom_specifier = atom_specifier
         self.extra_basis = extra_basis
+        self.current_path = os.path.dirname(os.path.realpath(__file__))
 
         # Convert k_grid key to a string from a tuple
         # Writing the options for a hole calculation doesn't use ASE, so it must be
@@ -159,16 +160,12 @@ class ForceOccupation:
         return self.valence
 
     @staticmethod
-    def add_additional_basis(
-        current_path, elements, content, target_atom
-    ) -> Union[List[str], None]:
+    def add_additional_basis(elements, content, target_atom) -> List[str]:
         """
         Add an additional basis set for the core hole calculation.
 
         Parameters
         ----------
-            current_path : str
-                path to the current directory
             elements : List[str]
                 list of all supported elements
             content : List[str]
@@ -185,16 +182,16 @@ class ForceOccupation:
         # Check the additional functions haven't already been added to control
         for line in content:
             if "# Additional basis functions for atom with a core hole" in line:
-                return
+                return content
+
+        current_path = os.path.dirname(os.path.realpath(__file__))
 
         # Get the additional basis set
         if "dscf_utils" in current_path.split("/"):
-            with open(
-                f"{current_path}/../deltascf_aims/add_basis_functions.yml", "r"
-            ) as f:
+            with open(f"{current_path}/utils/add_basis_functions.yml", "r") as f:
                 ad_basis = yaml.safe_load(f)
         else:
-            with open(f"{current_path}/add_basis_functions.yml", "r") as f:
+            with open(f"{current_path}/utils/add_basis_functions.yml", "r") as f:
                 ad_basis = yaml.safe_load(f)
 
         if [*target_atom][-1][0] == "1":
@@ -232,10 +229,7 @@ class ForceOccupation:
         # Append a separator to the end of the file
         # This helps with adding the additional basis set in the correct positions for
         # some basis sets.
-        separator = (
-            "#######################################################################"
-            "#########"
-        )
+        separator = 80 * "#"
         content.append(separator + "\n")
 
         # Find the line which contains the appropriate row of '#'s after the species and element
@@ -596,7 +590,7 @@ class Projector(ForceOccupation):
                 # Add additional core-hole basis functions
                 if self.extra_basis:
                     control_content = self.add_additional_basis(
-                        self.current_path, self.elements, control_content, f"{el}1"
+                        self.elements, control_content, f"{el}1"
                     )
 
                 (
@@ -661,7 +655,7 @@ class Projector(ForceOccupation):
                 # Add additional core-hole basis functions
                 if self.extra_basis:
                     control_content = self.add_additional_basis(
-                        self.current_path, self.elements, control_content, f"{el}1"
+                        self.elements, control_content, f"{el}1"
                     )
 
                 # Add partial charge to the control file
@@ -738,7 +732,7 @@ class Projector(ForceOccupation):
                 # Add additional core-hole basis functions
                 if self.extra_basis:
                     control_content = self.add_additional_basis(
-                        self.current_path, self.elements, control_content, f"{el}1"
+                        self.elements, control_content, f"{el}1"
                     )
 
                 # Remove partial charge from the control file
@@ -858,7 +852,7 @@ class Basis(ForceOccupation):
                 # Add additional core-hole basis functions
                 if self.extra_basis:
                     control_content = self.add_additional_basis(
-                        self.current_path, self.elements, control_content, f"{el}1"
+                        self.elements, control_content, f"{el}1"
                     )
 
                 # Write the keywords and basis functions to the file

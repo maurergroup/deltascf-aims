@@ -380,10 +380,19 @@ def basis(start, run_type, occ_type, spin, n_qn, l_qn, m_qn, ks_max, control_opt
     help="Full width at half maximum value",
 )
 @click.option(
+    "-i",
+    "--include_name",
+    is_flag=True,
+    default=True,
+    show_default=True,
+    help="Include the molecule name in the plot",
+)
+@click.option(
     "-e",
     "--exclude_mabe",
     is_flag=True,
     default=False,
+    show_default=True,
     help="Exclude the mean average binding energy from the plot",
 )
 @click.option(
@@ -394,11 +403,33 @@ def basis(start, run_type, occ_type, spin, n_qn, l_qn, m_qn, ks_max, control_opt
     help="Global minimum percentage",
 )
 @click.pass_obj
-def plot(start, graph, intensity, asym, a, b, gl_ratio, omega, exclude_mabe, gmp):
+def plot(
+    start,
+    graph,
+    intensity,
+    asym,
+    a,
+    b,
+    gl_ratio,
+    omega,
+    include_name,
+    exclude_mabe,
+    gmp,
+):
     """
     Plot the simulated XPS spectra.
     """
 
     return main.plot(
-        start, graph, intensity, asym, a, b, gl_ratio, omega, exclude_mabe, gmp
+        start,
+        graph,
+        intensity,
+        asym,
+        a,
+        b,
+        gl_ratio,
+        omega,
+        include_name,
+        exclude_mabe,
+        gmp,
     )

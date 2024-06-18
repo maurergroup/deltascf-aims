@@ -67,7 +67,6 @@ class Start(object):
 
     Methods
     -------
-
         check_for_help_arg()
             Print click help if --help flag is given
         check_for_geometry_input()
@@ -166,7 +165,7 @@ class Start(object):
         Check for lattice vectors and k-grid in input file.
         """
 
-        self.found_lattice_vecs = False
+        self.found_l_vecs = False
         if self.geometry_input is not None:
             utils.check_constrained_geom(self.geometry_input)
             self.found_l_vecs = utils.check_lattice_vecs(self.geometry_input)
@@ -436,6 +435,7 @@ class Process:
         b=0.0,
         gl_ratio=0.5,
         omega=0.35,
+        include_name=True,
         exclude_mabe=False,
         gmp=0.003,
     ):
@@ -447,6 +447,7 @@ class Process:
         self.b = b
         self.gl_ratio = gl_ratio
         self.omega = omega
+        self.include_name = include_name
         self.exclude_mabe = exclude_mabe
         self.gmp = gmp
 
@@ -477,10 +478,10 @@ class Process:
 
         Parameters
         ----------
-            element : str
-                element the binding energies were calculated for
-            type : Literal["peaks", "spectrum"]
-                type of file to move
+        element : str
+            element the binding energies were calculated for
+        type : Literal["peaks", "spectrum"]
+            type of file to move
         """
 
         os.system(f"mv {element}_xps_{type}.txt {self.start.run_loc}")
@@ -491,13 +492,13 @@ class Process:
 
         Parameters
         ----------
-            xps : List[float]
-                deltaSCF energies
+        xps : List[float]
+            deltaSCF energies
 
         Returns
         -------
-            peaks : np.ndarray
-                broadened peaks
+        peaks : np.ndarray
+            broadened peaks
         """
 
         peaks = broaden(
@@ -520,12 +521,12 @@ class Process:
 
         Parameters
         ----------
-            peaks : np.ndarray
-                broadened peaks
-            element : str
-                element the binding energies were calculated for
-            bin_width : float
-                resolution of the spectral curve - lower values increase the resolution
+        peaks : np.ndarray
+            broadened peaks
+        element : str
+            element the binding energies were calculated for
+        bin_width : float
+            resolution of the spectral curve - lower values increase the resolution
         """
 
         data = []
@@ -546,7 +547,9 @@ class Process:
         xps : list
             List of individual binding energies.
         """
-        xps_spec = XPSSpectrum(self.gmp, self.start.run_loc, self.start.constr_atom)
+        xps_spec = XPSSpectrum(
+            self.gmp, self.start.run_loc, self.start.constr_atom, self.include_name
+        )
 
         print("\nplotting spectrum and calculating MABE...")
 
@@ -1099,7 +1102,7 @@ class Basis(GroundCalc, ExcitedCalc):
         )
 
         # Check that the constrained atoms have been given
-        utils.check_params(self.start)
+        utils.check_params(self.start, include_hpc=False)
 
         # Check that the required arguments have been given
         utils.check_args(
