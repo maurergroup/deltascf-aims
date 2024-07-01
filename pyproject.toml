@@ -27,7 +27,7 @@ pyment = "^0.3.3"
 pytest = "^7.4.3"
 ptpython = "^3.0.26"
 black = "^24.3.0"
-ruff = "^0.3.4"
+ruff = ">=0.3.4,<0.6.0"
 
 [tool.poetry.scripts]
 deltascf = 'deltascf_aims.cli:initialise'
