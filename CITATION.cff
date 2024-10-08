@@ -1,0 +1,30 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: DeltaSCF-aims
+message: >-
+  If you use this software, please cite it using the
+  metadata from this file.
+type: software
+authors:
+  - given-names: Dylan
+    family-names: Morgan
+    email: dylan.morgan@warwick.ac.uk
+    affiliation: University of Warwick
+    orcid: 'https://orcid.org/0009-0009-8924-8267'
+repository-code: 'https://github.com/maurergroup/deltascf-aims'
+abstract: >-
+  An application to automate core level spectroscopy
+  simulations in FHI-aims 
+keywords:
+  - simulation
+  - spectroscopy
+  - XPS
+  - FHI-aims
+  - delta-SCF
+  - DFT
+license: GPL-3.0
+commit: f7ecca9afa96391dbf1e98342943feb162b468ec
+version: 1.0.0
+date-released: '2024-06-18'
