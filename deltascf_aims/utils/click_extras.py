@@ -1,17 +1,38 @@
 from click import Argument, Option, UsageError
 
 
+def get_long_arg_name(ctx, arg):
+    """
+    Get the long argument name for a given argument.
+
+    Parameters
+    ----------
+    ctx : click.Context
+        The click context object
+    arg : str
+        The parsed argument name to get the long name for
+
+    Returns
+    -------
+    str
+        The long version of the CLI argument name
+    """
+
+    # Convert set back to string
+    if isinstance(arg, set):
+        arg = ", ".join(arg)
+
+    # Necessary as ctx.command.params is a list of click.Option objects so we need to
+    # extract the name attribute from each object
+    arg_index = [i.name for i in ctx.command.params].index(arg)
+
+    return ctx.command.params[arg_index].opts[1]
+
+
 class ShowHelpSubCmd(Argument):
     """
     Enable the help documentation to be shown for subcommands if '--help' is specified
     as part of the subcommand's args before any code is executed for the parent cmd.
-
-    ...
-
-    Methods
-    -------
-        handle_parse_result(ctx, opts, args)
-            Check if '--help' exists on the command line and if we are in a subcommand.
     """
 
     def handle_parse_result(self, ctx, opts, args):
@@ -36,16 +57,10 @@ class MutuallyExclusive(Option):
 
     Attributes
     ----------
-        mutually_exclusive : set
-            A set of mutually exclusive options.
-        name : str
-            The name of the option.
-
-    Methods
-    -------
-        handle_parse_result(ctx, opts, args)
-            Check if the mutually exclusive options are present in the command line
-            arguments.
+    mutually_exclusive : set
+        A set of mutually exclusive options.
+    name : str
+        The name of the option.
     """
 
     def __init__(self, *args, **kwargs):
@@ -54,17 +69,56 @@ class MutuallyExclusive(Option):
 
         if self.mutually_exclusive:
             ex_str = ", ".join(self.mutually_exclusive)
-            kwargs["help"] = (
-                f"{help} | NOTE: This argument is mutually exclusive with: [{ex_str}]."
-            )
+            kwargs["help"] = f"{help} [mutually exclusive with `{ex_str}`]"
 
         super().__init__(*args, **kwargs)
 
     def handle_parse_result(self, ctx, opts, args):
+        curr_arg_long = get_long_arg_name(ctx, self.name)
+        mut_ex_arg_long = get_long_arg_name(ctx, self.mutually_exclusive)
+
         if self.mutually_exclusive.intersection(opts) and self.name in opts:
             raise UsageError(
-                "Illegal usage: `{}` is mutually exclusive with "
-                "arguments `{}`.".format(self.name, ", ".join(self.mutually_exclusive))
+                f"`{curr_arg_long}` is mutually exclusive with `{mut_ex_arg_long}`."
+            )
+
+        return super().handle_parse_result(ctx, opts, args)
+
+
+class NotRequiredIf(Option):
+    """
+    Allow one of two arguments to be required mutually exclusively.
+
+    ...
+
+    Attributes
+    ----------
+    not_required_if : set
+        A set of arguments that are not allowed if this argument is present.
+    name : str
+        The name of the option.
+    """
+
+    def __init__(self, *args, **kwargs):
+        self.not_required_if = set(kwargs.pop("not_required_if", []))
+        help = kwargs.get("help", "")
+
+        if self.not_required_if:
+            ex_str = ", ".join(self.not_required_if)
+            kwargs["help"] = f"{help} [required, or: `{ex_str}`]"
+
+        super().__init__(*args, **kwargs)
+
+    def handle_parse_result(self, ctx, opts, args):
+        curr_arg_long = get_long_arg_name(ctx, self.name)
+        mut_ex_arg_long = get_long_arg_name(ctx, self.not_required_if)
+
+        if self.not_required_if.difference(opts) and self.name not in opts:
+            raise UsageError(f"`{curr_arg_long}` is required, or: `{mut_ex_arg_long}`.")
+
+        if self.not_required_if.intersection(opts) and self.name in opts:
+            raise UsageError(
+                f"`{curr_arg_long}` is mutually exclusive with `{mut_ex_arg_long}`."
             )
 
         return super().handle_parse_result(ctx, opts, args)
@@ -78,16 +132,10 @@ class MutuallyInclusive(Option):
 
     Attributes
     ----------
-        mutually_inclusive : set
-            A set of mutually inclusive options.
-        name : str
-            The name of the option.
-
-    Methods
-    -------
-        handle_parse_result(ctx, opts, args)
-            Check if the mutually inclusive options are present in the command line
-            arguments.
+    mutually_inclusive : set
+        A set of mutually inclusive options.
+    name : str
+        The name of the option.
     """
 
     def __init__(self, *args, **kwargs):
@@ -96,17 +144,18 @@ class MutuallyInclusive(Option):
 
         if self.mutually_inclusive:
             ex_str = ", ".join(self.mutually_inclusive)
-            kwargs["help"] = help + (
-                " | NOTE: This argument is mutually inclusive with: [" + ex_str + "]."
-            )
+            kwargs["help"] = f" {help} [mutually inclusive with `{ex_str}`]"
 
         super().__init__(*args, **kwargs)
 
     def handle_parse_result(self, ctx, opts, args):
+        curr_arg_long = get_long_arg_name(ctx, self.name)
+        mut_ex_arg_long = get_long_arg_name(ctx, self.mutually_exclusive)
+
         if self.mutually_inclusive.intersection(opts) and self.name not in opts:
             raise UsageError(
-                "Illegal usage: `{}` is mutually inclusive with "
-                "arguments `{}`.".format(self.name, ", ".join(self.mutually_inclusive))
+                f"`{curr_arg_long}` is mutually inclusive with arguments"
+                f"`{mut_ex_arg_long}`."
             )
 
         return super().handle_parse_result(ctx, opts, args)

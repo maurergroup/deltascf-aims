@@ -888,7 +888,8 @@ class GroundCalc:
                 )
 
     def _with_ase(self, calc, control_opts, add_extra_basis, l_vecs) -> None:
-        """Run the ground state calculation using ASE.
+        """
+        Run the ground state calculation using ASE.
 
         Parameters
         ----------
@@ -951,7 +952,6 @@ class GroundCalc:
 
     def _without_ase(self, print_output, nprocs, binary) -> None:
         """
-
         Run the ground state calculation without ASE.
 
         Parameters
@@ -1113,7 +1113,9 @@ class ExcitedCalc:
             Invalid parameter for current_calc has been given
         """
 
-        prev_calc = None  # Placeholder until prev_calc is assigned
+        # Placeholders until assigned
+        prev_calc = None
+        search_path = ""
 
         match current_calc:
             case "init_1":
@@ -1156,18 +1158,6 @@ class ExcitedCalc:
                     prev_calc = "ground"
                     search_path = f"{self.start.run_loc}/ground/aims.out"
 
-            case _:
-                if isinstance(current_calc, str):
-                    raise ValueError(
-                        "current_calc must be 'init_1', 'init_2', or 'hole', not "
-                        f"{current_calc}"
-                    )
-                else:
-                    raise TypeError(
-                        "current_calc must be a string with a value of init_1, init_2, "
-                        f"or hole, not {type(current_calc)}"
-                    )
-
         if not os.path.isfile(search_path):
             raise FileNotFoundError(
                 f"aims.out for {prev_calc} not found, please ensure the "
@@ -1193,7 +1183,7 @@ class ExcitedCalc:
             List of atom indices to constrain
         constr_atoms : List[str]
             Constrained atoms
-        run_type : Literal["init_1", "init_2", "hole"]
+        run_type : Literal["init_1", "init_2", "hole", ""]
             Type of excited calculation to run
         spec_run_info : str
             Redirection location for STDERR of calculation
@@ -1201,7 +1191,7 @@ class ExcitedCalc:
             Whether the calculation uses the basis occupation constraint method
         """
 
-        # Don't cd into hole for basis scalculation
+        # Don't cd into hole for basis calculation
         if basis_constr:
             run_type = ""
 

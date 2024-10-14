@@ -129,9 +129,10 @@ class Start(object):
 
         self.ase = True
 
+    # TODO figure out how to get this to work
     # def _check_help_arg(func):
     #     """
-    #     Print click help if --help flag is given.
+    #     Print click help if --help flag is given anywhere in the CLI arguments.
     #     """
 
     #     @functools.wraps(func)
@@ -227,6 +228,7 @@ class Start(object):
                     "molecule argument not provided, defaulting to using existing geometry.in"
                     " file from the ground state calculation"
                 )
+
             except FileNotFoundError:
                 raise click.MissingParameter(
                     param_hint="-m/--molecule or -e/--geometry_input",
@@ -252,13 +254,13 @@ class Start(object):
             Element of constr_atom
         """
 
-        # TODO: support for multiple constrained atoms
+        # TODO: add support for multiple constrained atoms
         for atom in atoms:
             if atom.index in self.spec_at_constr:
                 self.constr_atom = atom.symbol
                 break
 
-    # TODO @_check_help_arg
+    # @_check_help_arg
     def check_for_bin(self) -> tuple[str, str]:
         """
         Check if a binary is saved in ./aims_bin_loc.txt.

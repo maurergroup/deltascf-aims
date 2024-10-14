@@ -1,7 +1,11 @@
 import click
 
 import deltascf_aims.main as main
-from deltascf_aims.utils.click_extras import MutuallyExclusive, MutuallyInclusive
+from deltascf_aims.utils.click_extras import (
+    MutuallyExclusive,
+    MutuallyInclusive,
+    NotRequiredIf,
+)
 
 
 @click.group()
@@ -10,7 +14,7 @@ from deltascf_aims.utils.click_extras import MutuallyExclusive, MutuallyInclusiv
     "-h",
     "--hpc",
     cls=MutuallyExclusive,
-    mutually_exclusive=["--binary"],
+    mutually_exclusive=["binary"],
     is_flag=True,
     help="setup a calculation primarily for use on a hpc cluster without running "
     "the calculation",
@@ -19,20 +23,20 @@ from deltascf_aims.utils.click_extras import MutuallyExclusive, MutuallyInclusiv
     "-m",
     "--molecule",
     "spec_mol",
-    cls=MutuallyExclusive,
-    mutually_exclusive=["--geometry_input"],
+    cls=NotRequiredIf,
+    not_required_if=["geometry_input"],
     type=str,
     help="molecule to be used in the calculation",
 )
 @click.option(
     "-e",
     "--geometry_input",
-    cls=MutuallyExclusive,
-    mutually_exclusive=["--molecule"],
+    cls=NotRequiredIf,
+    not_required_if=["spec_mol"],
     nargs=1,
     type=click.File(),
     help="specify a custom geometry.in instead of using a structure from pubchem "
-    "or ase",
+    "or ASE",
 )
 @click.option(
     "-i",
@@ -47,7 +51,7 @@ from deltascf_aims.utils.click_extras import MutuallyExclusive, MutuallyInclusiv
     cls=MutuallyExclusive,
     mutually_exclusive=["hpc"],
     is_flag=True,
-    help="modify the path to the fhi-aims binary",
+    help="modify the path to the FHI-aims binary",
 )
 @click.option(
     "-r",
@@ -61,18 +65,18 @@ from deltascf_aims.utils.click_extras import MutuallyExclusive, MutuallyInclusiv
     "-c",
     "--constrained_atom",
     "constr_atom",
-    cls=MutuallyExclusive,
-    mutually_exclusive=["spec_at_constr"],
+    cls=NotRequiredIf,
+    not_required_if=["spec_at_constr"],
     type=str,
-    # multiple=true,  # todo: allow for multiple atoms to be constrained
+    # multiple=true,  # TODO: allow for multiple atoms to be constrained
     help="atom to constrain; constrain all atoms of this element",
 )
 @click.option(
     "-s",
     "--specific_atom_constraint",
     "spec_at_constr",
-    cls=MutuallyExclusive,
-    mutually_exclusive=["constr_atom"],
+    cls=NotRequiredIf,
+    not_required_if=["constr_atom"],
     multiple=True,
     type=click.IntRange(min=1, max_open=True),
     help="specify specific atoms to constrain by their index in a geometry file",
@@ -234,7 +238,7 @@ def initialise(
     "--ks_range",
     nargs=2,
     type=click.IntRange(1),
-    help="range of Kohn-Sham states to constrain - taken with 2 arguments",
+    help="range of Kohn-Sham states to constrain",
 )
 @click.option(
     "-c",
@@ -282,6 +286,7 @@ def projector(start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_op
     "-n",
     "--n_quantum_number",
     "n_qn",
+    required=True,
     type=int,
     help="principal quantum number of constrained state",
 )
@@ -289,6 +294,7 @@ def projector(start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_op
     "-l",
     "--l_quantum_number",
     "l_qn",
+    required=True,
     type=int,
     help="orbital momentum quantum number of constrained state",
 )
@@ -296,12 +302,14 @@ def projector(start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_op
     "-m",
     "--m_quantum_number",
     "m_qn",
+    required=True,
     type=int,
     help="magnetic quantum number for projection of orbital momentum",
 )
 @click.option(
     "-k",
     "--ks_max",
+    required=True,
     type=click.IntRange(1),
     help="maximum Kohn-Sham state to constrain",
 )

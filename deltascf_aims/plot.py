@@ -208,3 +208,38 @@ class XPSSpectrum:
         # Save as both a pdf and png
         plt.savefig(f"{self.run_loc}/xps_spectrum.pdf", dpi=300)
         plt.savefig(f"{self.run_loc}/xps_spectrum.png", dpi=300)
+
+    # TODO finish and check this function
+    def plot_2(self, xps):
+        """
+        Plot the invidual binding energies. Include the peak in the legend if first call.
+        """
+
+        raise NotImplementedError
+
+        plt.axvline(
+            x=xps[0],
+            c="#9467bd",  # Purpley colour
+            ymax=0.25,
+            label="Individual binding energies",
+        )
+
+        for peak in xps[1:]:
+            plt.axvline(x=peak, c="#9467bd", ymax=0.25)  # Purpley colour
+
+        self._get_spectrum_range()
+
+        # Plot the spectrum
+        plt.plot(self.plot_x, self.plot_y, label="Simulated XPS spectrum")
+
+        # Set general plot parameters
+        plt.xlabel("Energy / eV")
+        plt.ylabel("Intensity")
+        plt.ylim((0, self.y_max + 1))
+        plt.xlim(
+            self.x_max, self.x_min
+        )  # Reverse to match experimental XPS conventions
+        # plt.xticks(np.arange(self.x_min, self.x_max, 1))
+        plt.legend()  # (loc="upper right")
+
+        return plt

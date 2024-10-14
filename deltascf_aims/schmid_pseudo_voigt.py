@@ -47,12 +47,7 @@ def _schmid_pseudo_voigt(
         Broadened spectrum point
     """
 
-    if asymmetry is False:
-        V = A * (1 - m) * np.sqrt((4 * np.log(2)) / (np.pi * omega**2)) * np.exp(
-            -(4 * np.log(2) / omega**2) * (domain - E) ** 2
-        ) + A * m * (1 / (2 * np.pi)) * (omega / ((omega / 2) ** 2 + (domain - E) ** 2))
-
-    else:
+    if asymmetry:
         omega_as = 2 * omega / (1 + np.exp(-a * domain - b))
 
         V = A * (1 - m) * np.sqrt(
@@ -75,13 +70,18 @@ def _schmid_pseudo_voigt(
             )
         )
 
+    else:
+        V = A * (1 - m) * np.sqrt((4 * np.log(2)) / (np.pi * omega**2)) * np.exp(
+            -(4 * np.log(2) / omega**2) * (domain - E) ** 2
+        ) + A * m * (1 / (2 * np.pi)) * (omega / ((omega / 2) ** 2 + (domain - E) ** 2))
+
     return V
 
 
 def broaden(
     start, stop, A, m, dirac_peaks, omega, asymmetry, a, b
 ) -> npt.NDArray[np.float64]:
-    """Braoden the Dirac delta peaks.
+    """Broaden the Dirac delta peaks.
 
     Parameters
     ----------
@@ -92,7 +92,7 @@ def broaden(
     A : float
         Intensity
     m : float
-        Gaussian-Lorentzian mising
+        Gaussian-Lorentzian mixing
     dirac_peaks : np.array
         Array of Dirac peaks
     omega : float
