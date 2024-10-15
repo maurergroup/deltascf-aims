@@ -161,17 +161,6 @@ class XPSSpectrum:
             Whether to exclude the mean average binding energy from the plot.
         """
 
-        # Add the mean average binding energy to the plot
-        if not exclude_mabe:
-            self._find_k_edge_mabe()
-
-            plt.axvline(
-                self.aims_be,
-                c="grey",
-                linestyle="--",
-                label=f"MABE = {self.aims_be} eV",
-            )
-
         # Plot the individual binding energies
         # Include the peak in the legend if first call
         plt.axvline(
@@ -186,17 +175,29 @@ class XPSSpectrum:
 
         self._get_spectrum_range()
 
-        # Plot the spectrum
-        plt.plot(self.plot_x, self.plot_y, label="Simulated XPS spectrum")
-
         # Set general plot parameters
         plt.xlabel("Energy / eV")
         plt.ylabel("Intensity")
-        plt.ylim((0, self.y_max + 1))
+        ylims = plt.ylim((0, self.y_max * 1.4))
         plt.xlim(
             self.x_max, self.x_min
         )  # Reverse to match experimental XPS conventions
-        # plt.xticks(np.arange(self.x_min, self.x_max, 1))
+
+        # Plot the spectrum
+        plt.plot(self.plot_x, self.plot_y, label="Simulated XPS spectrum")
+
+        # Add the mean average binding energy to the plot
+        if not exclude_mabe:
+            self._find_k_edge_mabe()
+
+            plt.axvline(
+                self.aims_be,
+                c="grey",
+                ymax=self.y_max / ylims[1],
+                linestyle="--",
+                label=f"MABE = {self.aims_be} eV",
+            )
+
         plt.legend(loc="upper right")
 
         # Add molecule name to title if given
