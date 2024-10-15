@@ -332,14 +332,21 @@ def basis(start, run_type, occ_type, spin, n_qn, l_qn, m_qn, ks_max, control_opt
 
 
 @initialise.command()
-@click.option("-g", "--graph", is_flag=True, help="print out the simulated XPS spectra")
+@click.option(
+    "-g",
+    "--graph",
+    is_flag=True,
+    default=False,
+    show_default=True,
+    help="graph the simulated XPS spectra",
+)
 @click.option(
     "-A",
     "--intensity",
     default=1,
     type=float,
     show_default=True,
-    help="Set as 1 for all subpeaks if they are non-degenerate",
+    help="set as 1 for all subpeaks if they are non-degenerate",
 )
 @click.option(
     "-s",
@@ -347,29 +354,29 @@ def basis(start, run_type, occ_type, spin, n_qn, l_qn, m_qn, ks_max, control_opt
     is_flag=True,
     default=False,
     show_default=True,
-    help="Simulate the XPS spectrum with asymmetry",
+    help="simulate the XPS spectrum with asymmetry",
 )
 @click.option(
     "-a",
     "--asym_param",
     "a",
     cls=MutuallyInclusive,
-    mutually_inclusive=["--asym"],
+    mutually_inclusive=["asym"],
     default=0.2,
     type=float,
     show_default=True,
-    help="Define the asymmetry parameter",
+    help="define the asymmetry parameter",
 )
 @click.option(
     "-b",
     "--asym_trans_param",
     "b",
     cls=MutuallyInclusive,
-    mutually_inclusive=["--asym"],
+    mutually_inclusive=["asym"],
     default=0.0,
     type=float,
     show_default=True,
-    help="Define the asymmetry translation parameter",
+    help="define the asymmetry translation parameter",
 )
 @click.option(
     "-m",
@@ -377,7 +384,7 @@ def basis(start, run_type, occ_type, spin, n_qn, l_qn, m_qn, ks_max, control_opt
     default=0.5,
     type=click.FloatRange(min=0, max=1, clamp=True),
     show_default=True,
-    help="Set the mixing parameter for the Gaussian-Lorentzian functions",
+    help="set the mixing parameter for the Gaussian-Lorentzian functions",
 )
 @click.option(
     "-o",
@@ -385,15 +392,15 @@ def basis(start, run_type, occ_type, spin, n_qn, l_qn, m_qn, ks_max, control_opt
     default=0.35,
     type=click.FloatRange(min=0, max=1, clamp=True),
     show_default=True,
-    help="Full width at half maximum value",
+    help="full width at half maximum value",
 )
 @click.option(
     "-i",
     "--include_name",
     is_flag=True,
-    default=True,
+    default=False,
     show_default=True,
-    help="Include the molecule name in the plot",
+    help="include the molecule name in the plot",
 )
 @click.option(
     "-e",
@@ -401,14 +408,14 @@ def basis(start, run_type, occ_type, spin, n_qn, l_qn, m_qn, ks_max, control_opt
     is_flag=True,
     default=False,
     show_default=True,
-    help="Exclude the mean average binding energy from the plot",
+    help="exclude the mean average binding energy from the plot",
 )
 @click.option(
     "--gmp",
     default=0.003,
     type=click.FloatRange(min=0, max_open=True),
     show_default=True,
-    help="Global minimum percentage",
+    help="global minimum percentage",
 )
 @click.pass_obj
 def plot(

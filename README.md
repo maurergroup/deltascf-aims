@@ -55,7 +55,7 @@ deltaSCF-aims has a CLI that has been written using the [Click library](https://
 
 The following table provides a summary of all of the command line options 
 
-| Argument                                                     | Description                                                                                                                                                           |
+| Option                                                     | Description                                                                                                                                                           |
 |--------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `-h, --hpc`                                                  | Setup a calculation without running the calculation. It is primarily for use on a HPC with batch job submission. This argument is mutually exclusive with: `--binary` |
 | `-m, --molecule TEXT`                                        | Molecule name, formula, PubChem CID, or PubChem SMILES string to be used in the calculation. This argument is mutually exclusive with `--geometry_input`              |
@@ -84,7 +84,7 @@ After specifying all of the desired base command options, one of the subcommands
 
 This sets up a `deltascf_basis` (the default) or the deprecated `force_occupation_basis` calculation in FHI-aims, in accordance with how they are described in the $\Delta$SCF FHI-aims [tutorial](https://fhi-aims-club.gitlab.io/tutorials/core-level-with-delta-scf/index.html), and how `deltascf_basis` is documented in the manual.
 
-When calling the `basis` subcommand, there are a number of additional required arguments. These are `-r/--run_type`, which is one of either `ground` or `hole` depending on whether a ground state or core hole calculation should be run, `-n`, `-l`, `-m`, which represent the quantum numbers of the orbital to manually set the occupation of, and `-k/--ks_max`, which is the maximum Kohn-Sham eigenstate to constrain. Other optional flags are the `-s/--spin`, which can either be 1 or 2, and defaults to 1, for setting the occupation in the up or down spin channels, and `-o/--occ_type`, which controls whether `deltascf_basis` or `force_occupation_basis` is used by FHI-aims (`deltascf_basis` by default). 
+When calling the `basis` subcommand, there are a number of additional required arguments. These are `-r/--run_type`, which is one of either `ground` or `hole` depending on whether a ground state or core hole calculation should be run, `-n`, `-l`, `-m`, which represent the quantum numbers of the orbital to manually set the occupation of, and `-k/--ks_max`, which is the maximum Kohn-Sham eigenstate the core-hole is allowed to occupy. Other optional flags are the `-s/--spin`, which can either be 1 or 2, and defaults to 1, for setting the occupation in the up or down spin channels, and `-o/--occ_type`, which controls whether `deltascf_basis` or `force_occupation_basis` is used by FHI-aims (`deltascf_basis` by default). 
 
 The final optional argument is `-c/--control_opts`. This is a `key=value` pair of any additional options to pass into the FHI-aims control file. Naturally, it is completely infeasible to check all of the options that FHI-aims takes in its control file, so adding the correct options is at the discretion of the user, and will only be checked when FHI-aims is run. For FHI-aims keywords that take multiple strings for the `value`, single quotes can be put around the entire `value`.
 
@@ -98,16 +98,72 @@ deltascf -m benzaldehyde -c C basis -r hole -n 1 -l 0 -m 0 -k 6
 
 This would write the FHI-aims input files and run the 1s core-hole calculation for all of the C atoms in a benzaldehyde molecule using `deltascf_basis` with 4 CPU cores in the current directory, and automatically prompt the user for the location of the FHI-aims binary using their default editor if it was being executed for the first time after installation. Note that this command will error if deltaSCF-aims cannot find a directory called `ground` with a file called `aims.out` from the current directory. This would generated if the `ground` calculation was run before this.
 
-A significantly more complex example is...
+A significantly more complex (and more realistic) example would be to run core-hole constrained calculations for one 2p orbital on all C atoms in the system with the user specifying their own geometry and control files, using addition core-hole augmented basis sets with an overall intermediate basis set, printing the live output of the calculation running on 8 CPU cores, whilst also adding the `spin none` and `relativistic atomic_zora scalar` keywords to the FHI-aims control file:
 
-...which would [explain what each subcommand does and the expected output]
+``` shell
+deltascf -e geometry.in -i control.in -c C -b intermediate -x -p -n 8 basis -r hole -n 2 -l 1 -m 0 -k 6 -c spin=none -c 'relativistic=atomic_zora scalar'
+```
 
 ### Projector 
-<!-- TODO -->
+
+This sets up a `deltascf_projector` (the default) or the deprecated `force_occupation_projector` calculation in FHI-aims, in accordance with how they are described in the $\Delta$SCF FHI-aims [tutorial](https://fhi-aims-club.gitlab.io/tutorials/core-level-with-delta-scf/index.html), and how `deltascf_projector` is documented in the manual.
+
+When calling the `projector` subcommand, there are a number of additional required arguments. These are `-r/--run_type`, which is one of `ground`, `init_1`, `init_2`, or `hole`. `ground` and `hole` perform the same as described in [Basis](#basis) section, and `init_1` and `init_2` are additional localisation steps that are often necessary to ensure convergence and localisation of the core-hole, as described in the [tutorial](https://fhi-aims-club.gitlab.io/tutorials/core-level-with-delta-scf/index.html). `init_1` sets up a calculation to run to SCF convergence with a nuclear charge of 0.1 on the atom where the core hole will be initialised but without constraining the occupation of any Kohn-Sham (KS) eigenstate, and writes wavefunction restart files for this. To maintain charge neutrality, and extra 0.1 electron is also added to the calculation. `init_2` sets up a calculation to run with only a single SCF iteration, with the core hole and the additional partial charge, from the restart files from the `init_1` calculation, and also writes wavefunction restart files after this single SCF step. Finally, when `hole` is run, the additional partial charge is removed, whilst keeping the core hole and the whole charge until the SCF cycle converges. The calculation is also initialised from the restart files from the `init_2` calculation.
+
+On a practical note, when run without the `--hpc` flag, running `deltascf ... projector -r init_1 ...` also sets up the directories and files for the `init_2` and `hole` calculations, however these are not run until `... -r init_2 ...` and/or `... -r hole ...` are specified as arguments.
+
+As it is possible to run periodic calculations with `projector`, there is a `-l/--latice_vectors` argument. The allows the user to specify lattice vectors in a 9x9 matrix by specifying 3 strings pertaining to lattice vector. If providing lattice vectors, it is also necessary to specify a Monkhorst-Pack k-grid, which can be done using the `-p/--pbc` option. `--pbc` takes 3 integers as arguments, corresponding to the number of k-points in the x, y, and z directions respectively. For example,
+
+``` shell
+deltascf -e geometry.in -i control.in -c C projector -r ground -l "0.0 1.76 1.76" "1.76 0.0 1.76" "1.76 1.76 0.0" -p 8 8 8
+```
+
+performs a ground state calculation from a user-defined geometry and control file, but with defining an FCC cell with lattice vectors of magnitude 2.489 in each direction, and sampling the first Brillouin zone with a total of 64 k-points (8 in each Cartesian direction).
+
+The final options are `-s/--spin`, `-c/--control_opts`, and `-k/--ks_range`. `--spin` and `--control_opts` operate the same as described in [Basis](#basis), and `--ks_range` specifies the allowed range of KS eigenstates for the core-hole to move between. This is similar to the `--ks_max` for the `basis` command, but with the addition of a minimum value.
+
+An example workflow for `projector` might look like
+
+``` shell
+deltascf -m ethyl-trifluoroacetate -c C -x -p -n 4 projector -c 'occupation_type=gaussian 0.1' -r ground 
+...
+deltascf -m ethyl-trifluoroacetate -c C -p -n 8 projector -k 1 4 -c 'occupation_type=gaussian 0.1' -r init_1
+...
+deltascf -m ethyl-trifluoroacetate -c C -p -n 8 projector -r init_2
+...
+deltascf -m ethyl-trifluoroacetate -c C -p -n 8 projector -r hole
+```
 
 ### Plot
-<!-- TODO -->
 
-The `plot` subcommand is used for calculating an XPS spectrum from a $\Delta$SCF calculation by parsing, broadening, and plotting the XPS spectrum.
+The `plot` subcommand is used for creating an XPS spectrum from a $\Delta$SCF calculation by parsing, broadening, and plotting the XPS spectrum. The following summary of options for this is given in the table below 
+
+| Option                         | Description                                                                                         |
+|--------------------------------|-----------------------------------------------------------------------------------------------------|
+| `-g, --graph`                  | Plot the simulated XPS spectra in addition to saving the spectrum to a file                         |
+| `-A, --intensity FLOAT`        | Normalised intensity of the spectrum `[default: 1]`                                                 |
+| `-s, --asym`                   | Include an asymmetry broadening parameter                                                           |
+| `-a, --asym_param FLOAT`       | Define the asymmetry parameter [mutually inclusive with `--asym`] `[default: 0.2]`                  |
+| `-b, --asym_trans_param FLOAT` | Define the asymmetry translation parameter [mutually inclusive with `--asym`] `[default: 0.0]`      |
+| `-m, --gl_ratio FLOAT RANGE`   | Set the mixing parameter for the Gaussian-Lorentzian functions `[default: 0.5; 0<=x<=1]`            |
+| `-o, --omega FLOAT RANGE`      | Full width at half maximum value `[default:0.35; 0<=x<=1]`                                          |
+| `-i, --include_name`           | If possible, include the molecule name in the plot `[default: True]`                                |
+| `-e, --exclude_mabe`           | Exclude the mean average binding energy from the plot `[default: Flase]`                            |
+| `--gmp FLOAT RANGE`            | Set the minimum y-value to include in the plot (global minimum percentage) `[default: 0.003; x>=0]` |
+
+This subcommand performs post-processing on the FHI-aims calculation and writes several files. The first is plain text file which contains a list of the calculated binding energies for each of the excited state calculations, calculated against the ground-state. The second is also plain text and contains the broadened spectrum. This is formatted into 2 columns; the first is the x-value, and the second is the intensity of the spectrum on the y-axis at this point. The final two are a pdf and png file of the broadened spectrum plotted, which are only produced if the `-g/--graph` flag is given. 
+
+![Azulene 1s XPS spectrum calculated with projector](/assests/xps_spectrum.png)
 
 #### Broadening
+
+The broadening is calculated using a Schmid-pseudo-Voigt function to broaden the spectrum with some tunable parameters, which were given in the table above. The formula for how the non-asymmetrical spectrum is calculated is
+
+<!-- **Schmid-pseudo-Voigt broadening** -->
+$$V = A(1-m) \sqrt{\frac{4 \ln(2)}{\pi \omega^2}} e^{-\frac{4 \ln(2)}{\omega^2}x^2} + Am \frac{1}{2\pi} \frac{\omega}{\left(\frac{\omega}{2}\right)^2 + x^2}$$
+
+where $A$ is the intensity of the peak, $m$ is the Gaussian-Lorentzian mixing parameter, and $\omega$ is the full width at half maximum.[^1]
+
+## References 
+
+[^1]: M. Schmid, H.-P. Steinrück, J. M. Gottfried, *Surface and Interface Analysis*, **2014**, 46, 505–511. https://analyticalsciencejournals.onlinelibrary.wiley.com/doi/10.1002/sia.5521

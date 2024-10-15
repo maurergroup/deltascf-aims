@@ -150,7 +150,7 @@ class MutuallyInclusive(Option):
 
     def handle_parse_result(self, ctx, opts, args):
         curr_arg_long = get_long_arg_name(ctx, self.name)
-        mut_ex_arg_long = get_long_arg_name(ctx, self.mutually_exclusive)
+        mut_ex_arg_long = get_long_arg_name(ctx, self.mutually_inclusive)
 
         if self.mutually_inclusive.intersection(opts) and self.name not in opts:
             raise UsageError(

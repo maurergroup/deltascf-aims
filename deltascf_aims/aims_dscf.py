@@ -799,9 +799,13 @@ class Projector(GroundCalc, ExcitedCalc):
     def add_l_vecs(self, geom):
         """
         Add lattice vectors to the geometry.in file.
+
+        Parameters
+        ----------
+        geom : str
+            path to the geometry file
         """
 
-        # Read the file
         with open(geom, "r") as geom_file:
             geom_content = geom_file.readlines()
 
@@ -836,7 +840,6 @@ class Projector(GroundCalc, ExcitedCalc):
                     f"{self.l_vecs[i][2]}\n",
                 )
 
-        # Write to the file
         with open(geom, "w") as geom_file:
             geom_file.writelines(geom_content)
 
