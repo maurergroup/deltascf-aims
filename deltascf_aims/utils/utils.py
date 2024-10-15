@@ -917,7 +917,8 @@ class GroundCalc:
             l_vecs = l_vecs_copy
 
             # Add the lattice vectors if periodic
-            self.atoms.set_pbc(l_vecs)
+            # Currently only supports 3D periodicity
+            self.atoms.set_pbc((True, True, True))
             self.atoms.set_cell(l_vecs)
 
         if self.hpc:
