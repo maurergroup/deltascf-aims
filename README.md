@@ -82,7 +82,7 @@ After specifying all of the desired base command options, one of the subcommands
 
 ### Basis 
 
-This sets up a `deltascf_basis` (the default) or the deprecated `force_occupation_basis` calculation in FHI-aims, in accordance with how they are described in the $\Delta$SCF FHI-aims [tutorial](https://fhi-aims-club.gitlab.io/tutorials/core-level-with-delta-scf/index.html), and how `deltascf_basis` is documented in the manual.
+This sets up a `deltascf_basis` (the default) or the deprecated `force_occupation_basis` calculation in FHI-aims, in accordance with how they are described in the $\Delta$-SCF FHI-aims [tutorial](https://fhi-aims-club.gitlab.io/tutorials/core-level-with-delta-scf/index.html), and how `deltascf_basis` is documented in the manual.
 
 When calling the `basis` subcommand, there are a number of additional required arguments. These are `-r/--run_type`, which is one of either `ground` or `hole` depending on whether a ground state or core hole calculation should be run, `-n`, `-l`, `-m`, which represent the quantum numbers of the orbital to manually set the occupation of, and `-k/--ks_max`, which is the maximum Kohn-Sham eigenstate the core-hole is allowed to occupy. Other optional flags are the `-s/--spin`, which can either be 1 or 2, and defaults to 1, for setting the occupation in the up or down spin channels, and `-o/--occ_type`, which controls whether `deltascf_basis` or `force_occupation_basis` is used by FHI-aims (`deltascf_basis` by default). 
 
@@ -106,7 +106,7 @@ deltascf -e geometry.in -i control.in -c C -b intermediate -x -p -n 8 basis -r h
 
 ### Projector 
 
-This sets up a `deltascf_projector` (the default) or the deprecated `force_occupation_projector` calculation in FHI-aims, in accordance with how they are described in the $\Delta$SCF FHI-aims [tutorial](https://fhi-aims-club.gitlab.io/tutorials/core-level-with-delta-scf/index.html), and how `deltascf_projector` is documented in the manual.
+This sets up a `deltascf_projector` (the default) or the deprecated `force_occupation_projector` calculation in FHI-aims, in accordance with how they are described in the $\Delta$-SCF FHI-aims [tutorial](https://fhi-aims-club.gitlab.io/tutorials/core-level-with-delta-scf/index.html), and how `deltascf_projector` is documented in the manual.
 
 When calling the `projector` subcommand, there are a number of additional required arguments. These are `-r/--run_type`, which is one of `ground`, `init_1`, `init_2`, or `hole`. `ground` and `hole` perform the same as described in [Basis](#basis) section, and `init_1` and `init_2` are additional localisation steps that are often necessary to ensure convergence and localisation of the core-hole, as described in the [tutorial](https://fhi-aims-club.gitlab.io/tutorials/core-level-with-delta-scf/index.html). `init_1` sets up a calculation to run to SCF convergence with a nuclear charge of 0.1 on the atom where the core hole will be initialised but without constraining the occupation of any Kohn-Sham (KS) eigenstate, and writes wavefunction restart files for this. To maintain charge neutrality, and extra 0.1 electron is also added to the calculation. `init_2` sets up a calculation to run with only a single SCF iteration, with the core hole and the additional partial charge, from the restart files from the `init_1` calculation, and also writes wavefunction restart files after this single SCF step. Finally, when `hole` is run, the additional partial charge is removed, whilst keeping the core hole and the whole charge until the SCF cycle converges. The calculation is also initialised from the restart files from the `init_2` calculation.
 
@@ -136,7 +136,7 @@ deltascf -m ethyl-trifluoroacetate -c C -p -n 8 projector -r hole
 
 ### Plot
 
-The `plot` subcommand is used for creating an XPS spectrum from a $\Delta$SCF calculation by parsing, broadening, and plotting the XPS spectrum. The following summary of options for this is given in the table below 
+The `plot` subcommand is used for creating an XPS spectrum from a $\Delta$-SCF calculation by parsing, broadening, and plotting the XPS spectrum. The following summary of options for this is given in the table below 
 
 | Option                         | Description                                                                                         |
 |--------------------------------|-----------------------------------------------------------------------------------------------------|
@@ -153,7 +153,7 @@ The `plot` subcommand is used for creating an XPS spectrum from a $\Delta$SCF ca
 
 This subcommand performs post-processing on the FHI-aims calculation and writes several files. The first is plain text file which contains a list of the calculated binding energies for each of the excited state calculations, calculated against the ground-state. The second is also plain text and contains the broadened spectrum. This is formatted into 2 columns; the first is the x-value, and the second is the intensity of the spectrum on the y-axis at this point. The final two are a pdf and png file of the broadened spectrum plotted, which are only produced if the `-g/--graph` flag is given. 
 
-![Azulene 1s XPS spectrum calculated with projector](/assests/xps_spectrum.png)
+![Azulene 1s XPS spectrum calculated with projector](/assets/xps_spectrum.png)
 
 #### Broadening
 
@@ -164,6 +164,6 @@ $$V = A(1-m) \sqrt{\frac{4 \ln(2)}{\pi \omega^2}} e^{-\frac{4 \ln(2)}{\omega^2}x
 
 where $A$ is the intensity of the peak, $m$ is the Gaussian-Lorentzian mixing parameter, and $\omega$ is the full width at half maximum.[^1]
 
-## References 
+### References 
 
 [^1]: M. Schmid, H.-P. Steinrück, J. M. Gottfried, *Surface and Interface Analysis*, **2014**, 46, 505–511. https://analyticalsciencejournals.onlinelibrary.wiley.com/doi/10.1002/sia.5521
