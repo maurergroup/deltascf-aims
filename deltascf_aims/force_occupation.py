@@ -3,9 +3,8 @@ import os
 import shutil
 import subprocess
 import warnings
-from typing import List, Tuple, Union
+from typing import List, Tuple
 
-import numpy as np
 import yaml
 
 import deltascf_aims.utils.utils as utils
@@ -84,20 +83,17 @@ class ForceOccupation:
 
         Parameters
         ----------
-            atom : str
-                element symbol of target atom
+        atom : str
+            element symbol of target atom
 
         Returns
         -------
-            valence : str
-                valence electronic structure of target atom
+        valence : str
+            valence electronic structure of target atom
         """
 
-        # Get the atomic number
+        # Get the atomic number of the target atom
         self.atom_index = self.elements.index(str(atom)) + 1
-
-        # Letters identifying subshells
-        l_letter = ["s", "p", "d", "f", "g"]
 
         # Create and order a list of tuples, (n+l, n, l), corresponding to the order
         # in which the corresponding orbitals are filled using the Madelung rule.
@@ -109,29 +105,21 @@ class ForceOccupation:
 
         nl_pairs.sort()
 
-        # inl indexes the subshell in the nl_pairs list; nelec is the number of
-        # electrons currently inhabiting this subshell
-        inl, nelec = 0, 0
-
-        # start with the 1s orbital
-        n, l = 1, 0
-
-        # a list of orbitals and the electrons they contain for a configuration
+        inl = 0
+        n_elec = 0
+        n = 1
+        l = 0
         config = [["1s", 0]]
-
-        # Store the most recent Noble gas configuration encountered in a tuple with the
-        # corresponding element symbol
         noble_gas_config = ("", "")
         s_config = ""
+        l_letter = ["s", "p", "d", "f", "g"]
 
         for i in range(len(self.elements[: self.atom_index])):
-            nelec += 1
+            n_elec += 1
 
-            # this subshell is now full
-            if nelec > 2 * (2 * l + 1):
-                # The most recent configuration was for a Noble gas: store it
+            if n_elec > 2 * (2 * l + 1):  # Subshell full
                 if l == 1:
-                    # Turn a list of orbital, nelec pairs into a configuration string
+                    # Save this noble gas configuration
                     noble_gas_config = (
                         ".".join(["{:2s}{:d}".format(*e) for e in config]),
                         "[{}]".format(self.elements[i - 1]),
@@ -141,16 +129,13 @@ class ForceOccupation:
                 inl += 1
                 _, n, l = nl_pairs[inl]
                 config.append(["{}{}".format(n, l_letter[l]), 1])
-                nelec = 1
+                n_elec = 1
 
             # add an electron to the current subshell
             else:
                 config[-1][1] += 1
 
-            # Turn config into a string
             s_config = ".".join(["{:2s}{:d}".format(*e) for e in config])
-
-            # Replace the heaviest Noble gas configuration with its symbol
             s_config = s_config.replace(*noble_gas_config)
 
         # Find the orbital with the highest energy according to the Madelung rule
@@ -162,21 +147,21 @@ class ForceOccupation:
     @staticmethod
     def add_additional_basis(elements, content, target_atom) -> List[str]:
         """
-        Add an additional basis set for the core hole calculation.
+        Insert an additional basis set to control.in.
 
         Parameters
         ----------
-            elements : List[str]
-                list of all supported elements
-            content : List[str]
-                list of lines in the control file
-            target_atom : str
-                element symbol of target atom
+        elements : List[str]
+            list of all supported elements
+        content : List[str]
+            list of lines in the control file
+        target_atom : str
+            element symbol of target atom
 
         Returns
         -------
-            content : List[str]
-                list of lines in the control file
+        content : List[str]
+            list of lines in the control file
         """
 
         # Check the additional functions haven't already been added to control
@@ -292,10 +277,7 @@ class ForceOccupation:
             spl = line.split()
 
             # Break when basis set definitions start
-            if (
-                "############################################################"
-                "####################" in line
-            ):
+            if 80 * "#" in line:
                 break
 
             # Add the dictionary value as a string
@@ -338,23 +320,23 @@ class ForceOccupation:
 
         Parameters
         ----------
-            control : str
-                path to the control file
-            opts : dict
-                dictionary of keywords to change
+        control : str
+            path to the control file
+        opts : dict
+            dictionary of keywords to change
 
         Returns
         -------
-            content : List[str]
-                list of lines in the control file
+        content : List[str]
+            list of lines in the control file
         """
 
         # Find and replace keywords in control file
         with open(control, "r") as read_control:
             content = read_control.readlines()
 
-        divider_1 = "#==============================================================================="
-        divider_2 = "################################################################################"
+        divider_1 = "#" + 79 * "="
+        divider_2 = 80 * "#"
 
         short_circuit = False
 
@@ -404,34 +386,30 @@ class ForceOccupation:
         return content
 
     def add_partial_charge(
-        self, content, target_atom, at_num, atom_valence, partial_charge
+        self, content, target_atom, at_num, partial_charge
     ) -> Tuple[int, int, str, List[str]]:
         """
         Add a partial charge to a basis set in a control.in file.
 
         Parameters
         ----------
-            content : List[str]
-                list of lines in the control file
-            target_atom : str
-                element symbol of target atom
-            at_num : int
-                atomic number of target atom
-            atom_valence : str
-                valence electronic structure of target atom
-            partial_charge : float
-                partial charge to add to the nucleus
+        content : List[str]
+            list of lines in the control file
+        target_atom : str
+            element symbol of target atom
+        at_num : int
+            atomic number of target atom
+        partial_charge : float
+            partial charge to add to the nucleus
 
         Returns
         -------
-            nuclear_index : int
-                index of the nucleus in the control file
-            valence_index : int
-                index of the valence orbital in the control file
-            nucleus : str
-                nucleus line in the control file
-            content : List[str]
-                list of lines in the control file
+        nuclear_index : int
+            index of the nucleus in the control file
+        nucleus : str
+            nucleus line in the control file
+        content : List[str]
+            list of lines in the control file
         """
 
         # Ensure returned variables are bound
@@ -602,7 +580,6 @@ class Projector(ForceOccupation):
                     control_content,
                     el,
                     self.elements.index(el) + 1,
-                    self.valence,
                     opts["charge"],
                 )
 
@@ -660,11 +637,7 @@ class Projector(ForceOccupation):
 
                 # Add partial charge to the control file
                 _, _, _, control_content = self.add_partial_charge(
-                    control_content,
-                    el,
-                    self.elements.index(el) + 1,
-                    self.valence,
-                    opts["charge"] - 1,
+                    control_content, el, self.elements.index(el) + 1, opts["charge"] - 1
                 )
 
                 with open(i2_control, "w") as write_control:
@@ -737,7 +710,7 @@ class Projector(ForceOccupation):
 
                 # Remove partial charge from the control file
                 _, _, _, control_content = self.add_partial_charge(
-                    control_content, el, self.elements.index(el) + 1, self.valence, 0
+                    control_content, el, self.elements.index(el) + 1, 0
                 )
 
                 # Write the data to the file
@@ -759,12 +732,12 @@ class Basis(ForceOccupation):
     ):
         """Write new directories and control files for basis calculations."""
 
-        # The new basis method should utilise ks method parallel
+        # Enforce that the old method uses ks_method serial
         ks_method = ""
         if occ_type == "force_occupation_basis":
             ks_method = "serial"
-        if occ_type == "deltascf_basis":
-            ks_method = "parallel"
+        else:
+            ks_method = None
 
         # Iterate over each constrained atom
         for el in self.element_symbols:
@@ -778,9 +751,13 @@ class Basis(ForceOccupation):
                     "charge": 1.0,
                     "sc_iter_limit": 500,
                     "sc_init_iter": 75,
-                    occ_type: f"{self.atom_specifier[i]} {spin} atomic {n_qn} {l_qn} {m_qn} {occ_no} {ks_max}",
+                    occ_type: f"{self.atom_specifier[i]} {spin} atomic {n_qn} {l_qn} "
+                    f"{m_qn} {occ_no} {ks_max}",
                     "KS_method": ks_method,
                 }
+
+                if ks_method is not None:
+                    opts["KS_method"] = ks_method
 
                 # Allow users to modify and add keywords
                 opts = self.mod_keywords(self.ad_cont_opts, opts)

@@ -56,7 +56,7 @@ def projector(*args):
         proj.add_l_vecs(start.geometry_input)
 
     if start.use_extra_basis:
-        proj.add_extra_basis_fns(start.constr_atom)
+        proj.add_extra_basis_fns(start.constr_atom, start.control_input)
 
     match proj.run_type:
         case "ground":
@@ -113,7 +113,7 @@ def basis(*args):
     basis = Basis(*args)
 
     if start.use_extra_basis:
-        basis.add_extra_basis_fns(start.constr_atom)
+        basis.add_extra_basis_fns(start.constr_atom, start.control_input)
 
     match basis.run_type:
         case "ground":

@@ -17,7 +17,7 @@ from deltascf_aims.schmid_pseudo_voigt import broaden
 from deltascf_aims.utils.utils import ExcitedCalc, GroundCalc
 
 
-class Start(object):
+class Start:
     """
     Perform initial checks and setup for running calcultions.
 
@@ -267,17 +267,21 @@ class Start(object):
 
         Returns
         -------
-            current_path : str
-                path to the current working directory
-            bin_path : str
-                path to the location of the FHI-aims binary
+        current_path : str
+            path to the current working directory
+        bin_path : str
+            path to the location of the FHI-aims binary
         """
 
         current_path = os.path.dirname(os.path.realpath(__file__))
-        with open(f"{current_path}/aims_bin_loc.txt", "r") as f:
-            lines = f.readlines()
 
-        if "~" in lines[0][:-1] and not self.binary:
+        if Path(f"{current_path}/aims_bin_loc.txt").exists():
+            with open(f"{current_path}/aims_bin_loc.txt", "r") as f:
+                lines = f.readlines()
+        else:
+            lines = []
+
+        if len(lines) > 0 and "~" in lines[0][:-1] and not self.binary:
             raise FileNotFoundError(
                 "Please provide the full path to the FHI-aims binary"
             )
@@ -295,15 +299,15 @@ class Start(object):
 
         Parameters
         ----------
-            current_path : str
-                path to the current working directory
-            bin_path : str
-                path to the location of the FHI-aims binary
+        current_path : str
+            path to the current working directory
+        bin_path : str
+            path to the location of the FHI-aims binary
 
         Returns
         -------
-            binary : str
-                path to the location of the FHI-aims binary
+        binary : str
+            path to the location of the FHI-aims binary
         """
 
         if not Path(bin_path).is_file() or self.binary or bin_path == "":
@@ -346,8 +350,8 @@ class Start(object):
 
         Parameters
         ----------
-            binary : str
-                path to the location of the FHI-aims binary
+        binary : str
+            path to the location of the FHI-aims binary
         """
 
         self.species = f"{Path(binary).parent.parent}/species_defaults/"
@@ -370,8 +374,8 @@ class Start(object):
 
         Returns
         -------
-            _atoms : Atoms
-                ASE atoms object
+        _atoms : Atoms
+            ASE atoms object
         """
 
         return self._atoms
@@ -383,8 +387,8 @@ class Start(object):
 
         Parameters
         ----------
-            atoms : Atoms
-                ASE atoms object
+        atoms : Atoms
+            ASE atoms object
         """
 
         self._atoms = atoms
@@ -395,15 +399,15 @@ class Start(object):
 
         Parameters
         __________
-            atoms : Atoms
-                ASE atoms object
-            binary : str
-                path to the location of the FHI-aims binary
+        atoms : Atoms
+            ASE atoms object
+        binary : str
+            path to the location of the FHI-aims binary
 
         Returns
         -------
-            atoms : Atoms
-                ASE atoms object with a calculator added
+        atoms : Atoms
+            ASE atoms object with a calculator added
         """
 
         atoms.calc = utils.create_calc(
@@ -724,12 +728,12 @@ class Projector(GroundCalc, ExcitedCalc):
 
         Parameters
         ----------
-            atom : int
-                atom to copy the restart files for
-            begin : str
-                location to copy the restart files from
-            end : str
-                location to copy the restart files to
+        atom : int
+            atom to copy the restart files for
+        begin : str
+            location to copy the restart files from
+        end : str
+            location to copy the restart files to
         """
 
         os.path.isfile(

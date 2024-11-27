@@ -831,7 +831,7 @@ class GroundCalc:
         if geom_inp is not None:
             os.system(f"cp {geom_inp.name} {self.run_loc}/ground")
 
-    def add_extra_basis_fns(self, constr_atom) -> None:
+    def add_extra_basis_fns(self, constr_atom, control_in) -> None:
         """
         Add additional basis functions to the basis set.
 
@@ -841,15 +841,9 @@ class GroundCalc:
             element symbol of the constrained atom
         """
 
-        print(f"{self.species}/defaults_2020/{self.basis_set}/*{constr_atom}_default")
-
-        basis_file = glob.glob(
-            f"{self.species}/defaults_2020/{self.basis_set}/*{constr_atom}_default"
-        )[0]
         current_path = os.path.dirname(os.path.realpath(__file__))
-
-        with open(basis_file, "r") as basis_functions:
-            control_content = basis_functions.readlines()
+        with open(control_in.name, "r") as control:
+            control_content = control.readlines()
 
         with open(f"{current_path}/elements.yml", "r") as elements:
             elements = yaml.load(elements, Loader=yaml.SafeLoader)
@@ -858,34 +852,8 @@ class GroundCalc:
             elements, control_content, constr_atom
         )
 
-        # Create a new directory for modified basis sets
-        new_dir = f"{self.species}/ch_self.basis_sets/{self.basis_set}/"
-
-        if os.path.exists(new_dir):
-            os.system(f"rm {new_dir}/*")
-        else:
-            os.system(f"mkdir -p {self.species}/ch_self.basis_sets/{self.basis_set}/")
-
-        os.system(
-            f"cp {basis_file} {self.species}/ch_self.basis_sets/{self.basis_set}/"
-        )
-        new_basis_file = glob.glob(
-            f"{self.species}/ch_self.basis_sets/{self.basis_set}/*{constr_atom}_default"
-        )[0]
-
-        if new_content is not None:
-            with open(new_basis_file, "w") as basis_functions:
-                basis_functions.writelines(new_content)
-
-        # Copy atoms from the original basis set directory to the new one
-        chem_symbols = list(set(self.atoms.get_chemical_symbols()))
-
-        for atom in chem_symbols:
-            if atom != constr_atom:
-                os.system(
-                    f"cp {self.species}/defaults_2020/{self.basis_set}/*{atom}_default "
-                    f"{self.species}/ch_self.basis_sets/{self.basis_set}/"
-                )
+        with open(control_in.name, "w") as control:
+            control.writelines(new_content)
 
     def _with_ase(self, calc, control_opts, add_extra_basis, l_vecs) -> None:
         """
@@ -1076,7 +1044,7 @@ class ExcitedCalc:
         ):
             print(
                 f'{prev_calc} restart files not found, please ensure "{prev_calc}"'
-                "has been run"
+                " has been run"
             )
             raise FileNotFoundError
 
