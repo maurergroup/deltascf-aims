@@ -649,19 +649,19 @@ class Projector(ForceOccupation):
         """Write new hole directories and control files for the hole calculation."""
 
         # Calculate original valence state
-        val_spl = self.valence.split(".")
+        val_spl = self.valence.split("\n")
         del val_spl[-1]
         val_spl.append(".\n")
         self.valence = "".join(val_spl)
 
-        # The new basis method should utilise ks method parallel
+        # Enforce that the old method uses ks_method serial
         ks_method = ""
         if occ_type == "force_occupation_projector":
             ks_method = "serial"
-        if occ_type == "deltascf_projector" and not pbc:
-            ks_method = "parallel"
         if occ_type == "deltascf_projector" and pbc:
             ks_method = "serial"
+        else:
+            ks_method = None
 
         # Loop over each element to constrain
         for el in self.element_symbols:
@@ -672,11 +672,13 @@ class Projector(ForceOccupation):
                     "sc_iter_limit": 500,
                     "sc_init_iter": 75,
                     occ_type: f"{ks_start} {spin} {occ} {ks_start} {ks_stop}",
-                    "KS_method": ks_method,
                     "restart_read_only": "restart_file",
                     # "force_single_restartfile": ".true.",
                     # "output": "cube spin_density",
                 }
+
+                if ks_method is not None:
+                    opts["KS_method"] = ks_method
 
                 # Add or change user-specified keywords to the control file
                 opts = self.mod_keywords(self.ad_cont_opts, opts)
@@ -708,11 +710,6 @@ class Projector(ForceOccupation):
                         self.elements, control_content, f"{el}1"
                     )
 
-                # Remove partial charge from the control file
-                _, _, _, control_content = self.add_partial_charge(
-                    control_content, el, self.elements.index(el) + 1, 0
-                )
-
                 # Write the data to the file
                 with open(h_control, "w") as write_control:
                     write_control.writelines(control_content)
@@ -733,7 +730,6 @@ class Basis(ForceOccupation):
         """Write new directories and control files for basis calculations."""
 
         # Enforce that the old method uses ks_method serial
-        ks_method = ""
         if occ_type == "force_occupation_basis":
             ks_method = "serial"
         else:
@@ -753,7 +749,6 @@ class Basis(ForceOccupation):
                     "sc_init_iter": 75,
                     occ_type: f"{self.atom_specifier[i]} {spin} atomic {n_qn} {l_qn} "
                     f"{m_qn} {occ_no} {ks_max}",
-                    "KS_method": ks_method,
                 }
 
                 if ks_method is not None:

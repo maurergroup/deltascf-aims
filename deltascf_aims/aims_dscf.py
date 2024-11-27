@@ -571,38 +571,38 @@ class Projector(GroundCalc, ExcitedCalc):
 
     Attributes
     ----------
-        start : Start
-            instance of the Start object
-        run_type : click.Choice(["ground", "init_1", "init_2", "hole"])
-            type of calculation to perform
-        occ_type : click.Choice(["deltascf_projector", "force_occupation_projector"])
-            use either the refactored or original projector keyword
-        pbc : tuple
-            k-grid for a periodic calculation
-        l_vecs : List[List[float]]
-            lattice vectors in a 3x3 matrix of floats
-        spin : click.Choice(["1", "2"])
-            spin channel of the constraint
-        ks_range : click.IntRange(1)
-            range of Kohn-Sham states to constrain
-        control_opts : Tuple[str]
-            additional control options to be added to the control.in file
+    start : Start
+        instance of the Start object
+    run_type : click.Choice(["ground", "init_1", "init_2", "hole"])
+        type of calculation to perform
+    occ_type : click.Choice(["deltascf_projector", "force_occupation_projector"])
+        use either the refactored or original projector keyword
+    pbc : tuple
+        k-grid for a periodic calculation
+    l_vecs : List[List[float]]
+        lattice vectors in a 3x3 matrix of floats
+    spin : click.Choice(["1", "2"])
+        spin channel of the constraint
+    ks_range : click.IntRange(1)
+        range of Kohn-Sham states to constrain
+    control_opts : Tuple[str]
+        additional control options to be added to the control.in file
 
     Methods
     -------
-        check_periodic()
-            Check if the lattice vectors and k_grid have been provided
-        run_ground()
-            Run the ground state calculation
-        setup_excited_calcs()
-            Setup files and parameters required for the initialisation and hole
-            calculations
-        pre_init_2(fo, atom_specifier)
-            Setup everything for the 2nd init calculation
-        pre_hole(fo, atom_specifier)
-            Setup everything for the hole calculation
-        run_excited(start, atom_specifier)
-            Run the projector calculations
+    check_periodic()
+        Check if the lattice vectors and k_grid have been provided
+    run_ground()
+        Run the ground state calculation
+    setup_excited_calcs()
+        Setup files and parameters required for the initialisation and hole
+        calculations
+    pre_init_2(fo, atom_specifier)
+        Setup everything for the 2nd init calculation
+    pre_hole(fo, atom_specifier)
+        Setup everything for the hole calculation
+    run_excited(start, atom_specifier)
+        Run the projector calculations
     """
 
     def __init__(
