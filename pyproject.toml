@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "deltascf-aims"
-version = "1.0.1"
+version = "1.0.3"
 description = "Application to test calculation of core holes in FHI-aims"
 authors = ["Dylan Morgan <dylan.morgan@warwick.ac.uk>"]
 license = "GPL 3"
@@ -24,7 +24,7 @@ optional = true
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.7.4"
 ptpython = "^3.0.29"
-pytest = "^8.3.3"
+pyright = "^1.1.389"
 
 [tool.poetry.scripts]
 deltascf = 'deltascf_aims.cli:initialise'
