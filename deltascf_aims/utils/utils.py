@@ -588,79 +588,127 @@ def get_element_symbols(geom, spec_at_constr) -> List[str]:
     return element_symbols
 
 
+def _check_spin_polarised(lines) -> bool:
+    """
+    Check if the FHI-aims calculation was spin polarised.
+
+    Returns
+    -------
+    bool
+        Whether the calculation was spin polarised or not
+    """
+
+    spin_polarised = False
+
+    for line in lines:
+        spl = line.split()
+        if len(spl) == 2:
+            # Don't break the loop if spin polarised calculation is found as if the
+            # keyword is specified again, it is the last one that is used
+            if spl[0] == "spin" and spl[1] == "collinear":
+                spin_polarised = True
+
+            if spl[0] == "spin" and spl[1] == "none":
+                spin_polarised = False
+
+    return spin_polarised
+
+
 def print_ks_states(run_loc) -> None:
     """
-    Print the KS states for the different spin states.
+    Print the Kohn-Sham eigenvalues from a calculation.
 
     Parameters
     ----------
     run_loc : str
-        path to the calculation directory
+        Path to the calculation directory
 
     Raises
     ------
-    SystemExit
-        Exit the program if no KS states are found
+    ValueError
+        Could not find the KS states
     """
 
-    # Parse the output file
     with open(f"{run_loc}/aims.out", "r") as aims:
         lines = aims.readlines()
 
-    su_eigs_start_line = None
-    sd_eigs_start_line = None
+    # Check if the calculation was spin polarised
+    spin_polarised = _check_spin_polarised(lines)
 
-    for num, content in enumerate(lines):
-        if "Spin-up eigenvalues" in content:
-            su_eigs_start_line = num
-            if "K-point:" in lines[num + 1]:
-                su_eigs_start_line += 1
+    # Parse line to find the start of the KS eigenvalues
+    target_line = "  State    Occupation    Eigenvalue [Ha]    Eigenvalue [eV]"
 
-        if "Spin-down eigenvalues" in content:
-            sd_eigs_start_line = num
-            if "K-point:" in lines[num + 1]:
-                sd_eigs_start_line += 1
+    if not spin_polarised:
+        start_line, end_line = None, None
 
-    # Check that KS states were found
-    if lines[-2] == "          Have a nice day.\n":
-        if su_eigs_start_line is None:
-            print("No spin-up KS states found")
-            print("Did you run a spin polarised calculation?")
-            raise SystemExit
-
-        if sd_eigs_start_line is None:
-            print("No spin-down KS states found")
-            print("Did you run a spin polarised calculation?")
-            raise SystemExit
-
-    su_eigs = []
-    sd_eigs = []
-
-    # Save the KS states into lists
-    if su_eigs_start_line is not None:
-        for num, content in enumerate(lines[su_eigs_start_line + 2 :]):
-            spl = content.split()
-
-            if len(spl) != 0:
-                su_eigs.append(content)
-            else:
+        for num, content in enumerate(reversed(lines)):
+            if target_line in content:
+                start_line = len(lines) - num
                 break
 
-    if sd_eigs_start_line is not None:
-        for num, content in enumerate(lines[sd_eigs_start_line + 2 :]):
-            spl = content.split()
+        else:
+            raise ValueError("Could not find the KS states in aims.out")
 
-            if len(spl) != 0:
-                sd_eigs.append(content)
-            else:
+        for num, content in enumerate(lines[start_line:]):
+            if not content.split():
+                end_line = start_line + num
                 break
 
-    # Print the KS states
-    print("Spin-up KS eigenvalues:\n")
-    print(*su_eigs, sep="")
+        else:
+            raise ValueError("Could not find the KS states in aims.out")
 
-    print("Spin-down KS eigenvalues:\n")
-    print(*sd_eigs, sep="")
+        eigs = lines[start_line:end_line]
+
+        print("\nKS eigenvalues:\n")
+        print(target_line)
+        print(*eigs, sep="")
+
+    elif spin_polarised:
+        su_eigs_start_line, sd_eigs_start_line = None, None
+
+        for num, content in enumerate(reversed(lines)):
+            if "Spin-up eigenvalues" in content:
+                su_eigs_start_line = len(lines) - num
+
+                if "K-point:" in lines[su_eigs_start_line]:
+                    su_eigs_start_line += 3
+                break
+
+        else:
+            raise ValueError("No spin-up KS states found")
+
+        for num, content in enumerate(lines[su_eigs_start_line:]):
+            if not content.split():
+                su_eigs_end_line = su_eigs_start_line + num
+                break
+
+        else:
+            raise ValueError("No spin-up KS states found")
+
+        if "Spin-down eigenvalues" in lines[su_eigs_end_line + 1]:
+            sd_eigs_start_line = su_eigs_end_line + 1
+
+            if "K-point:" in lines[sd_eigs_start_line + 1]:
+                sd_eigs_start_line += 3
+
+        else:
+            raise ValueError("No spin-down KS states found")
+
+        for num, content in enumerate(lines[sd_eigs_start_line:]):
+            if not content.split():
+                sd_eigs_end_line = sd_eigs_start_line + num
+                break
+
+        else:
+            raise ValueError("No spin-down KS states found")
+
+        su_eigs = lines[su_eigs_start_line:su_eigs_end_line]
+        sd_eigs = lines[sd_eigs_start_line:sd_eigs_end_line]
+
+        print("Spin-up KS eigenvalues:\n")
+        print(*su_eigs, sep="")
+        print("Spin-down KS eigenvalues:\n")
+        print(*sd_eigs, sep="")
 
 
 def set_env_vars() -> None:
