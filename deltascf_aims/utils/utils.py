@@ -668,10 +668,10 @@ def print_ks_states(run_loc) -> None:
 
         for num, content in enumerate(reversed(lines)):
             if "Spin-up eigenvalues" in content:
-                su_eigs_start_line = len(lines) - num
+                su_eigs_start_line = len(lines) - num + 1
 
-                if "K-point:" in lines[su_eigs_start_line]:
-                    su_eigs_start_line += 3
+                if "K-point:" in lines[su_eigs_start_line - 1]:
+                    su_eigs_start_line += 1
                 break
 
         else:
@@ -686,10 +686,10 @@ def print_ks_states(run_loc) -> None:
             raise ValueError("No spin-up KS states found")
 
         if "Spin-down eigenvalues" in lines[su_eigs_end_line + 1]:
-            sd_eigs_start_line = su_eigs_end_line + 1
+            sd_eigs_start_line = su_eigs_end_line + 3
 
-            if "K-point:" in lines[sd_eigs_start_line + 1]:
-                sd_eigs_start_line += 3
+            if "K-point:" in lines[su_eigs_end_line + 2]:
+                sd_eigs_start_line += 1
 
         else:
             raise ValueError("No spin-down KS states found")

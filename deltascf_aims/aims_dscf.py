@@ -466,8 +466,8 @@ class Process:
 
         Returns
         -------
-            xps : List[float]
-                deltaSCF energies
+        xps : List[float]
+            deltaSCF energies
         """
 
         grenrgys = cds.read_ground_energy(self.start.run_loc)

@@ -153,7 +153,7 @@ The `plot` subcommand is used for creating an XPS spectrum from a $\Delta$-SCF c
 
 This subcommand performs post-processing on the FHI-aims calculation and writes several files. The first is plain text file which contains a list of the calculated binding energies for each of the excited state calculations, calculated against the ground-state. The second is also plain text and contains the broadened spectrum. This is formatted into 2 columns; the first is the x-value, and the second is the intensity of the spectrum on the y-axis at this point. The final two are a pdf and png file of the broadened spectrum plotted, which are only produced if the `-g/--graph` flag is given. 
 
-![Azulene 1s XPS spectrum calculated with projector](/assets/xps_spectrum.png)
+![Azulene 1s XPS spectrum calculated with projector](./assets/xps_spectrum.png)
 
 #### Broadening
 
