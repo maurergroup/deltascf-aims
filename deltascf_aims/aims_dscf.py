@@ -54,6 +54,8 @@ class Start:
             print the simulated XPS spectrum
         print_output : bool
             print the live output of the calculation
+        run_cmd : str
+            parallel command to use for the calculation
         nprocs : int
             number of processors to use
         ase : bool
@@ -109,6 +111,7 @@ class Start:
         use_extra_basis,
         print_output,
         force,
+        run_cmd,
         nprocs,
     ):
         self.hpc = hpc
@@ -125,6 +128,7 @@ class Start:
         self.use_extra_basis = use_extra_basis
         self.print_output = print_output
         self.force = force
+        self.run_cmd = run_cmd
         self.nprocs = nprocs
 
         self.ase = True
@@ -218,12 +222,12 @@ class Start:
             The param_hint option has not been provided
         """
 
-        atoms = Atoms()
+        self.atoms = Atoms()
 
         # Find the structure if not given
         if self.spec_mol is None and self.geometry_input is None:
             try:
-                atoms = read(f"./{self.run_loc}/ground/geometry.in")
+                self.atoms = read(f"./{self.run_loc}/ground/geometry.in")
                 print(
                     "molecule argument not provided, defaulting to using existing geometry.in"
                     " file from the ground state calculation"
@@ -238,24 +242,19 @@ class Start:
         # Build the structure if given
         elif self.ase:
             if self.spec_mol is not None:
-                atoms = utils.build_geometry(self.spec_mol)
+                self.atoms = utils.build_geometry(self.spec_mol)
             if self.geometry_input is not None:
-                atoms = read(self.geometry_input.name)
+                self.atoms = read(self.geometry_input.name)
 
-        return atoms
+        return self.atoms
 
-    def find_constr_atom_element(self, atoms) -> None:
+    def find_constr_atom_element(self) -> None:
         """
         Find the element of the atom to perform XPS/NEXAFS for.
-
-        Parameters
-        ----------
-        atoms : Atoms
-            Element of constr_atom
         """
 
         # TODO: add support for multiple constrained atoms
-        for atom in atoms:
+        for atom in self.atoms:
             if atom.index in self.spec_at_constr:
                 self.constr_atom = atom.symbol
                 break
@@ -393,14 +392,12 @@ class Start:
 
         self._atoms = atoms
 
-    def add_calc(self, atoms, binary) -> Atoms:
+    def add_calc(self, binary) -> Atoms:
         """
         Add an ASE calculator to an Atoms object.
 
         Parameters
         __________
-        atoms : Atoms
-            ASE atoms object
         binary : str
             path to the location of the FHI-aims binary
 
@@ -410,14 +407,14 @@ class Start:
             ASE atoms object with a calculator added
         """
 
-        atoms.calc = utils.create_calc(
-            self.nprocs, binary, self.species, self.basis_set
+        self.atoms.calc = utils.create_calc(
+            self.nprocs, binary, self.run_cmd, self.species, self.basis_set
         )
 
         if self.print_output:
             warnings.warn("-p/--print_output is not supported with the ASE backend")
 
-        return atoms
+        return self.atoms
 
 
 class Process:
@@ -577,7 +574,7 @@ class Projector(GroundCalc, ExcitedCalc):
         type of calculation to perform
     occ_type : click.Choice(["deltascf_projector", "force_occupation_projector"])
         use either the refactored or original projector keyword
-    pbc : tuple
+    pbc : Tuple[int]
         k-grid for a periodic calculation
     l_vecs : List[List[float]]
         lattice vectors in a 3x3 matrix of floats

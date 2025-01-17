@@ -17,7 +17,7 @@ def start(*args):
     start.atoms = start.create_structure()
 
     if start.constr_atom is None:
-        start.find_constr_atom_element(start.atoms)
+        start.find_constr_atom_element()
 
     curr_path, bin_path = start.check_for_bin()
     bin_path = start.bin_path_prompt(curr_path, bin_path)
@@ -25,7 +25,7 @@ def start(*args):
 
     # Return the atoms object with a calculator
     if start.ase:
-        start.atoms = start.add_calc(start.atoms, bin_path)
+        start.add_calc(bin_path)
 
     # TODO pass the Start and Argument objects to the subcommands
     # ctx.obj = {"argument": argument, "start": start}
@@ -73,6 +73,7 @@ def projector(*args):
                 start.use_extra_basis,
                 proj.l_vecs,
                 start.print_output,
+                start.run_cmd,
                 start.nprocs,
                 start.binary,
                 start.atoms.calc,

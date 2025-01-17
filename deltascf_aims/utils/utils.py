@@ -2,7 +2,7 @@ import glob
 import os
 import warnings
 from sys import platform
-from typing import List, Literal, Union
+from typing import List, Literal, Tuple, Union
 
 import numpy as np
 import yaml
@@ -11,28 +11,28 @@ from ase.build import molecule
 from ase.calculators.aims import Aims
 from ase.data.pubchem import pubchem_atoms_search
 from ase.io import write
-from click import BadParameter, MissingParameter, progressbar
+from click import BadParameter, File, MissingParameter, progressbar
 
 import deltascf_aims.force_occupation as fo
 
 
 def add_control_opts(
     start,
-    constr_atom,
-    i_atom,
-    calc,
-    control_opts,
+    constr_atom: str,
+    i_atom: Union[int, str],
+    calc: str,
+    control_opts: dict,
 ) -> None:
     """
     Add additional control options to the control file.
 
     Parameters
     ----------
-    start : Start
+    start
         Instance of Start class
     constr_atoms : str
         Constrained atom
-    i_atom : int
+    i_atom : Union[int, str]
         Atom index to add the control options to
     calc : str
         Name of the calculation to add the control options to
@@ -63,13 +63,15 @@ def add_control_opts(
         control_file.writelines(control_content)
 
 
-def add_molecule_identifier(start, atom_specifier, basis=False) -> None:
+def add_molecule_identifier(
+    start, atom_specifier: List[int], basis: bool = False
+) -> None:
     """
     Add a string to the geometry.in to parse when plotting to identify it.
 
     Parameters
     ----------
-    start : Start
+    start
         Instance of the Start class
     atom_specifier : List[int]
         Atom indices as given in geometry.in
@@ -102,7 +104,7 @@ def add_molecule_identifier(start, atom_specifier, basis=False) -> None:
         hole_geom.writelines(lines)
 
 
-def build_geometry(geometry) -> Union[Atoms, List[Atoms]]:
+def build_geometry(geometry: str) -> Union[Atoms, List[Atoms]]:
     """
     Try getting geometry data from various databases to create a geometry.in file.
 
@@ -178,7 +180,7 @@ def check_args(*args) -> None:
             raise MissingParameter(param_hint=f"'--{arg[0]}'", param_type="option")
 
 
-def check_constrained_geom(geom_file) -> None:
+def check_constrained_geom(geom_file: str) -> None:
     """
     Check for `constrain_relaxation` keywords in the geometry.in.
 
@@ -207,12 +209,12 @@ def check_constrained_geom(geom_file) -> None:
 
 def check_curr_prev_run(
     run_type: Literal["ground", "hole", "init_1", "init_2"],
-    run_loc,
-    constr_atoms,
-    atom_specifier,
+    run_loc: str,
+    constr_atoms: Union[List[str], str],
+    atom_specifier: List[int],
     constr_method: Literal["projector", "basis"],
-    hpc,
-    force,
+    hpc: bool,
+    force: bool = False,
 ) -> None:
     """
 
@@ -224,7 +226,7 @@ def check_curr_prev_run(
         Type of calculation to check for
     run_loc : str
         Path to the calculation directory
-    constr_atoms : List[str]
+    constr_atoms : Union[List[str], str]
         Constrained atoms
     atom_specifier : List[int]
         List of atom indices
@@ -232,6 +234,8 @@ def check_curr_prev_run(
         Method of constraining atom occupations
     hpc : bool
         Whether to run on a HPC
+    force : bool, optional
+        Force the calculation to run
 
     Raises
     ------
@@ -262,7 +266,7 @@ def check_curr_prev_run(
                 break
 
 
-def check_k_grid(control_file) -> bool:
+def check_k_grid(control_file: str) -> bool:
     """
     Check if there is a k_grid in the control.in.
 
@@ -286,9 +290,14 @@ def check_k_grid(control_file) -> bool:
     return k_grid
 
 
-def check_lattice_vecs(geom_file) -> bool:
+def check_lattice_vecs(geom_file: str) -> bool:
     """
     Check if lattice vectors are given in the geometry.in file.
+
+    Parameters
+    ----------
+    geom_file : str
+        Path to geometry.in file
 
     Returns
     -------
@@ -311,7 +320,7 @@ def check_params(start, include_hpc=False) -> None:
 
     Parameters
     ----------
-    start : Start
+    start
         Instance of the Start class
     include_hpc : bool, optional
         Include the hpc parameter in the check
@@ -337,7 +346,7 @@ def check_params(start, include_hpc=False) -> None:
         )
 
 
-def check_species_in_control(control_content, species) -> bool:
+def check_species_in_control(control_content: List[str], species: str) -> bool:
     """
     Check if the species basis set definition exists in control.in.
 
@@ -364,15 +373,15 @@ def check_species_in_control(control_content, species) -> bool:
     return False
 
 
-def convert_opts_to_dict(opts, pbc) -> dict:
+def convert_opts_to_dict(opts: Tuple[str], pbc: Union[Tuple[int], None]) -> dict:
     """
     Convert the control options from a tuple to a dictionary.
 
     Parameters
     ----------
-    opts : tuple
+    opts : Tuple[str]
         Tuple of control options
-    pbc : list
+    pbc : Tuple[int]
         Tuple of k-points
 
     Returns
@@ -395,7 +404,7 @@ def convert_opts_to_dict(opts, pbc) -> dict:
     return opts_dict
 
 
-def convert_tuple_key_to_str(control_opts) -> dict:
+def convert_tuple_key_to_str(control_opts: dict) -> dict:
     """Convert any keys given as tuples to strings in control_opts
 
     Parameters
@@ -416,7 +425,9 @@ def convert_tuple_key_to_str(control_opts) -> dict:
     return control_opts
 
 
-def create_calc(procs, binary, species, int_grid) -> Aims:
+def create_calc(
+    procs: int, binary: str, aims_cmd: str, species: str, int_grid: str
+) -> Aims:
     """
     Create an ASE calculator object.
 
@@ -426,6 +437,8 @@ def create_calc(procs, binary, species, int_grid) -> Aims:
         number of processors to use
     binary : str
         path to aims binary
+    aims_cmd : str
+        command to run aims
     species : str
         path to species directory
     int_grid : str
@@ -442,7 +455,7 @@ def create_calc(procs, binary, species, int_grid) -> Aims:
         xc="pbe",
         spin="collinear",
         default_initial_moment=1,
-        aims_command=f"mpirun -n {procs} {binary}",
+        aims_command=f"{aims_cmd} {procs} {binary}",
         species_dir=f"{species}/defaults_2020/{int_grid}/",
     )
 
@@ -450,14 +463,17 @@ def create_calc(procs, binary, species, int_grid) -> Aims:
 
 
 def get_atoms(
-    constr_atoms, spec_at_constr, geometry_path, element_symbols
+    constr_atoms: Union[List[str], str],
+    spec_at_constr: List[int],
+    geometry_path: str,
+    element_symbols: Union[str, List[str]],
 ) -> List[int]:
     """
     Get the atom indices to constrain from the geometry file.
 
     Parameters
     ----------
-    constr_atoms : List[str]
+    constr_atoms : Union[List[str], str]
         List of elements to constrain
     spec_at_constr : List[int]
         List of atom indices to constrain
@@ -547,7 +563,7 @@ def get_all_elements() -> List[str]:
     return elements
 
 
-def get_element_symbols(geom, spec_at_constr) -> List[str]:
+def get_element_symbols(geom: str, spec_at_constr: List[int]) -> List[str]:
     """
     Find the element symbols from specified atom indices in a geometry file.
 
@@ -564,8 +580,8 @@ def get_element_symbols(geom, spec_at_constr) -> List[str]:
         List of element symbols
     """
 
-    with open(geom, "r") as geom:
-        lines = geom.readlines()
+    with open(geom, "r") as geom_file:
+        lines = geom_file.readlines()
 
     atom_lines = []
 
@@ -588,9 +604,14 @@ def get_element_symbols(geom, spec_at_constr) -> List[str]:
     return element_symbols
 
 
-def _check_spin_polarised(lines) -> bool:
+def _check_spin_polarised(lines: List[str]) -> bool:
     """
     Check if the FHI-aims calculation was spin polarised.
+
+    Parameters
+    ----------
+    lines : List[str]
+        Lines from the aims.out file
 
     Returns
     -------
@@ -614,7 +635,7 @@ def _check_spin_polarised(lines) -> bool:
     return spin_polarised
 
 
-def print_ks_states(run_loc) -> None:
+def print_ks_states(run_loc: str) -> None:
     """
     Print the Kohn-Sham eigenvalues from a calculation.
 
@@ -728,15 +749,15 @@ def set_env_vars() -> None:
         warnings.warn("OS not supported, please ensure ulimit is set to unlimited")
 
 
-def warn_no_extra_control_opts(opts, inp) -> None:
+def warn_no_extra_control_opts(opts: dict, inp: Union[File, None]) -> None:
     """
     Raise a warning if not additional control options have been specified.
 
     Parameters
     ----------
-    opts : Tuple[str]
+    opts : dict
         additional control options to be added to the control.in file
-    inp : click.File
+    inp : Union[File, None]
         path to custom control.in file
 
     """
@@ -748,7 +769,12 @@ def warn_no_extra_control_opts(opts, inp) -> None:
 
 
 def write_control(
-    run_loc, control_opts, atoms, int_grid, add_extra_basis, defaults
+    run_loc: str,
+    control_opts: dict,
+    atoms: Atoms,
+    int_grid: str,
+    add_extra_basis: bool,
+    defaults: str,
 ) -> None:
     """
     Write a control.in file.
@@ -857,7 +883,7 @@ class GroundCalc:
             path to the control.in file
         control_opts : dict
             additional options to be added to the control.in file
-        start : Start
+        start
             instance of Start class
         """
 
@@ -967,7 +993,7 @@ class GroundCalc:
                 f"mv {self.run_loc}/aims.out {self.run_loc}/parameters.ase {self.run_loc}/ground/"
             )
 
-    def _without_ase(self, print_output, nprocs, binary) -> None:
+    def _without_ase(self, print_output, aims_cmd, nprocs, binary) -> None:
         """
         Run the ground state calculation without ASE.
 
@@ -975,8 +1001,10 @@ class GroundCalc:
         ----------
         print_output : bool
             Whether to print the output of the calculation
+        aims_cmd : str
+            Command to run FHI-aims
         nprocs : int
-            Number of processors to use with mpirun
+            Number of processors to use with parallel command
         binary : str
             Path to the FHI-aims binary
         """
@@ -985,12 +1013,12 @@ class GroundCalc:
 
         if print_output:  # Show live output of calculation
             os.system(
-                f"cd {self.run_loc}/ground && mpirun -n {nprocs} {binary} | tee aims.out"
+                f"cd {self.run_loc}/ground && {aims_cmd} {nprocs} {binary} | tee aims.out"
             )
 
         else:
             os.system(
-                f"cd {self.run_loc}/ground && mpirun -n {nprocs} {binary} > aims.out"
+                f"cd {self.run_loc}/ground && {aims_cmd} {nprocs} {binary} > aims.out"
             )
 
     def run_ground(
@@ -999,6 +1027,7 @@ class GroundCalc:
         add_extra_basis,
         l_vecs,
         print_output,
+        aims_cmd,
         nprocs,
         binary,
         calc=None,
@@ -1016,8 +1045,10 @@ class GroundCalc:
             Lattice vectors
         print_output : bool
             Whether to print the output of the calculation
+        aims_cmd : str
+            Command to run FHI-aims
         nprocs : int
-            Number of processors to use with mpirun
+            Number of processors to use with the parallel command
         binary : str
             Path to the FHI-aims binary
         calc : Aims, optional
@@ -1031,7 +1062,7 @@ class GroundCalc:
             self._with_ase(calc, control_opts, add_extra_basis, l_vecs)
 
         elif not self.hpc:  # Don't use ASE
-            self._without_ase(print_output, nprocs, binary)
+            self._without_ase(print_output, aims_cmd, nprocs, binary)
 
         # Print the KS states from aims.out so it is easier to specify the
         # KS states for the hole calculation
@@ -1045,7 +1076,7 @@ class ExcitedCalc:
 
     Attributes
     ----------
-    start : Start
+    start
         Instance of Start class
 
     Methods
@@ -1218,7 +1249,7 @@ class ExcitedCalc:
             for i in range(len(atom_specifier)):
                 os.system(
                     f"cd {self.start.run_loc}/{constr_atoms[0]}{atom_specifier[i]}"
-                    f"/{run_type} && mpirun -n {self.start.nprocs} "
+                    f"/{run_type} && {self.start.run_cmd} {self.start.nprocs} "
                     f"{self.start.binary} | tee aims.out {spec_run_info}"
                 )
                 if run_type != "init_1" and run_type != "init_2":
@@ -1234,7 +1265,7 @@ class ExcitedCalc:
                 for i in prog_bar:
                     os.system(
                         f"cd {self.start.run_loc}/{constr_atoms[0]}{atom_specifier[i]}"
-                        f"/{run_type} && mpirun -n {self.start.nprocs} "
+                        f"/{run_type} && {self.start.run_cmd} {self.start.nprocs} "
                         f"{self.start.binary} > aims.out {spec_run_info}"
                     )
 

@@ -124,9 +124,18 @@ from deltascf_aims.utils.click_extras import (
     help="force the calculation to run even if it has already been run",
 )
 @click.option(
+    "--aims_cmd",
+    default="mpirun -n",
+    show_default=True,
+    nargs=1,
+    type=str,
+    help="parallel command to run FHI-aims",
+)
+@click.option(
     "-n",
     "--nprocs",
     default=4,
+    nargs=1,
     show_default=True,
     type=int,
     help="number of processors to use",
@@ -149,6 +158,7 @@ def initialise(
     use_extra_basis,
     print_output,
     force,
+    aims_cmd,
     nprocs,
 ):
     """
@@ -191,6 +201,7 @@ def initialise(
         use_extra_basis,
         print_output,
         force,
+        aims_cmd,
         nprocs,
     )
 
