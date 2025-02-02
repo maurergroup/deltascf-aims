@@ -1,81 +1,166 @@
 ---
 Li: |
-  # Additional basis functions for atom with a core hole
-       hydro 1 s 4.0
-       hydro 1 s 6.0
-       hydro 2 s 5.0
+       # Additional basis functions for atom with a core hole
+            hydro 1 s 4.0
+            hydro 1 s 6.0
+            hydro 2 s 5.0
 
 Be: |
-  # Additional basis functions for atom with a core hole
-       hydro 1 s 5.0
-       hydro 1 s 7.0
-       hydro 2 s 6.0
+       # Additional basis functions for atom with a core hole
+            hydro 1 s 5.0
+            hydro 1 s 7.0
+            hydro 2 s 6.0
 
 B: |
-  # Additional basis functions for atom with a core hole
-       hydro 1 s 9.0
-       hydro 1 s 7.0
-       hydro 1 s 3.0
-       hydro 2 s 5.0
-       hydro 2 p 6.0
+       # Additional basis functions for atom with a core hole
+            hydro 1 s 9.0
+            hydro 1 s 7.0
+            hydro 1 s 3.0
+            hydro 2 s 5.0
+            hydro 2 p 6.0
 
 C: |
-  # Additional basis functions for atom with a core hole
-       hydro 1 s 10.0
-       hydro 1 s 8.0
-       hydro 1 s 4.0
-       hydro 2 s 6.0
+       # Additional basis functions for atom with a core hole
+            hydro 1 s 10.0
+            hydro 1 s 8.0
+            hydro 1 s 4.0
+            hydro 2 s 6.0
 
 N: |
-  # Additional basis functions for atom with a core hole
-       hydro 1 s 11.0
-       hydro 1 s 9.0
-       hydro 1 s 5.0
-       hydro 2 s 8.0
-       hydro 2 s 10.0
-       hydro 2 p 6.5
-       hydro 3 s 6.2
-       hydro 3 p 6.2
+       # Additional basis functions for atom with a core hole
+            hydro 1 s 11.0
+            hydro 1 s 9.0
+            hydro 1 s 5.0
+            hydro 2 s 8.0
+            hydro 2 s 10.0
+            hydro 2 p 6.5
+            hydro 3 s 6.2
+            hydro 3 p 6.2
 
 O: |
-  # Additional basis functions for atom with a core hole
-       hydro 1 s 12.0
-       hydro 1 s 10.0
-       hydro 1 s 6.0
-       hydro 2 s 10.0
-       hydro 2 p 8.0
-       hydro 2 p 6.0
-       hydro 3 d 8.0
+       # Additional basis functions for atom with a core hole
+            hydro 1 s 12.0
+            hydro 1 s 10.0
+            hydro 1 s 6.0
+            hydro 2 s 10.0
+            hydro 2 p 8.0
+            hydro 2 p 6.0
+            hydro 3 d 8.0
 
 Na: |
-  # Additional basis functions for atom with a core hole
-       hydro 1 s 15.0
-       hydro 1 s 13.0
-       hydro 1 s 9.0
-       hydro 2 s 13.5
-       hydro 2 s 11.5
-       hydro 2 p 10.5
-       hydro 2 p 8.5
-       hydro 3 d 7.0
-       hydro 3 p 8.0
+       # Additional basis functions for atom with a core hole
+            hydro 1 s 15.0
+            hydro 1 s 13.0
+            hydro 1 s 9.0
+            hydro 2 s 13.5
+            hydro 2 s 11.5
+            hydro 2 p 10.5
+            hydro 2 p 8.5
+            hydro 3 d 7.0
+            hydro 3 p 8.0
 
 Mg: |
-  # Additional basis functions for atom with a core hole
-       hydro 1 s 16.0
-       hydro 1 s 14.0
-       hydro 1 s 10.0
-       hydro 2 s 14.5
-       hydro 2 s 12.5
-       hydro 2 p 11.5
-       hydro 2 p 9.5
-       hydro 3 d 8.0
-       hydro 3 p 9.0
+       # Additional basis functions for atom with a core hole
+            hydro 1 s 16.0
+            hydro 1 s 14.0
+            hydro 1 s 10.0
+            hydro 2 s 14.5
+            hydro 2 s 12.5
+            hydro 2 p 11.5
+            hydro 2 p 9.5
+            hydro 3 d 8.0
+            hydro 3 p 9.0
 
 Si: |
-  # Additional basis functions for atom with a core hole
-       hydro 2 p 15.0
-       hydro 2 p 12.0
-       hydro 2 p 5.0
-       hydro 2 s 14.0
-       hydro 1 s 16.0
-       hydro 1 s 9.0
+       # Additional basis functions for atom with a core hole
+            hydro 2 p 15.0
+            hydro 2 p 12.0
+            hydro 2 p 5.0
+            hydro 2 s 14.0
+            hydro 1 s 16.0
+            hydro 1 s 9.0
+
+Ti: |
+       # Additional core basis functions to facilitate core hole
+            hydro 1 s 24.0
+            hydro 2 s 22.0
+            hydro 2 p 22.0
+            hydro 2 p 16.0
+            hydro 3 s 15.0
+            hydro 3 p 13.0
+            hydro 3 d 7.0
+
+V: |
+       # Additional core basis functions to facilitate core hole
+            hydro 1 s 25.0
+            hydro 2 s 24.0
+            hydro 2 p 26.0
+            hydro 2 p 23.0
+            hydro 3 s 17.0
+            hydro 3 s 15.0
+            hydro 3 p 14.0
+            hydro 3 d 8.0
+            hydro 4 p 16.6
+            hydro 5 f 24.2
+
+Cr: |
+       # Additional core basis functions to facilitate core hole
+            hydro 1 s 26.0
+            hydro 2 s 25.0
+            hydro 2 p 27.0
+            hydro 2 p 24.0
+            hydro 3 s 18.0
+            hydro 3 s 16.0
+            hydro 3 p 15.0
+            hydro 3 d 9.0
+            hydro 4 p 17.6
+            hydro 5 f 25.2
+
+Mn: |
+       # Additional core basis functions to facilitate core hole
+            hydro 1 s 27.0
+            hydro 2 s 26.0
+            hydro 2 p 28.0
+            hydro 2 p 25.0
+            hydro 3 s 19.0
+            hydro 3 s 17.0
+            hydro 3 p 16.0
+            hydro 3 d 10.0
+            hydro 4 p 18.6
+            hydro 5 f 26.2
+
+Fe: |
+       # Additional core basis functions to facilitate core hole
+            hydro 2 s 27.0
+            hydro 2 p 29.0
+            hydro 2 p 26.0
+            hydro 3 s 20.0
+            hydro 3 s 18.0
+            hydro 3 p 17.0
+            hydro 3 d 11.0
+            hydro 4 p 19.6
+            hydro 5 f 27.2
+
+Co: |
+       # Additional core basis functions to facilitate core hole
+            hydro 2 s 28.0
+            hydro 2 p 30.0
+            hydro 2 p 27.0
+            hydro 3 s 21.0
+            hydro 3 s 19.0
+            hydro 3 p 18.0
+            hydro 3 d 12.0
+            hydro 4 p 20.6
+            hydro 5 f 28.2
+
+Ni: |
+       # Additional core basis functions to facilitate core hole
+            hydro 2 s 29.0
+            hydro 2 p 31.0
+            hydro 2 p 28.0
+            hydro 3 s 22.0
+            hydro 3 s 20.0
+            hydro 3 p 19.0
+            hydro 3 d 13.0
+            hydro 4 p 21.6
+            hydro 5 f 29.2
