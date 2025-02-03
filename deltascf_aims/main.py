@@ -127,6 +127,7 @@ def basis(*args):
                 start.use_extra_basis,
                 None,
                 start.print_output,
+                start.run_cmd,
                 start.nprocs,
                 start.binary,
                 start.atoms.calc,
