@@ -14,24 +14,26 @@ files = [
 
 [[package]]
 name = "ase"
-version = "3.22.1"
+version = "3.25.0"
 description = "Atomic Simulation Environment"
 optional = false
-python-versions = ">=3.6"
+python-versions = ">=3.9"
 groups = ["main"]
 files = [
-    {file = "ase-3.22.1-py3-none-any.whl", hash = "sha256:66cc481e3d82bea8931d5fe677119932ea0bd1bc08b901fd84f36b37fa681c9e"},
-    {file = "ase-3.22.1.tar.gz", hash = "sha256:004df6b0ea04b1114c790fadfe45d4125eb0e53125c66a93425af853d82ab432"},
+    {file = "ase-3.25.0-py3-none-any.whl", hash = "sha256:f9a5295e1154da355af04726d001fa76a311c076616d98e49cd9f34fc3afe188"},
+    {file = "ase-3.25.0.tar.gz", hash = "sha256:374cf8ca9fe588f05d6e856da3c9c17ef262dc968027b231d449334140c962c2"},
 ]
 
 [package.dependencies]
-matplotlib = ">=3.1.0"
-numpy = ">=1.15.0"
-scipy = ">=1.1.0"
+matplotlib = ">=3.3.4"
+numpy = ">=1.19.5"
+scipy = ">=1.6.0"
 
 [package.extras]
-docs = ["pillow", "sphinx", "sphinx-rtd-theme"]
-test = ["pytest (>=5.0.0)", "pytest-mock (>=3.3.0)", "pytest-xdist (>=1.30.0)"]
+docs = ["pillow", "sphinx", "sphinx_rtd_theme"]
+lint = ["coverage", "flake8", "mypy", "ruff", "types-PyMySQL", "types-docutils"]
+spglib = ["spglib (>=1.9)"]
+test = ["pytest (>=7.0.0)", "pytest-xdist (>=2.1.0)"]
 
 [[package]]
 name = "click"
@@ -878,4 +880,4 @@ files = [
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<3.13"
-content-hash = "9de38f377e97f1beca968548d9b04277eac587060016c586fc6cd54283ec3d9b"
+content-hash = "c39598a69382b02c385ba0f5cc6e72efb8a7127e75fe058aa38dc65ec815888d"
