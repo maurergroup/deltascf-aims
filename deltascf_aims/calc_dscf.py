@@ -91,11 +91,13 @@ def read_excited_energy(calc_path, element) -> Tuple[List[float], str]:
                     f"{calc_path}{directory}/aims.out", "r", errors="ignore"
                 ) as out:
                     lines = out.readlines()
-            else:
+            elif os.path.exists(f"{calc_path}{directory}/hole/aims.out"):
                 with open(
                     f"{calc_path}{directory}/hole/aims.out", "r", errors="ignore"
                 ) as out:
                     lines = out.readlines()
+            else:
+                lines = []
 
             for line in lines:
                 # Get the energy
