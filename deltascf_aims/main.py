@@ -3,7 +3,6 @@ from deltascf_aims.aims_dscf import Basis, Process, Projector, Start
 
 def start(*args):
     """Entry point for the CLI."""
-
     # Get context object and arguments for Start
     args = list(args)
     ctx = args.pop(0)
@@ -37,7 +36,6 @@ def projector(*args):
     Automate an FHI-aims core-level constraint calculation run using the projector
     method.
     """
-
     # Get start object
     start = args[0]
 
@@ -103,7 +101,6 @@ def basis(*args):
     """
     Automate an FHI-aims core-level constraint calculation run using the basis method.
     """
-
     # Get start object
     start = args[0]
 
@@ -149,7 +146,6 @@ def plot(*args):
     """
     Automate the plotting of the XPS spectrum.
     """
-
     # Get start object
     start = args[0]
 

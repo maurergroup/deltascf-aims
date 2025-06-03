@@ -39,9 +39,8 @@ def add_control_opts(
     control_opts : dict
         Control options
     """
-
     # Convert non-string array-type structures to strings
-    for key, opt in zip(control_opts.keys(), control_opts.values()):
+    for key, opt in control_opts.items():
         if not isinstance(opt, str):  # Must be list, tuple, or set
             control_opts[key] = " ".join(str(i) for i in opt)
 
@@ -78,7 +77,6 @@ def add_molecule_identifier(
     basis : bool, optional
         Whether a basis calculation is being run
     """
-
     if basis:
         hole = ""
     else:
@@ -86,7 +84,6 @@ def add_molecule_identifier(
 
     with open(
         f"{start.run_loc}/{start.constr_atom}{atom_specifier[0]}{hole}/geometry.in",
-        "r",
     ) as hole_geom:
         lines = hole_geom.readlines()
 
@@ -123,7 +120,6 @@ def build_geometry(geometry: str) -> Union[Atoms, List[Atoms]]:
     SystemExit
         Exit the program if the system is not found in any database
     """
-
     try:
         atoms = molecule(geometry)
         print("molecule found in ASE database")
@@ -164,7 +160,6 @@ def check_args(*args) -> None:
     MissingParameter
         A required parameter has not been given
     """
-
     # TODO: Check that this function is working correctly
     # TODO: Check if this works with the locals() commented out below
     # def_args = locals()
@@ -194,7 +189,6 @@ def check_constrained_geom(geom_file: str) -> None:
     SystemExit
         Exit the program if the `constrain_relaxation` keyword is found
     """
-
     for line in geom_file:
         if "constrain_relaxation" in line:
             print("'constrain_relaxation' keyword found in geometry.in")
@@ -242,7 +236,6 @@ def check_curr_prev_run(
     SystemExit
         Exit the program if the calculation has already been run
     """
-
     if run_type == "ground":
         search_path = f"{run_loc}/{run_type}/aims.out"
     elif constr_method == "projector":
@@ -280,7 +273,6 @@ def check_k_grid(control_file: str) -> bool:
     k_grid : bool
         Whether the k_grid input parameter is found
     """
-
     k_grid = False
 
     for line in control_file:
@@ -304,7 +296,6 @@ def check_lattice_vecs(geom_file: str) -> bool:
     l_vecs : bool
         True if lattice vectors are found, False otherwise
     """
-
     l_vecs = False
 
     for line in geom_file:
@@ -332,7 +323,6 @@ def check_params(start, include_hpc=False) -> None:
     BadParameter
         An incompatible parameter has been given
     """
-
     if include_hpc:
         if start.hpc:
             raise BadParameter(
@@ -363,11 +353,10 @@ def check_species_in_control(control_content: List[str], species: str) -> bool:
         True if the basis set for the species was found in control.in, False otherwise
 
     """
-
     for line in control_content:
         spl = line.split()
 
-        if len(spl) > 0 and "species" == spl[0] and species == spl[1]:
+        if len(spl) > 0 and spl[0] == "species" and species == spl[1]:
             return True
 
     return False
@@ -389,7 +378,6 @@ def convert_opts_to_dict(opts: Tuple[str], pbc: Union[Tuple[int], None]) -> dict
     opts_dict : dict
         Dictionary of control options
     """
-
     opts_dict = {}
 
     for opt in opts:
@@ -417,7 +405,6 @@ def convert_tuple_key_to_str(control_opts: dict) -> dict:
     control_opts : dict
         Ammended control.in file options
     """
-
     for i in control_opts.items():
         if type(i[1]) == tuple:
             control_opts[i[0]] = " ".join(str(j) for j in i[1])
@@ -449,7 +436,6 @@ def create_calc(
     aims_calc : Aims
         ASE calculator object
     """
-
     # Choose some sane defaults
     aims_calc = Aims(
         xc="pbe",
@@ -494,7 +480,6 @@ def get_atoms(
     ValueError
         An invalid parameter has been given
     """
-
     elements = get_all_elements()
     atom_specifier = []
 
@@ -509,7 +494,7 @@ def get_atoms(
 
         # Constrain all atoms of the target element
         for atom in constr_atoms:
-            with open(geometry_path, "r") as geom_in:
+            with open(geometry_path) as geom_in:
                 atom_counter = 0
 
                 for line in geom_in:
@@ -552,12 +537,11 @@ def get_all_elements() -> List[str]:
     elements : List[str]
         Element symbols
     """
-
     # Find the root directory of the package
     current_path = os.path.dirname(os.path.realpath(__file__))
 
     # Get all supported elements in FHI-aims
-    with open(f"{current_path}/elements.yml", "r") as elements_file:
+    with open(f"{current_path}/elements.yml") as elements_file:
         elements = yaml.load(elements_file, Loader=yaml.SafeLoader)
 
     return elements
@@ -579,8 +563,7 @@ def get_element_symbols(geom: str, spec_at_constr: List[int]) -> List[str]:
     List[str]
         List of element symbols
     """
-
-    with open(geom, "r") as geom_file:
+    with open(geom) as geom_file:
         lines = geom_file.readlines()
 
     atom_lines = []
@@ -588,7 +571,7 @@ def get_element_symbols(geom: str, spec_at_constr: List[int]) -> List[str]:
     # Copy only the lines which specify atom coors into a new list
     for line in lines:
         spl = line.split()
-        if len(line) > 0 and "atom" == spl[0]:
+        if len(line) > 0 and spl[0] == "atom":
             atom_lines.append(line)
 
     element_symbols = []
@@ -618,7 +601,6 @@ def _check_spin_polarised(lines: List[str]) -> bool:
     bool
         Whether the calculation was spin polarised or not
     """
-
     spin_polarised = False
 
     for line in lines:
@@ -649,8 +631,7 @@ def print_ks_states(run_loc: str) -> None:
     ValueError
         Could not find the KS states
     """
-
-    with open(f"{run_loc}/aims.out", "r") as aims:
+    with open(f"{run_loc}/aims.out") as aims:
         lines = aims.readlines()
 
     # Check if the calculation was spin polarised
@@ -736,7 +717,6 @@ def set_env_vars() -> None:
     """
     Set environment variables for running FHI-aims.
     """
-
     os.system("export OMP_NUM_THREADS=1")
     os.system("export MKL_NUM_THREADS=1")
     os.system("export MKL_DYNAMIC=FALSE")
@@ -795,7 +775,6 @@ def write_control(
     defaults : str
         Path to the species_defaults directory
     """
-
     # Firstly create the control file if it doesn't exist
     if not os.path.isfile(f"{run_loc}/control.in"):
         os.system(f"touch {run_loc}/control.in")
@@ -886,7 +865,6 @@ class GroundCalc:
         start
             instance of Start class
         """
-
         # Create the ground directory if it doesn't already exist
         os.system(f"mkdir -p {self.run_loc}/ground")
 
@@ -914,12 +892,11 @@ class GroundCalc:
         constr_atom : str
             element symbol of the constrained atom
         """
-
         current_path = os.path.dirname(os.path.realpath(__file__))
-        with open(control_in.name, "r") as control:
+        with open(control_in.name) as control:
             control_content = control.readlines()
 
-        with open(f"{current_path}/elements.yml", "r") as elements:
+        with open(f"{current_path}/elements.yml") as elements:
             elements = yaml.load(elements, Loader=yaml.SafeLoader)
 
         new_content = fo.ForceOccupation.add_additional_basis(
@@ -944,7 +921,6 @@ class GroundCalc:
         l_vecs : tuple
             Lattice vectors
         """
-
         # Change the defaults if any are specified by the user
         # Update with all control options from the calculator
         calc.set(**control_opts)
@@ -1008,7 +984,6 @@ class GroundCalc:
         binary : str
             Path to the FHI-aims binary
         """
-
         print("running calculation...")
 
         if print_output:  # Show live output of calculation
@@ -1054,7 +1029,6 @@ class GroundCalc:
         calc : Aims, optional
             Instance of an ASE calculator object
         """
-
         if not self.hpc:  # Run the ground state calculation
             set_env_vars()
 
@@ -1111,7 +1085,6 @@ class ExcitedCalc:
             Unable to find restart files in the directory of the previous
             calculation
         """
-
         if (
             len(
                 glob.glob(
@@ -1160,7 +1133,6 @@ class ExcitedCalc:
         ValueError
             Invalid parameter for current_calc has been given
         """
-
         # Placeholders until assigned
         prev_calc = None
         search_path = ""
@@ -1238,7 +1210,6 @@ class ExcitedCalc:
         basis_constr : bool, optional
             Whether the calculation uses the basis occupation constraint method
         """
-
         # Don't cd into hole for basis calculation
         if basis_constr:
             run_type = ""

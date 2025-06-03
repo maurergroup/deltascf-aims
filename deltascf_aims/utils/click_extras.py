@@ -17,7 +17,6 @@ def get_long_arg_name(ctx, arg):
     str
         The long version of the CLI argument name
     """
-
     # Convert set back to string
     if isinstance(arg, set):
         arg = ", ".join(arg)

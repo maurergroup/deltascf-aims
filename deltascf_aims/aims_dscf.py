@@ -10,10 +10,10 @@ from ase import Atoms
 from ase.io import read
 
 import deltascf_aims.calc_dscf as cds
-import deltascf_aims.force_occupation as force_occupation
-import deltascf_aims.utils.utils as utils
+from deltascf_aims import force_occupation
 from deltascf_aims.plot import XPSSpectrum
 from deltascf_aims.schmid_pseudo_voigt import broaden
+from deltascf_aims.utils import utils
 from deltascf_aims.utils.utils import ExcitedCalc, GroundCalc
 
 
@@ -159,7 +159,6 @@ class Start:
             The param_hint option has not been provided
 
         """
-
         if not self.geometry_input:
             raise click.MissingParameter(
                 param_hint="-e/--geometry_input", param_type="option"
@@ -169,7 +168,6 @@ class Start:
         """
         Check for lattice vectors and k-grid in input file.
         """
-
         self.found_l_vecs = False
         if self.geometry_input is not None:
             utils.check_constrained_geom(self.geometry_input)
@@ -192,7 +190,6 @@ class Start:
         click.MissingParameter
             The param_hint option has not been provided
         """
-
         if self.constr_atom is None and len(self.spec_at_constr) == 0:
             raise click.MissingParameter(
                 param_hint="-c/--constrained_atom or -s/--specific_atom_constraint",
@@ -201,7 +198,6 @@ class Start:
 
     def check_ase_usage(self) -> None:
         """Check whether ASE should be used or not."""
-
         if self.control_input is not None:
             self.ase = False  # Do not use if control.in is specified
 
@@ -221,7 +217,6 @@ class Start:
         click.MissingParameter
             The param_hint option has not been provided
         """
-
         self.atoms = Atoms()
 
         # Find the structure if not given
@@ -252,7 +247,6 @@ class Start:
         """
         Find the element of the atom to perform XPS/NEXAFS for.
         """
-
         # TODO: add support for multiple constrained atoms
         for atom in self.atoms:
             if atom.index in self.spec_at_constr:
@@ -271,11 +265,10 @@ class Start:
         bin_path : str
             path to the location of the FHI-aims binary
         """
-
         current_path = os.path.dirname(os.path.realpath(__file__))
 
         if Path(f"{current_path}/aims_bin_loc.txt").exists():
-            with open(f"{current_path}/aims_bin_loc.txt", "r") as f:
+            with open(f"{current_path}/aims_bin_loc.txt") as f:
                 lines = f.readlines()
         else:
             lines = []
@@ -308,7 +301,6 @@ class Start:
         binary : str
             path to the location of the FHI-aims binary
         """
-
         if not Path(bin_path).is_file() or self.binary or bin_path == "":
             marker = (
                 "\n# Enter the path to the FHI-aims binary above this line\n"
@@ -321,7 +313,7 @@ class Start:
                     with open(f"{current_path}/aims_bin_loc.txt", "w") as f:
                         f.write(bin_line)
 
-                    with open(f"{current_path}/aims_bin_loc.txt", "r") as f:
+                    with open(f"{current_path}/aims_bin_loc.txt") as f:
                         self.binary = f.readlines()[0]
 
                 else:
@@ -352,7 +344,6 @@ class Start:
         binary : str
             path to the location of the FHI-aims binary
         """
-
         self.species = f"{Path(binary).parent.parent}/species_defaults/"
 
         # TODO: check if the warnings module could be used here
@@ -376,7 +367,6 @@ class Start:
         _atoms : Atoms
             ASE atoms object
         """
-
         return self._atoms
 
     @atoms.setter
@@ -389,7 +379,6 @@ class Start:
         atoms : Atoms
             ASE atoms object
         """
-
         self._atoms = atoms
 
     def add_calc(self, binary) -> Atoms:
@@ -397,6 +386,7 @@ class Start:
         Add an ASE calculator to an Atoms object.
 
         Parameters
+        ----------
         __________
         binary : str
             path to the location of the FHI-aims binary
@@ -406,7 +396,6 @@ class Start:
         atoms : Atoms
             ASE atoms object with a calculator added
         """
-
         self.atoms.calc = utils.create_calc(
             self.nprocs, binary, self.run_cmd, self.species, self.basis_set
         )
@@ -466,7 +455,6 @@ class Process:
         xps : List[float]
             deltaSCF energies
         """
-
         grenrgys = cds.read_ground_energy(self.start.run_loc)
         excienrgys, element = cds.read_excited_energy(
             self.start.run_loc, self.start.constr_atom
@@ -486,7 +474,6 @@ class Process:
         type : Literal["peaks", "spectrum"]
             type of file to move
         """
-
         os.system(f"mv {element}_xps_{type}.txt {self.start.run_loc}")
 
     def call_broaden(self, xps) -> np.ndarray:
@@ -503,7 +490,6 @@ class Process:
         peaks : np.ndarray
             broadened peaks
         """
-
         peaks = broaden(
             0,
             1000,
@@ -531,11 +517,10 @@ class Process:
         bin_width : float
             resolution of the spectral curve - lower values increase the resolution
         """
-
         data = []
         bin_val = 0.00
         for peak in peaks:
-            data.append(f"{str(bin_val)} {str(peak)}\n")
+            data.append(f"{bin_val!s} {peak!s}\n")
             bin_val += bin_width
 
         with open(f"{element}_xps_spectrum.txt", "w") as spec:
@@ -661,7 +646,6 @@ class Projector(GroundCalc, ExcitedCalc):
         check_args : bool, optional
             Whether to check if the required CLI arguments were given or not
         """
-
         # Check that the previous calculation has been run
         prev_calc = self.check_prereq_calc(current_calc, self.constr_atoms, "projector")
 
@@ -700,7 +684,6 @@ class Projector(GroundCalc, ExcitedCalc):
         proj : ForceOccupation
             Instance of ForceOccupation
         """
-
         proj.setup_init_1(self.start.basis_set, self.start.species, self.ground_control)
         proj.setup_init_2(
             self.ks_range[0],
@@ -732,7 +715,6 @@ class Projector(GroundCalc, ExcitedCalc):
         end : str
             location to copy the restart files to
         """
-
         os.path.isfile(
             glob.glob(
                 f"{self.start.run_loc}/{self.constr_atoms[0]}{atom}/{begin}/"
@@ -754,7 +736,6 @@ class Projector(GroundCalc, ExcitedCalc):
         element_symbols : Union[str, List[str]]
             Element symbols to constrain
         """
-
         if len(self.start.spec_at_constr) > 0:
             element_symbols = utils.get_element_symbols(
                 self.ground_geom, self.start.spec_at_constr
@@ -769,7 +750,6 @@ class Projector(GroundCalc, ExcitedCalc):
         """
         Check if the lattice vectors and k_grid have been provided.
         """
-
         print(
             "-p/--pbc argument not given, attempting to use"
             " k_grid from control file or previous calculation"
@@ -781,7 +761,7 @@ class Projector(GroundCalc, ExcitedCalc):
             for control in glob.glob(
                 f"{self.start.run_loc}/**/control.in", recursive=True
             ):
-                with open(control, "r") as control:
+                with open(control) as control:
                     for line in control:
                         if "k_grid" in line:
                             pbc_list.append(line.split()[1:])
@@ -790,9 +770,8 @@ class Projector(GroundCalc, ExcitedCalc):
             # then enforce the user to provide the k_grid
             if not pbc_list.count(pbc_list[0]) == len(pbc_list):
                 raise click.MissingParameter(param_hint="-p/--pbc", param_type="option")
-            else:
-                pbc_list = tuple([int(i) for i in pbc_list[0]])
-                self.control_opts["k_grid"] = pbc_list
+            pbc_list = tuple([int(i) for i in pbc_list[0]])
+            self.control_opts["k_grid"] = pbc_list
 
         except IndexError:
             raise click.MissingParameter(param_hint="-p/--pbc", param_type="option")
@@ -806,8 +785,7 @@ class Projector(GroundCalc, ExcitedCalc):
         geom : str
             path to the geometry file
         """
-
-        with open(geom, "r") as geom_file:
+        with open(geom) as geom_file:
             geom_content = geom_file.readlines()
 
         # Check if the lattice vectors are already in the file
@@ -853,7 +831,6 @@ class Projector(GroundCalc, ExcitedCalc):
             spec_run_info : str
                 redirection location for STDERR of calculation
         """
-
         # Get the element symbols to constrain
         element_symbols = self._get_element_symbols()
 
@@ -897,7 +874,6 @@ class Projector(GroundCalc, ExcitedCalc):
             spec_run_info : str
                 Redirection location for STDERR of calculation
         """
-
         # Get the element symbols to constrain
         element_symbols = self._get_element_symbols()
 
@@ -941,7 +917,6 @@ class Projector(GroundCalc, ExcitedCalc):
             Indices for atoms as specified in geometry.in, redirection location for
             STDERR of calculation
         """
-
         # Get element symbols to constrain
         element_symbols = self._get_element_symbols()
 
@@ -1095,7 +1070,6 @@ class Basis(GroundCalc, ExcitedCalc):
         """
         Perform checks before running the excited calculation.
         """
-
         # Check that the current calculation has not already been run
         utils.check_curr_prev_run(
             self.run_type,
@@ -1127,7 +1101,6 @@ class Basis(GroundCalc, ExcitedCalc):
         element_symbols : Union[str, List[str]]
             Element symbols to constrain
         """
-
         if len(self.start.spec_at_constr) > 0:
             element_symbols = utils.get_element_symbols(
                 self.ground_geom, self.start.spec_at_constr
@@ -1147,7 +1120,6 @@ class Basis(GroundCalc, ExcitedCalc):
         List[int]
             Indices for atoms as specified in geometry.in
         """
-
         # Do this outside of _calc_checks as atom_specifier is needed for that function
         self.check_prereq_calc("hole", self.constr_atoms, "basis")
 

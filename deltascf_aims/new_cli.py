@@ -165,7 +165,6 @@ class Initialise:
 
         Copyright \u00A9 2022-2024, Dylan Morgan dylan.morgan@warwick.ac.uk
         """
-
         return self.func(
             click.get_current_context(),
             hpc,
@@ -249,7 +248,6 @@ class Projector:
         """
         Force occupation through defining the Kohn-Sham states to occupy.
         """
-
         return self.func(*args)
 
 
@@ -323,7 +321,6 @@ class Basis:
         """
         Force occupation through basis functions.
         """
-
         return self.func(*args)
 
 
@@ -404,5 +401,4 @@ class Plot:
         """
         Plot the simulated XPS spectra.
         """
-
         return self.func(*args)

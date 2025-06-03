@@ -16,8 +16,7 @@ def read_ground_energy(calc_path) -> float:
         grenrgys : float
             ground state energy
     """
-
-    with open(f"{calc_path}ground/aims.out", "r", encoding="utf-8") as ground:
+    with open(f"{calc_path}ground/aims.out", encoding="utf-8") as ground:
         lines = ground.readlines()
 
     grenrgys = None
@@ -51,7 +50,6 @@ def _contains_number(string) -> bool:
         found_string : bool
             True if a number is found, False otherwise
     """
-
     found_string = False
 
     for character in string:
@@ -77,7 +75,6 @@ def read_excited_energy(calc_path, element) -> Tuple[List[float], str]:
         excienrgys : list[float]
             excited state energies
     """
-
     dir_list = os.listdir(calc_path)
     energy = "s.c.f. calculation      :"
     excienrgys = []
@@ -88,12 +85,12 @@ def read_excited_energy(calc_path, element) -> Tuple[List[float], str]:
             # Try reading output file from basis, then projector file structure
             if os.path.exists(f"{calc_path}{directory}/aims.out"):
                 with open(
-                    f"{calc_path}{directory}/aims.out", "r", errors="ignore"
+                    f"{calc_path}{directory}/aims.out", errors="ignore"
                 ) as out:
                     lines = out.readlines()
             elif os.path.exists(f"{calc_path}{directory}/hole/aims.out"):
                 with open(
-                    f"{calc_path}{directory}/hole/aims.out", "r", errors="ignore"
+                    f"{calc_path}{directory}/hole/aims.out", errors="ignore"
                 ) as out:
                     lines = out.readlines()
             else:
@@ -122,7 +119,6 @@ def calc_delta_scf(element, grenrgys, excienrgys) -> List[float]:
         excienrgys : List[float]
             excited state energies
     """
-
     xps = []
 
     for i in excienrgys:

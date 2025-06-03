@@ -1,6 +1,6 @@
 import click
 
-import deltascf_aims.main as main
+from deltascf_aims import main
 from deltascf_aims.utils.click_extras import (
     MutuallyExclusive,
     MutuallyInclusive,
@@ -179,7 +179,6 @@ def initialise(
 
     Copyright \u00A9 2022-2024, Dylan Morgan dylan.morgan@warwick.ac.uk
     """
-
     # TODO something like this (but check commented decorator above)
     # if "--help" in sys.argv:
     #     click.echo(ctx.get_help())
@@ -263,7 +262,6 @@ def projector(start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_op
     """
     Force occupation through defining the Kohn-Sham states to occupy.
     """
-
     return main.projector(
         start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts
     )
@@ -336,7 +334,6 @@ def basis(start, run_type, occ_type, spin, n_qn, l_qn, m_qn, ks_max, control_opt
     """
     Force occupation through basis functions.
     """
-
     return main.basis(
         start, run_type, occ_type, spin, n_qn, l_qn, m_qn, ks_max, control_opts
     )
@@ -445,7 +442,6 @@ def plot(
     """
     Plot the simulated XPS spectra.
     """
-
     return main.plot(
         start,
         graph,

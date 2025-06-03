@@ -7,7 +7,7 @@ from typing import List, Tuple
 
 import yaml
 
-import deltascf_aims.utils.utils as utils
+from deltascf_aims.utils import utils
 
 
 class ForceOccupation:
@@ -66,7 +66,6 @@ class ForceOccupation:
         str
            highest energy orbital
         """
-
         madelung_1 = [int(i[0]) + self.azimuthal_refs[i[1]] for i in orb_list]
         max_i_vals = [i for i, j in enumerate(madelung_1) if j == max(madelung_1)]
 
@@ -91,7 +90,6 @@ class ForceOccupation:
         valence : str
             valence electronic structure of target atom
         """
-
         # Get the atomic number of the target atom
         self.atom_index = self.elements.index(str(atom)) + 1
 
@@ -122,13 +120,13 @@ class ForceOccupation:
                     # Save this noble gas configuration
                     noble_gas_config = (
                         ".".join(["{:2s}{:d}".format(*e) for e in config]),
-                        "[{}]".format(self.elements[i - 1]),
+                        f"[{self.elements[i - 1]}]",
                     )
 
                 # Start a new subshell
                 inl += 1
                 _, n, l = nl_pairs[inl]
-                config.append(["{}{}".format(n, l_letter[l]), 1])
+                config.append([f"{n}{l_letter[l]}", 1])
                 n_elec = 1
 
             # add an electron to the current subshell
@@ -163,7 +161,6 @@ class ForceOccupation:
         content : List[str]
             list of lines in the control file
         """
-
         # Check the additional functions haven't already been added to control
         for line in content:
             if "# Additional basis functions for atom with a core hole" in line:
@@ -173,10 +170,10 @@ class ForceOccupation:
 
         # Get the additional basis set
         if "dscf_utils" in current_path.split("/"):
-            with open(f"{current_path}/utils/add_basis_functions.yml", "r") as f:
+            with open(f"{current_path}/utils/add_basis_functions.yml") as f:
                 ad_basis = yaml.safe_load(f)
         else:
-            with open(f"{current_path}/utils/add_basis_functions.yml", "r") as f:
+            with open(f"{current_path}/utils/add_basis_functions.yml") as f:
                 ad_basis = yaml.safe_load(f)
 
         if [*target_atom][-1][0] == "1":
@@ -192,7 +189,6 @@ class ForceOccupation:
                 " The calculation will continue without the additional core-hole basis set."
             )
             el_ad_basis = ""
-            pass
 
         # Add the additional basis set before the 5th line of '#'s after the species
         # and element line defining the start of the basis set. This is the only
@@ -245,11 +241,8 @@ class ForceOccupation:
             content.insert(insert_point, f"{el_ad_basis}\n")
             return content
 
-        else:
-            warnings.warn(
-                "There was an error with adding the additional basis function"
-            )
-            return content
+        warnings.warn("There was an error with adding the additional basis function")
+        return content
 
     @staticmethod
     def get_control_keywords(control) -> dict:
@@ -266,9 +259,8 @@ class ForceOccupation:
         opts : dict
             dictionary of keywords in the control file
         """
-
         # Find and replace keywords in control file
-        with open(control, "r") as read_control:
+        with open(control) as read_control:
             content = read_control.readlines()
 
         # Get keywords
@@ -307,7 +299,6 @@ class ForceOccupation:
         opts : dict
             Keywords
         """
-
         for key in list(ad_cont_opts.keys()):
             opts.update({key: ad_cont_opts[key]})
 
@@ -330,9 +321,8 @@ class ForceOccupation:
         content : List[str]
             list of lines in the control file
         """
-
         # Find and replace keywords in control file
-        with open(control, "r") as read_control:
+        with open(control) as read_control:
             content = read_control.readlines()
 
         divider_1 = "#" + 79 * "="
@@ -356,7 +346,7 @@ class ForceOccupation:
 
                 # Marker if ASE was used so keywords will be added in the same
                 # place as the others
-                elif divider_1 in line:
+                if divider_1 in line:
                     ident += 1
                     if ident == 3:
                         content.insert(j, f"{opt:<34} {opts[opt]}\n")
@@ -411,7 +401,6 @@ class ForceOccupation:
         content : List[str]
             list of lines in the control file
         """
-
         # Ensure returned variables are bound
         nuclear_index = 0
         valence_index = 0
@@ -484,7 +473,6 @@ class Projector(ForceOccupation):
 
     def setup_init_1(self, basis_set, defaults, control):
         """Write new directories and control files for the first initialisation calculation."""
-
         # Default control file options
         opts = {
             "charge": 0.1,
@@ -512,16 +500,15 @@ class Projector(ForceOccupation):
             subprocess.run(bash_add_basis.split(), check=True, stdout=new_control)
 
             # Change basis set label for core hole atom
-            with open(self.new_control, "r") as read_control:
+            with open(self.new_control) as read_control:
                 new_basis_content = read_control.readlines()
 
             for j, line in enumerate(new_basis_content):
                 spl = line.split()
 
-                if len(spl) > 1:
-                    if "species" == spl[0] and el == spl[1]:
-                        new_basis_content[j] = f"  species        {el}1\n"
-                        break
+                if len(spl) > 1 and spl[0] == "species" and el == spl[1]:
+                    new_basis_content[j] = f"  species        {el}1\n"
+                    break
 
             # Write it to intermediate control file
             with open(self.new_control, "w") as write_control:
@@ -544,7 +531,7 @@ class Projector(ForceOccupation):
                 shutil.copyfile(f"{self.run_loc}/ground/geometry.in", i1_geometry)
 
                 # Change geometry file
-                with open(i1_geometry, "r") as read_geom:
+                with open(i1_geometry) as read_geom:
                     geom_content = read_geom.readlines()
 
                 # Change core hole atom to {atom}{num}
@@ -590,7 +577,6 @@ class Projector(ForceOccupation):
 
     def setup_init_2(self, ks_start, ks_stop, occ, occ_type, spin, pbc):
         """Write new directories and control files for the second initialisation calculation."""
-
         ks_method = ""
         if occ_type == "force_occupation_projector":
             ks_method = "serial"
@@ -647,7 +633,6 @@ class Projector(ForceOccupation):
 
     def setup_hole(self, ks_start, ks_stop, occ, occ_type, spin, pbc):
         """Write new hole directories and control files for the hole calculation."""
-
         # Calculate original valence state
         val_spl = self.valence.split("\n")
         del val_spl[-1]
@@ -658,10 +643,8 @@ class Projector(ForceOccupation):
         ks_method = ""
         if occ_type == "force_occupation_projector":
             ks_method = "serial"
-        if occ_type == "deltascf_projector" and pbc:
-            ks_method = "serial"
-        else:
-            ks_method = None
+
+        ks_method = "serial" if occ_type == "deltascf_projector" and pbc else None
 
         # Loop over each element to constrain
         for el in self.element_symbols:
@@ -694,7 +677,7 @@ class Projector(ForceOccupation):
                 )
                 shutil.copyfile(self.new_control, h_control)
 
-                with open(h_control, "r") as read_control:
+                with open(h_control) as read_control:
                     control_content = read_control.readlines()
 
                 # Set nuclear and valence orbitals back to integer values
@@ -728,12 +711,8 @@ class Basis(ForceOccupation):
         self, spin, n_qn, l_qn, m_qn, occ_no, ks_max, occ_type, basis_set, defaults
     ):
         """Write new directories and control files for basis calculations."""
-
         # Enforce that the old method uses ks_method serial
-        if occ_type == "force_occupation_basis":
-            ks_method = "serial"
-        else:
-            ks_method = None
+        ks_method = "serial" if occ_type == "force_occupation_basis" else None
 
         # Iterate over each constrained atom
         for el in self.element_symbols:
@@ -776,7 +755,7 @@ class Basis(ForceOccupation):
                 # Create new geometry file for hole calc by adding label for
                 # core hole basis set
                 # Change geometry file
-                with open(geometry, "r") as read_geom:
+                with open(geometry) as read_geom:
                     geom_content = read_geom.readlines()
 
                 # Change core hole atom to {atom}{num}
@@ -803,14 +782,13 @@ class Basis(ForceOccupation):
                 os.system(f"cat {basis_set_file[0]} >> {control}")
 
                 # Change basis set label for core hole atom
-                with open(control, "r") as read_control:
+                with open(control) as read_control:
                     control_content = read_control.readlines()
 
                 for j, line in enumerate(control_content):
                     spl = line.split()
 
-                    if len(spl) > 1:
-                        if "species" == spl[0] and el == spl[1]:
+                    if len(spl) > 1 and spl[0] == "species" and el == spl[1]:
                             control_content[j] = f"  species        {el}1\n"
                             break
 

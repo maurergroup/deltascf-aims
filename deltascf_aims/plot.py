@@ -61,7 +61,6 @@ class XPSSpectrum:
         print_name : bool
             Whether to seach for the molecule name in the calculation input files.
         """
-
         self.gmp = gmp
         self.run_loc = run_loc
         self.targ_at = targ_at
@@ -81,7 +80,6 @@ class XPSSpectrum:
         output : bool
             Whether to print the mean average binding energy.
         """
-
         aims_y_max_arg = self.xy_axis_aims[1].argmax()
         self.aims_be = round(self.xy_axis_aims[0][aims_y_max_arg], 4)
 
@@ -92,7 +90,6 @@ class XPSSpectrum:
         """
         Calculate the range of the XPS spectrum to plot
         """
-
         glob_max_y = max(self.xy_axis_aims[1])
         glob_min_y = glob_max_y * self.gmp
 
@@ -118,7 +115,6 @@ class XPSSpectrum:
         molecule : str
             Molecule type.
         """
-
         # Get first directory with target atom followed by any number
         # Enable for both basis and projector file structures
         try:
@@ -133,11 +129,11 @@ class XPSSpectrum:
 
         # Enable for both basis and projector file structures
         try:
-            with open(f"{self.run_loc}/{match}/geometry.in", "r") as hole_geom:
+            with open(f"{self.run_loc}/{match}/geometry.in") as hole_geom:
                 lines = hole_geom.readlines()
 
         except FileNotFoundError:
-            with open(f"{self.run_loc}/{match}/hole/geometry.in", "r") as hole_geom:
+            with open(f"{self.run_loc}/{match}/hole/geometry.in") as hole_geom:
                 lines = hole_geom.readlines()
 
         try:
@@ -160,7 +156,6 @@ class XPSSpectrum:
         exclude_mabe : bool
             Whether to exclude the mean average binding energy from the plot.
         """
-
         # Plot the individual binding energies
         # Include the peak in the legend if first call
         plt.axvline(
@@ -215,7 +210,6 @@ class XPSSpectrum:
         """
         Plot the invidual binding energies. Include the peak in the legend if first call.
         """
-
         raise NotImplementedError
 
         plt.axvline(

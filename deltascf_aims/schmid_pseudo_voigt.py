@@ -46,7 +46,6 @@ def _schmid_pseudo_voigt(
     V : npt.NDArray[np.float64]
         Broadened spectrum point
     """
-
     if asymmetry:
         omega_as = 2 * omega / (1 + np.exp(-a * domain - b))
 
@@ -109,7 +108,6 @@ def broaden(
     data : npt.NDArray[np.float64]
         Broadened spectrum
     """
-
     domain = np.linspace(start, stop, 100000)
     data = np.zeros([len(domain)])
     for i in dirac_peaks:
