@@ -552,17 +552,20 @@ class Projector(ForceOccupation):
                     geom_content = read_geom.readlines()
 
                 # Change all core hole atoms to {atom}{num}
-                atom_counter = 0
+                # atom_counter = 0
                 for j, line in enumerate(geom_content):
                     spl = line.split()
 
                     if "atom" in line and el in line:
-                        # if atom_counter + 1 == i:
-                        if atom_counter + 1 in self.atom_specifier:
-                            partial_hole_atom = f" {el}1\n"
-                            geom_content[j] = " ".join(spl[0:-1]) + partial_hole_atom
+                        # Use core hole basis set for all target atoms
+                        partial_hole_atom = f" {el}1\n"
+                        geom_content[j] = " ".join(spl[0:-1]) + partial_hole_atom
 
-                        atom_counter += 1
+                        # atom_counter += 1
+
+                        # if atom_counter in self.atom_specifier:
+                        #     partial_hole_atom = f" {el}1\n"
+                        #     geom_content[j] = " ".join(spl[0:-1]) + partial_hole_atom
 
                 with open(i1_geometry, "w") as write_geom:
                     write_geom.writelines(geom_content)
