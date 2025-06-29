@@ -608,9 +608,10 @@ class Projector(ForceOccupation):
             # Loop over each individual atom to constrain
             for i in self.atom_specifier:
                 opts = {
+                    "spin": "collinear",
                     "charge": 1.1,
                     "sc_iter_limit": 1,
-                    occ_type: f"{i} {spin} {occ} {ks_start} {ks_stop}",
+                    occ_type: f"{i + ks_start - 1} {spin} {occ} {ks_start} {ks_stop}",
                     "KS_method": ks_method,
                     "restart": "restart_file",
                     "restart_save_iterations": 1,
@@ -669,11 +670,13 @@ class Projector(ForceOccupation):
             # Loop over each individual atom to constrain
             for i in self.atom_specifier:
                 opts = {
+                    "spin": "collinear",
                     "charge": 1.0,
                     "sc_iter_limit": 500,
                     "sc_init_iter": 75,
-                    occ_type: f"{i} {spin} {occ} {ks_start} {ks_stop}",
-                    "restart_read_only": "restart_file",
+                    occ_type: f"{i + ks_start - 1} {spin} {occ} {ks_start} {ks_stop}",
+                    "KS_method": ks_method,
+                    "restart": "restart_file",
                     # "force_single_restartfile": ".true.",
                     # "output": "cube spin_density",
                 }
@@ -738,9 +741,7 @@ class Basis(ForceOccupation):
             for i in range(len(self.atom_specifier)):
                 # Default control file options
                 opts = {
-                    # "xc": "pbe",
-                    # "spin": "collinear",
-                    # "default_initial_moment": 0,
+                    "spin": "collinear",
                     "charge": 1.0,
                     "sc_iter_limit": 500,
                     "sc_init_iter": 75,
