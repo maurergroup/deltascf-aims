@@ -2,7 +2,7 @@ import glob
 import os
 import warnings
 from pathlib import Path
-from typing import List, Literal, Tuple, Union
+from typing import Literal, Union
 
 import click
 import numpy as np
@@ -121,9 +121,9 @@ class Start:
         self.binary = binary
         self.run_loc = run_location
         self.constr_atom = constr_atom
-        self.spec_at_constr = spec_at_constr
         self.occupation = occupation
         self.n_atoms = n_atoms
+        self.spec_at_constr = spec_at_constr
         self.basis_set = basis_set
         self.use_extra_basis = use_extra_basis
         self.print_output = print_output
@@ -165,9 +165,7 @@ class Start:
             )
 
     def check_for_pbcs(self) -> None:
-        """
-        Check for lattice vectors and k-grid in input file.
-        """
+        """Check for lattice vectors and k-grid in input file."""
         self.found_l_vecs = False
         if self.geometry_input is not None:
             utils.check_constrained_geom(self.geometry_input)
@@ -190,6 +188,13 @@ class Start:
         click.MissingParameter
             The param_hint option has not been provided
         """
+        # Add 1 to the second value in the tuple in place
+        try:
+            self.spec_at_constr = (self.spec_at_constr[0], self.spec_at_constr[1] + 1)
+            self.spec_at_constr = list(range(*self.spec_at_constr))
+        except TypeError:
+            self.spec_at_constr = ()
+
         if self.constr_atom is None and len(self.spec_at_constr) == 0:
             raise click.MissingParameter(
                 param_hint="-c/--constrained_atom or -s/--specific_atom_constraint",
@@ -202,14 +207,13 @@ class Start:
             self.ase = False  # Do not use if control.in is specified
 
     # @_check_help_arg
-    def create_structure(self) -> Union[Atoms, List[Atoms]]:
+    def create_structure(self) -> Union[Atoms, list[Atoms]]:
         """
-        Initialise an ASE atoms object from geometry file if given or find databases if
-        not.
+        Initialise an ASE atoms object from geometry.in or an ASE database.
 
         Returns
         -------
-        Union[Atoms, List[Atoms]]
+        Union[Atoms, list[Atoms]]
             ASE atoms object
 
         Raises
@@ -224,15 +228,15 @@ class Start:
             try:
                 self.atoms = read(f"./{self.run_loc}/ground/geometry.in")
                 print(
-                    "molecule argument not provided, defaulting to using existing geometry.in"
-                    " file from the ground state calculation"
+                    "molecule argument not provided, defaulting to using existing "
+                    "geometry.in file from the ground state calculation"
                 )
 
-            except FileNotFoundError:
+            except FileNotFoundError as err:
                 raise click.MissingParameter(
                     param_hint="-m/--molecule or -e/--geometry_input",
                     param_type="option",
-                )
+                ) from err
 
         # Build the structure if given
         elif self.ase:
@@ -244,9 +248,7 @@ class Start:
         return self.atoms
 
     def find_constr_atom_element(self) -> None:
-        """
-        Find the element of the atom to perform XPS/NEXAFS for.
-        """
+        """Find the element of the atom to perform XPS/NEXAFS for."""
         # TODO: add support for multiple constrained atoms
         for atom in self.atoms:
             if atom.index in self.spec_at_constr:
@@ -284,10 +286,11 @@ class Start:
 
         return current_path, bin_path
 
-    def bin_path_prompt(self, current_path, bin_path) -> str:
+    def bin_path_prompt(self, current_path: str, bin_path: str) -> str:
         """
-        Ensure the user has entered the path to the binary. If not open the user's
-        $EDITOR to allow them to enter the path.
+        Ensure the user has entered the path to the binary.
+
+        Open the user's $EDITOR to allow them to enter the path.
 
         Parameters
         ----------
@@ -335,7 +338,7 @@ class Start:
 
         return self.binary
 
-    def check_species_path(self, binary) -> None:
+    def check_species_path(self, binary: str) -> None:
         """
         Check if the species_defaults directory exists in the correct location.
 
@@ -353,14 +356,15 @@ class Start:
                 "\nError: ensure the FHI-aims binary is in the 'build' directory of the FHI-aims"
                 " source code directory, and that the 'species_defaults' directory exists"
             )
-            raise NotADirectoryError(
+            msg = (
                 f"species_defaults directory not found in {Path(binary).parent.parent}"
             )
+            raise NotADirectoryError(msg)
 
     @property
-    def atoms(self):
+    def atoms(self) -> Atoms:
         """
-        ASE atoms object
+        ASE atoms object.
 
         Returns
         -------
@@ -370,9 +374,9 @@ class Start:
         return self._atoms
 
     @atoms.setter
-    def atoms(self, atoms):
+    def atoms(self, atoms: Atoms) -> None:
         """
-        Set the ASE atoms object
+        Set the ASE atoms object.
 
         Parameters
         ----------
@@ -381,13 +385,12 @@ class Start:
         """
         self._atoms = atoms
 
-    def add_calc(self, binary) -> Atoms:
+    def add_calc(self, binary: str) -> Atoms:
         """
         Add an ASE calculator to an Atoms object.
 
         Parameters
         ----------
-        __________
         binary : str
             path to the location of the FHI-aims binary
 
@@ -401,7 +404,9 @@ class Start:
         )
 
         if self.print_output:
-            warnings.warn("-p/--print_output is not supported with the ASE backend")
+            warnings.warn(
+                "-p/--print_output is not supported with the ASE backend", stacklevel=2
+            )
 
         return self.atoms
 
@@ -414,7 +419,7 @@ class Process:
 
     Attributes
     ----------
-
+    TODO
     """
 
     def __init__(
@@ -446,13 +451,13 @@ class Process:
         # Ensure that the constrained atom(s) have been given
         utils.check_args(("constrained_atom", self.start.constr_atom))
 
-    def calc_dscf_energies(self) -> Tuple[List[float], str]:
+    def calc_dscf_energies(self) -> tuple[list[float], str]:
         """
-        Parse absolute energies and calculate deltaSCF energies
+        Parse absolute energies and calculate deltaSCF energies.
 
         Returns
         -------
-        xps : List[float]
+        xps : list[float]
             deltaSCF energies
         """
         grenrgys = cds.read_ground_energy(self.start.run_loc)
@@ -463,7 +468,9 @@ class Process:
 
         return xps, element
 
-    def move_file_to_run_loc(self, element, type: Literal["peaks", "spectrum"]) -> None:
+    def move_file_to_run_loc(
+        self, element: str, file_type: Literal["peaks", "spectrum"]
+    ) -> None:
         """
         Move either the peaks or spectrum file to the run location.
 
@@ -471,10 +478,10 @@ class Process:
         ----------
         element : str
             element the binding energies were calculated for
-        type : Literal["peaks", "spectrum"]
+        file_type : Literal["peaks", "spectrum"]
             type of file to move
         """
-        os.system(f"mv {element}_xps_{type}.txt {self.start.run_loc}")
+        os.system(f"mv {element}_xps_{file_type}.txt {self.start.run_loc}")
 
     def call_broaden(self, xps) -> np.ndarray:
         """
@@ -482,7 +489,7 @@ class Process:
 
         Parameters
         ----------
-        xps : List[float]
+        xps : list[float]
             deltaSCF energies
 
         Returns
@@ -533,7 +540,7 @@ class Process:
         Parameters
         ----------
         xps : list
-            List of individual binding energies.
+            list of individual binding energies.
         """
         xps_spec = XPSSpectrum(
             self.gmp, self.start.run_loc, self.start.constr_atom, self.include_name
@@ -546,8 +553,7 @@ class Process:
 
 class Projector(GroundCalc, ExcitedCalc):
     """
-    Force occupation of the basis functions by projecting the occupation of Kohn-Sham
-    states onto them.
+    Force occupation of Kohn-Sham states and project onto basis functions.
 
     ...
 
@@ -559,15 +565,15 @@ class Projector(GroundCalc, ExcitedCalc):
         type of calculation to perform
     occ_type : click.Choice(["deltascf_projector", "force_occupation_projector"])
         use either the refactored or original projector keyword
-    pbc : Tuple[int]
+    pbc : tuple[int]
         k-grid for a periodic calculation
-    l_vecs : List[List[float]]
+    l_vecs : list[list[float]]
         lattice vectors in a 3x3 matrix of floats
     spin : click.Choice(["1", "2"])
         spin channel of the constraint
     ks_range : click.IntRange(1)
         range of Kohn-Sham states to constrain
-    control_opts : Tuple[str]
+    control_opts : tuple[str]
         additional control options to be added to the control.in file
 
     Methods
@@ -591,7 +597,7 @@ class Projector(GroundCalc, ExcitedCalc):
         self, start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts
     ):
         # Get methods from GroundCalc
-        super(Projector, self).__init__(
+        super().__init__(
             start.run_loc,
             start.atoms,
             start.basis_set,
@@ -601,9 +607,7 @@ class Projector(GroundCalc, ExcitedCalc):
         )
 
         # Get methods from ExcitedCalc
-        # Ignore pyright error as I don't think it understands MRO and thinks this calls
-        # the GroundCalc __init__
-        super(GroundCalc, self).__init__(start)  # pyright: ignore
+        super(GroundCalc, self).__init__(start)
 
         self.start = start
         self.run_type = run_type
@@ -622,8 +626,10 @@ class Projector(GroundCalc, ExcitedCalc):
         # Raise a warning if no additional control options have been specified
         utils.warn_no_extra_control_opts(self.control_opts, start.control_input)
 
-        # Convert constr_atom to a list
+        # if isinstance(self.start.spec_at_constr, list):
+        #     self.constr_atoms = self.start.spec_at_constr
         if not isinstance(self.start.constr_atom, list):
+            # Convert constr_atom to a list
             self.constr_atoms = [self.start.constr_atom]
         else:
             self.constr_atoms = self.start.constr_atom
@@ -675,13 +681,13 @@ class Projector(GroundCalc, ExcitedCalc):
         if check_args:
             utils.check_args(("ks_range", self.ks_range))
 
-    def _call_setups(self, proj) -> None:
+    def _call_setups(self, proj: force_occupation.Projector) -> None:
         """
-        Setup files and parameters required for the initialisation and hole calculations.
+        Set up files and parameters for the initialization and hole calculations.
 
         Parameters
         ----------
-        proj : ForceOccupation
+        proj : ForceOccupation.Projector
             Instance of ForceOccupation
         """
         proj.setup_init_1(self.start.basis_set, self.start.species, self.ground_control)
@@ -702,7 +708,7 @@ class Projector(GroundCalc, ExcitedCalc):
             self.start.found_k_grid,
         )
 
-    def _cp_restart_files(self, atom, begin, end) -> None:
+    def _cp_restart_files(self, atom: int, begin: str, end: str) -> None:
         """
         Copy the restart files from one calculation location to another.
 
@@ -717,8 +723,7 @@ class Projector(GroundCalc, ExcitedCalc):
         """
         os.path.isfile(
             glob.glob(
-                f"{self.start.run_loc}/{self.constr_atoms[0]}{atom}/{begin}/"
-                "*restart*"
+                f"{self.start.run_loc}/{self.constr_atoms[0]}{atom}/{begin}/*restart*"
             )[0]
         )
         os.system(
@@ -727,13 +732,13 @@ class Projector(GroundCalc, ExcitedCalc):
             f"/{end}/"
         )
 
-    def _get_element_symbols(self) -> Union[str, List[str]]:
+    def _get_element_symbols(self) -> Union[str, list[str]]:
         """
-        Create a list of element symbols to constrain
+        Create a list of element symbols to constrain.
 
         Returns
         -------
-        element_symbols : Union[str, List[str]]
+        element_symbols : Union[str, list[str]]
             Element symbols to constrain
         """
         if len(self.start.spec_at_constr) > 0:
@@ -747,9 +752,7 @@ class Projector(GroundCalc, ExcitedCalc):
         return element_symbols
 
     def check_periodic(self) -> None:
-        """
-        Check if the lattice vectors and k_grid have been provided.
-        """
+        """Check if the lattice vectors and k_grid have been provided."""
         print(
             "-p/--pbc argument not given, attempting to use"
             " k_grid from control file or previous calculation"
@@ -761,8 +764,8 @@ class Projector(GroundCalc, ExcitedCalc):
             for control in glob.glob(
                 f"{self.start.run_loc}/**/control.in", recursive=True
             ):
-                with open(control) as control:
-                    for line in control:
+                with open(control) as control_lines:
+                    for line in control_lines:
                         if "k_grid" in line:
                             pbc_list.append(line.split()[1:])
 
@@ -773,8 +776,10 @@ class Projector(GroundCalc, ExcitedCalc):
             pbc_list = tuple([int(i) for i in pbc_list[0]])
             self.control_opts["k_grid"] = pbc_list
 
-        except IndexError:
-            raise click.MissingParameter(param_hint="-p/--pbc", param_type="option")
+        except IndexError as err:
+            raise click.MissingParameter(
+                param_hint="-p/--pbc", param_type="option"
+            ) from err
 
     def add_l_vecs(self, geom):
         """
@@ -807,8 +812,8 @@ class Projector(GroundCalc, ExcitedCalc):
             for i in range(5, 8):
                 geom_content.insert(
                     i,
-                    f"lattice_vector {self.l_vecs[i-5][0]} {self.l_vecs[i-5][1]} "
-                    f" {self.l_vecs[i-5][2]}\n",
+                    f"lattice_vector {self.l_vecs[i - 5][0]} {self.l_vecs[i - 5][1]} "
+                    f" {self.l_vecs[i - 5][2]}\n",
                 )
 
         else:
@@ -822,7 +827,7 @@ class Projector(GroundCalc, ExcitedCalc):
         with open(geom, "w") as geom_file:
             geom_file.writelines(geom_content)
 
-    def setup_excited(self) -> Tuple[List[int], str]:
+    def setup_excited(self) -> tuple[list[int], str]:
         """
         Setup files and parameters required for the init and hole calculations.
 
@@ -865,7 +870,7 @@ class Projector(GroundCalc, ExcitedCalc):
 
         return self.atom_specifier, spec_run_info
 
-    def pre_init_2(self) -> Tuple[List[int], str]:
+    def pre_init_2(self) -> tuple[list[int], str]:
         """
         Prerequisite before running the 2nd init calculation.
 
@@ -907,13 +912,13 @@ class Projector(GroundCalc, ExcitedCalc):
 
         return self.atom_specifier, spec_run_info
 
-    def pre_hole(self) -> Tuple[List[int], str]:
+    def pre_hole(self) -> tuple[list[int], str]:
         """
         Prerequisite to running the hole calculation.
 
         Returns
         -------
-        Tuple[List[int], str]
+        tuple[list[int], str]
             Indices for atoms as specified in geometry.in, redirection location for
             STDERR of calculation
         """
@@ -1002,17 +1007,17 @@ class Basis(GroundCalc, ExcitedCalc):
         Magnetic quantum number for the basis function to constrain
     ks_max : int
         Highest energy Kohn-Sham state to constrain
-    control_opts : Tuple[str]
+    control_opts : tuple[str]
         Additional control options to be added to the control.in file
     ground_geom : str
         Location of the ground state geometry file
     ground_control : str
         Location of the ground state control file
-    control_opts : Tuple[str]
+    control_opts : tuple[str]
         Additional control options to be added to the control.in file
-    constr_atoms : List[int]
+    constr_atoms : list[int]
         Atom indices to constrain
-    atom_specifier : List[int]
+    atom_specifier : list[int]
         Atom indices as specified in geometry.in
     """
 
@@ -1092,13 +1097,13 @@ class Basis(GroundCalc, ExcitedCalc):
             ("m_qn", self.m_qn),
         )
 
-    def _get_element_symbols(self) -> Union[str, List[str]]:
+    def _get_element_symbols(self) -> Union[str, list[str]]:
         """
         Create a list of element symbols to constrain
 
         Returns
         -------
-        element_symbols : Union[str, List[str]]
+        element_symbols : Union[str, list[str]]
             Element symbols to constrain
         """
         if len(self.start.spec_at_constr) > 0:
@@ -1111,13 +1116,13 @@ class Basis(GroundCalc, ExcitedCalc):
 
         return element_symbols
 
-    def setup_excited(self) -> List[int]:
+    def setup_excited(self) -> list[int]:
         """
         Setup files and parameters required for the hole calculation.
 
         Returns
         -------
-        List[int]
+        list[int]
             Indices for atoms as specified in geometry.in
         """
         # Do this outside of _calc_checks as atom_specifier is needed for that function

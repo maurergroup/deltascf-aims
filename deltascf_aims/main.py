@@ -1,3 +1,5 @@
+from types import NoneType
+
 from deltascf_aims.aims_dscf import Basis, Process, Projector, Start
 
 
@@ -8,7 +10,7 @@ def start(*args):
     ctx = args.pop(0)
     start = Start(*args)
 
-    if len(start.spec_at_constr) > 0:
+    if not isinstance(start.spec_at_constr, NoneType) and len(start.spec_at_constr) > 0:
         start.check_for_geometry_input()
 
     start.check_for_pbcs()
@@ -32,10 +34,7 @@ def start(*args):
 
 
 def projector(*args):
-    """
-    Automate an FHI-aims core-level constraint calculation run using the projector
-    method.
-    """
+    """Automate an FHI-aims core-level constraint calculation run using projector."""
     # Get start object
     start = args[0]
 
@@ -45,9 +44,8 @@ def projector(*args):
 
     proj = Projector(*args)
 
-    if start.found_l_vecs or start.found_k_grid:
-        if proj.pbc is None:
-            proj.check_periodic()
+    if (start.found_l_vecs or start.found_k_grid) and proj.pbc is None:
+        proj.check_periodic()
 
     # If not ground, all the geometry.in files have been written already
     if proj.l_vecs is not None and proj.run_type != "ground":
@@ -94,7 +92,8 @@ def projector(*args):
                 )
 
         case _:
-            raise ValueError(f"Invalid run_type: {proj.run_type}")
+            msg = f"Invalid run_type: {proj.run_type}"
+            raise ValueError(msg)
 
 
 def basis(*args):

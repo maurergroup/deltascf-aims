@@ -77,8 +77,8 @@ from deltascf_aims.utils.click_extras import (
     "spec_at_constr",
     cls=NotRequiredIf,
     not_required_if=["constr_atom"],
-    multiple=True,
     type=click.IntRange(min=1, max_open=True),
+    nargs=2,
     help="specify specific atoms to constrain by their index in a geometry file",
 )
 @click.option(
@@ -102,7 +102,7 @@ from deltascf_aims.utils.click_extras import (
     "--basis_set",
     default="tight",
     show_default=True,
-    type=click.Choice(["light", "intermediate", "tight", "really_tight"]),
+    type=str,
     help="the basis set to use for the calculation",
 )
 @click.option(
@@ -162,8 +162,7 @@ def initialise(
     nprocs,
 ):
     """
-    An interface to automate core-hole constrained occupation methods in
-    FHI-aims.
+    Automation of core-hole constrained occupation methods in FHI-aims.
 
     There is functionality to use both the older and soon-to-be deprecated
     forced_occupation_basis and forced_occupation_projector methods, as well as
@@ -177,7 +176,7 @@ def initialise(
     geometry.in and control.in can be manually created and passed to this program.
     For full documentation, please refer to the README.md.
 
-    Copyright \u00A9 2022-2024, Dylan Morgan dylan.morgan@warwick.ac.uk
+    Copyright \u00a9 2022-2025, Dylan Morgan dylan.morgan@warwick.ac.uk
     """
     # TODO something like this (but check commented decorator above)
     # if "--help" in sys.argv:
@@ -259,9 +258,7 @@ def initialise(
 )
 @click.pass_obj
 def projector(start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts):
-    """
-    Force occupation through defining the Kohn-Sham states to occupy.
-    """
+    """Force occupation through defining the Kohn-Sham states to occupy."""
     return main.projector(
         start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts
     )
@@ -331,9 +328,7 @@ def projector(start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_op
 )
 @click.pass_obj
 def basis(start, run_type, occ_type, spin, n_qn, l_qn, m_qn, ks_max, control_opts):
-    """
-    Force occupation through basis functions.
-    """
+    """Force occupation through basis functions."""
     return main.basis(
         start, run_type, occ_type, spin, n_qn, l_qn, m_qn, ks_max, control_opts
     )
@@ -439,9 +434,7 @@ def plot(
     exclude_mabe,
     gmp,
 ):
-    """
-    Plot the simulated XPS spectra.
-    """
+    """Plot the simulated XPS spectra."""
     return main.plot(
         start,
         graph,

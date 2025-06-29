@@ -2,7 +2,7 @@ import glob
 import os
 import warnings
 from sys import platform
-from typing import List, Literal, Tuple, Union
+from typing import Any, Literal
 
 import numpy as np
 import yaml
@@ -19,7 +19,7 @@ import deltascf_aims.force_occupation as fo
 def add_control_opts(
     start,
     constr_atom: str,
-    i_atom: Union[int, str],
+    i_atom: int | str,
     calc: str,
     control_opts: dict,
 ) -> None:
@@ -32,7 +32,7 @@ def add_control_opts(
         Instance of Start class
     constr_atoms : str
         Constrained atom
-    i_atom : Union[int, str]
+    i_atom : int | str
         Atom index to add the control options to
     calc : str
         Name of the calculation to add the control options to
@@ -63,24 +63,21 @@ def add_control_opts(
 
 
 def add_molecule_identifier(
-    start, atom_specifier: List[int], basis: bool = False
+    start, atom_specifier: list[int], basis: bool = False
 ) -> None:
     """
     Add a string to the geometry.in to parse when plotting to identify it.
 
     Parameters
     ----------
-    start
-        Instance of the Start class
-    atom_specifier : List[int]
+    start: Start
+        Instance of Start
+    atom_specifier : list[int]
         Atom indices as given in geometry.in
     basis : bool, optional
         Whether a basis calculation is being run
     """
-    if basis:
-        hole = ""
-    else:
-        hole = "/hole"
+    hole = "" if basis else "/hole"
 
     with open(
         f"{start.run_loc}/{start.constr_atom}{atom_specifier[0]}{hole}/geometry.in",
@@ -101,7 +98,7 @@ def add_molecule_identifier(
         hole_geom.writelines(lines)
 
 
-def build_geometry(geometry: str) -> Union[Atoms, List[Atoms]]:
+def build_geometry(geometry: str) -> Atoms | list[Atoms]:
     """
     Try getting geometry data from various databases to create a geometry.in file.
 
@@ -112,7 +109,7 @@ def build_geometry(geometry: str) -> Union[Atoms, List[Atoms]]:
 
     Returns
     -------
-    atoms : Union[Atoms, List[Atoms]]
+    atoms : Atoms | list[Atoms]
         Atoms object, or list of atoms objects
 
     Raises
@@ -123,37 +120,47 @@ def build_geometry(geometry: str) -> Union[Atoms, List[Atoms]]:
     try:
         atoms = molecule(geometry)
         print("molecule found in ASE database")
-        return atoms
     except KeyError:
         print("molecule not found in ASE database, searching PubChem...")
+    else:
+        return atoms
 
     try:
         atoms = pubchem_atoms_search(name=geometry)
         print("molecule found as a PubChem name")
-        return atoms
     except ValueError:
         print(f"{geometry} not found in PubChem name")
+    else:
+        return atoms
 
     try:
         atoms = pubchem_atoms_search(cid=geometry)
         print("molecule found in PubChem CID")
-        return atoms
     except ValueError:
         print(f"{geometry} not found in PubChem CID")
+    else:
+        return atoms
 
     try:
         atoms = pubchem_atoms_search(smiles=geometry)
         print("molecule found in PubChem SMILES")
-        return atoms
-    except ValueError:
+    except ValueError as err:
         print(f"{geometry} not found in PubChem smiles")
         print(f"{geometry} not found in PubChem or ASE database")
         print("aborting...")
-        raise SystemExit
+        raise SystemExit from err
+    else:
+        return atoms
 
 
-def check_args(*args) -> None:
-    """Check if the required arguments have been specified.
+def check_args(*args: Any) -> None:
+    """
+    Check if the required arguments have been specified.
+
+    Parameters
+    ----------
+    *args: Any
+        Arguments to check
 
     Raises
     ------
@@ -191,7 +198,7 @@ def check_constrained_geom(geom_file: str) -> None:
     """
     for line in geom_file:
         if "constrain_relaxation" in line:
-            print("'constrain_relaxation' keyword found in geometry.in")
+            print("`constrain_relaxation` keyword found in geometry.in")
             print("ensure that no atoms are fixed in the geometry.in file")
             print(
                 "the geometry of the structure should have already been relaxed before "
@@ -204,8 +211,8 @@ def check_constrained_geom(geom_file: str) -> None:
 def check_curr_prev_run(
     run_type: Literal["ground", "hole", "init_1", "init_2"],
     run_loc: str,
-    constr_atoms: Union[List[str], str],
-    atom_specifier: List[int],
+    constr_atoms: list[str] | str,
+    atom_specifier: list[int],
     constr_method: Literal["projector", "basis"],
     hpc: bool,
     force: bool = False,
@@ -220,10 +227,10 @@ def check_curr_prev_run(
         Type of calculation to check for
     run_loc : str
         Path to the calculation directory
-    constr_atoms : Union[List[str], str]
+    constr_atoms : list[str] | str
         Constrained atoms
-    atom_specifier : List[int]
-        List of atom indices
+    atom_specifier : list[int]
+        list of atom indices
     constr_method : Literal["projector", "basis"]
         Method of constraining atom occupations
     hpc : bool
@@ -323,11 +330,10 @@ def check_params(start, include_hpc=False) -> None:
     BadParameter
         An incompatible parameter has been given
     """
-    if include_hpc:
-        if start.hpc:
-            raise BadParameter(
-                "the -h/--hpc flag is only supported for the 'hole' run type"
-            )
+    if include_hpc and start.hpc:
+        raise BadParameter(
+            "the -h/--hpc flag is only supported for the 'hole' run type"
+        )
 
     if len(start.spec_at_constr) == 0 and len(start.constr_atom) == 0:
         raise MissingParameter(
@@ -336,13 +342,13 @@ def check_params(start, include_hpc=False) -> None:
         )
 
 
-def check_species_in_control(control_content: List[str], species: str) -> bool:
+def check_species_in_control(control_content: list[str], species: str) -> bool:
     """
     Check if the species basis set definition exists in control.in.
 
     Parameters
     ----------
-    control_content : List[str]
+    control_content : list[str]
         Lines from the control.in file
     species : str
         Element of the basis set to search for
@@ -362,16 +368,16 @@ def check_species_in_control(control_content: List[str], species: str) -> bool:
     return False
 
 
-def convert_opts_to_dict(opts: Tuple[str], pbc: Union[Tuple[int], None]) -> dict:
+def convert_opts_to_dict(opts: tuple[str], pbc: tuple[int] | None) -> dict:
     """
     Convert the control options from a tuple to a dictionary.
 
     Parameters
     ----------
-    opts : Tuple[str]
-        Tuple of control options
-    pbc : Tuple[int]
-        Tuple of k-points
+    opts : tuple[str]
+        tuple of control options
+    pbc : tuple[int]
+        tuple of k-points
 
     Returns
     -------
@@ -393,7 +399,8 @@ def convert_opts_to_dict(opts: Tuple[str], pbc: Union[Tuple[int], None]) -> dict
 
 
 def convert_tuple_key_to_str(control_opts: dict) -> dict:
-    """Convert any keys given as tuples to strings in control_opts
+    """
+    Convert any keys given as tuples to strings in control_opts.
 
     Parameters
     ----------
@@ -406,7 +413,7 @@ def convert_tuple_key_to_str(control_opts: dict) -> dict:
         Ammended control.in file options
     """
     for i in control_opts.items():
-        if type(i[1]) == tuple:
+        if isinstance(i[1], tuple):
             control_opts[i[0]] = " ".join(str(j) for j in i[1])
 
     return control_opts
@@ -437,7 +444,7 @@ def create_calc(
         ASE calculator object
     """
     # Choose some sane defaults
-    aims_calc = Aims(
+    return Aims(
         xc="pbe",
         spin="collinear",
         default_initial_moment=1,
@@ -445,33 +452,31 @@ def create_calc(
         species_dir=f"{species}/defaults_2020/{int_grid}/",
     )
 
-    return aims_calc
-
 
 def get_atoms(
-    constr_atoms: Union[List[str], str],
-    spec_at_constr: List[int],
+    constr_atoms: list[str] | str,
+    spec_at_constr: list[int],
     geometry_path: str,
-    element_symbols: Union[str, List[str]],
-) -> List[int]:
+    element_symbols: str | list[str],
+) -> list[int]:
     """
     Get the atom indices to constrain from the geometry file.
 
     Parameters
     ----------
-    constr_atoms : Union[List[str], str]
-        List of elements to constrain
-    spec_at_constr : List[int]
-        List of atom indices to constrain
+    constr_atoms : list[str] | str
+        list of elements to constrain
+    spec_at_constr : list[int]
+        list of atom indices to constrain
     geometry_path : str
         Path to the geometry file
-    element_symbols : Union[str, List[str]]
+    element_symbols : str | list[str]
         Element symbols to constrain
 
     Returns
     -------
-    atom_specifier : List[int]
-        List of atom indices to constrain
+    list[int]
+        list of atom indices to constrain
 
     Raises
     ------
@@ -484,7 +489,7 @@ def get_atoms(
     atom_specifier = []
 
     # For if the user supplied element symbols to constrain
-    if constr_atoms is not None:
+    if isinstance(constr_atoms, list):
         # Check validity of specified elements
         for atom in constr_atoms:
             if atom not in elements:
@@ -528,13 +533,13 @@ def get_atoms(
     return atom_specifier
 
 
-def get_all_elements() -> List[str]:
+def get_all_elements() -> list[str]:
     """
     Get a list of all element symbols supported by FHI-aims.
 
     Returns
     -------
-    elements : List[str]
+    elements : list[str]
         Element symbols
     """
     # Find the root directory of the package
@@ -542,12 +547,10 @@ def get_all_elements() -> List[str]:
 
     # Get all supported elements in FHI-aims
     with open(f"{current_path}/elements.yml") as elements_file:
-        elements = yaml.load(elements_file, Loader=yaml.SafeLoader)
-
-    return elements
+        return yaml.load(elements_file, Loader=yaml.SafeLoader)
 
 
-def get_element_symbols(geom: str, spec_at_constr: List[int]) -> List[str]:
+def get_element_symbols(geom: str, spec_at_constr: list[int]) -> list[str]:
     """
     Find the element symbols from specified atom indices in a geometry file.
 
@@ -555,13 +558,13 @@ def get_element_symbols(geom: str, spec_at_constr: List[int]) -> List[str]:
     ----------
     geom : str
         Path to the geometry file
-    spec_at_constr : List[int]
-        List of atom indices
+    spec_at_constr : list[int]
+        list of atom indices
 
     Returns
     -------
-    List[str]
-        List of element symbols
+    list[str]
+        list of element symbols
     """
     with open(geom) as geom_file:
         lines = geom_file.readlines()
@@ -587,13 +590,13 @@ def get_element_symbols(geom: str, spec_at_constr: List[int]) -> List[str]:
     return element_symbols
 
 
-def _check_spin_polarised(lines: List[str]) -> bool:
+def _check_spin_polarised(lines: list[str]) -> bool:
     """
     Check if the FHI-aims calculation was spin polarised.
 
     Parameters
     ----------
-    lines : List[str]
+    lines : list[str]
         Lines from the aims.out file
 
     Returns
@@ -714,9 +717,7 @@ def print_ks_states(run_loc: str) -> None:
 
 
 def set_env_vars() -> None:
-    """
-    Set environment variables for running FHI-aims.
-    """
+    """Set environment variables for running FHI-aims."""
     os.system("export OMP_NUM_THREADS=1")
     os.system("export MKL_NUM_THREADS=1")
     os.system("export MKL_DYNAMIC=FALSE")
@@ -729,7 +730,7 @@ def set_env_vars() -> None:
         warnings.warn("OS not supported, please ensure ulimit is set to unlimited")
 
 
-def warn_no_extra_control_opts(opts: dict, inp: Union[File, None]) -> None:
+def warn_no_extra_control_opts(opts: dict, inp: File | None) -> None:
     """
     Raise a warning if not additional control options have been specified.
 
@@ -737,14 +738,15 @@ def warn_no_extra_control_opts(opts: dict, inp: Union[File, None]) -> None:
     ----------
     opts : dict
         additional control options to be added to the control.in file
-    inp : Union[File, None]
+    inp : File | None
         path to custom control.in file
 
     """
     if len(opts) < 1 and inp is None:
         warnings.warn(
             "No extra control options provided, using default options which can be "
-            "found in the 'control.in' file"
+            "found in the 'control.in' file",
+            stacklevel=2,
         )
 
 
@@ -1016,7 +1018,8 @@ class GroundCalc:
             Control options
         add_extra_basis : bool
             Whether to add additional basis function to the core hole
-        l_vecs : Union[Tuple[str], None]
+        l_vecs :
+        tuple[str] | None
             Lattice vectors
         print_output : bool
             Whether to print the output of the calculation
@@ -1072,7 +1075,7 @@ class ExcitedCalc:
 
         Parameters
         ----------
-        constr_atoms : List[str]
+        constr_atoms : list[str]
             Atom indices to constrain
         prev_calc : str
             Name of the previous calculation to check
@@ -1113,8 +1116,8 @@ class ExcitedCalc:
         ----------
         current_calc : Literal["init_1", "init_2", "hole"]
             Type of excited calculation to check for
-        constr_atoms : List[str]
-            List of constrained atoms
+        constr_atoms : list[str]
+            list of constrained atoms
         constr_method : Literal["projector", "basis"]
             Method of constraining atomic core holes
 
@@ -1161,8 +1164,7 @@ class ExcitedCalc:
 
                     try:
                         search_path = glob.glob(
-                            f"{self.start.run_loc}/{constr_atoms[0]}*/init_2/"
-                            "aims.out"
+                            f"{self.start.run_loc}/{constr_atoms[0]}*/init_2/aims.out"
                         )[0]
                     except FileNotFoundError:
                         raise FileNotFoundError(
@@ -1199,9 +1201,9 @@ class ExcitedCalc:
 
         Parameters
         ----------
-        atom_specifier : List[int]
-            List of atom indices to constrain
-        constr_atoms : List[str]
+        atom_specifier : list[int]
+            list of atom indices to constrain
+        constr_atoms : list[str]
             Constrained atoms
         run_type : Literal["init_1", "init_2", "hole", ""]
             Type of excited calculation to run
