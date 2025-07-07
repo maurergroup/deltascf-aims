@@ -22,7 +22,7 @@ numpy = "^2"
 optional = true
 
 [tool.poetry.group.dev.dependencies]
-ruff = ">=0.7.4,<0.12.0"
+ruff = ">=0.7.4,<0.13.0"
 ptpython = "^3.0.29"
 pyright = "^1.1.389"
 
