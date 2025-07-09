@@ -3,9 +3,7 @@ import os
 import shutil
 import warnings
 
-import yaml
-
-from deltascf_aims.utils import utils
+from deltascf_aims.utils import control_utils, geometry_utils
 
 
 class ForceOccupation:
@@ -47,7 +45,7 @@ class ForceOccupation:
             ad_cont_opts["k_grid"] = " ".join(map(str, ad_cont_opts["k_grid"]))
 
         self.new_control = f"{self.run_loc}/ground/control.in.new"
-        self.elements = utils.get_all_elements()
+        self.elements = geometry_utils.get_all_elements()
         self.azimuthal_refs = {"s": 1, "p": 2, "d": 3, "f": 4, "g": 5}
 
     def calculate_highest_E_orbital(self, orb_list: list[str]) -> str:
@@ -140,239 +138,6 @@ class ForceOccupation:
         self.valence = self.calculate_highest_E_orbital(output)
 
         return self.valence
-
-    @staticmethod
-    def add_additional_basis(elements, content, target_atom) -> list[str]:
-        """
-        Insert an additional basis set to control.in.
-
-        Parameters
-        ----------
-        elements : List[str]
-            list of all supported elements
-        content : List[str]
-            list of lines in the control file
-        target_atom : str
-            element symbol of target atom
-
-        Returns
-        -------
-        content : List[str]
-            list of lines in the control file
-        """
-        # Check the additional functions haven't already been added to control
-        for line in content:
-            if "# Additional basis functions for atom with a core hole" in line:
-                return content
-
-        current_path = os.path.dirname(os.path.realpath(__file__))
-
-        # Get the additional basis set
-        if "dscf_utils" in current_path.split("/"):
-            with open(f"{current_path}/utils/add_basis_functions.yml") as f:
-                ad_basis = yaml.safe_load(f)
-        else:
-            with open(f"{current_path}/utils/add_basis_functions.yml") as f:
-                ad_basis = yaml.safe_load(f)
-
-        if [*target_atom][-1][0] == "1":
-            root_target_atom = "".join([*target_atom][:-1])
-        else:
-            root_target_atom = target_atom
-
-        try:
-            el_ad_basis = ad_basis[root_target_atom]
-        except KeyError:
-            print(
-                f"Warning: the additional basis set for {target_atom} is not yet supported."
-                " The calculation will continue without the additional core-hole basis set."
-            )
-            el_ad_basis = ""
-
-        # Add the additional basis set before the 5th line of '#'s after the species
-        # and element line defining the start of the basis set. This is the only
-        # consistent marker across all the basis sets after which the additional basis
-        # set can be added.
-        basis_def_start = 0
-        for i, line in enumerate(content):
-            if "species" in line and target_atom in line:
-                basis_def_start = i
-                break
-
-        # Get the atomic number of the target atom
-        atom_index = elements.index(str(root_target_atom)) + 1
-
-        # prefix 0 if atom_index is less than 10
-        if atom_index < 10:
-            atom_index = f"0{atom_index}"
-
-        # Append a separator to the end of the file
-        # This helps with adding the additional basis set in the correct positions for
-        # some basis sets.
-        separator = 80 * "#"
-        content.append(separator + "\n")
-
-        # Find the line which contains the appropriate row of '#'s after the species and element
-        div_counter = 0
-        insert_point = 0
-        for i, line in enumerate(content[basis_def_start:]):
-            if separator in line:
-                if "species" in line and target_atom in line:
-                    break
-
-                if div_counter == 3:
-                    insert_point = i + basis_def_start
-
-                if div_counter < 4:
-                    div_counter += 1
-
-                else:
-                    insert_point = i + basis_def_start
-                    break
-
-        # Append the additional basis set to the end of the basis set in the control file
-        if (
-            el_ad_basis != ""
-            and basis_def_start != 0
-            and insert_point != 0
-            and div_counter != 0
-        ):
-            content.insert(insert_point, f"{el_ad_basis}\n")
-            return content
-
-        warnings.warn("There was an error with adding the additional basis function")
-        return content
-
-    @staticmethod
-    def get_control_keywords(control) -> dict:
-        """
-        Get the keywords in a control.in file.
-
-        Parameters
-        ----------
-        control : str
-            path to the control file
-
-        Returns
-        -------
-        opts : dict
-            dictionary of keywords in the control file
-        """
-        # Find and replace keywords in control file
-        with open(control) as read_control:
-            content = read_control.readlines()
-
-        # Get keywords
-        opts = {}
-        for line in content:
-            spl = line.split()
-
-            # Break when basis set definitions start
-            if 80 * "#" in line:
-                break
-
-            # Add the dictionary value as a string
-            if len(spl) > 1 and "#" not in spl[0]:
-                if len(spl[1:]) > 1:
-                    opts[spl[0]] = " ".join(spl[1:])
-
-                else:
-                    opts[spl[0]] = spl[1]
-
-        return opts
-
-    @staticmethod
-    def mod_keywords(ad_cont_opts, opts) -> dict:
-        """
-        Update default or parsed keywords with user-specified keywords.
-
-        Parameters
-        ----------
-        ad_cont_opts : dict
-            User-specified keywords
-        opts : dict
-            Default keywords
-
-        Returns
-        -------
-        opts : dict
-            Keywords
-        """
-        for key in list(ad_cont_opts.keys()):
-            opts.update({key: ad_cont_opts[key]})
-
-        return opts
-
-    @staticmethod
-    def change_control_keywords(control, opts) -> list[str]:
-        """
-        Modify the keywords in a control.in file from a dictionary of options.
-
-        Parameters
-        ----------
-        control : str
-            path to the control file
-        opts : dict
-            dictionary of keywords to change
-
-        Returns
-        -------
-        content : List[str]
-            list of lines in the control file
-        """
-        # Find and replace keywords in control file
-        with open(control) as read_control:
-            content = read_control.readlines()
-
-        divider_1 = "#" + 79 * "="
-        divider_2 = 80 * "#"
-
-        short_circuit = False
-
-        # Change keyword lines
-        for i, opt in enumerate(opts):
-            ident = 0
-
-            for j, line in enumerate(content):
-                if short_circuit:
-                    break
-
-                spl = line.split()
-
-                if opt in spl:
-                    content[j] = f"{opt:<34} {opts[opt]}\n"
-                    break
-
-                # Marker if ASE was used so keywords will be added in the same
-                # place as the others
-                if divider_1 in line:
-                    ident += 1
-                    if ident == 3:
-                        content.insert(j, f"{opt:<34} {opts[opt]}\n")
-                        break
-
-                # Marker for non-ASE input files so keywords will be added
-                # before the basis set definitions
-                elif divider_2 in line:
-                    ident += 1
-                    content.insert(j - 1, f"{opt:<34} {opts[opt]}\n")
-                    break
-
-            # Ensure keywords are added in all other instances
-            if ident == 0:
-                short_circuit = True
-
-                if i == 0:
-                    content.append(divider_1 + "\n")
-                    content.append(f"{opt:<34} {opts[opt]}\n")
-
-                else:
-                    content.append(f"{opt:<34} {opts[opt]}\n")
-
-                if i == len(opts) - 1:
-                    content.append(divider_1 + "\n")
-
-        return content
 
     def add_partial_charge(
         self, content, target_atom, at_num, partial_charge
@@ -494,7 +259,7 @@ class Projector(ForceOccupation):
         }
 
         # Add or change user-specified keywords to/in the control file
-        opts = self.mod_keywords(self.ad_cont_opts, opts)
+        opts = control_utils.mod_keywords(self.ad_cont_opts, opts)
 
         # Create a new intermediate file and write basis sets to it
         shutil.copyfile(control, self.new_control)
@@ -571,11 +336,13 @@ class Projector(ForceOccupation):
                     write_geom.writelines(geom_content)
 
                 # Change control file
-                control_content = self.change_control_keywords(i1_control, opts)
+                control_content = control_utils.change_control_keywords(
+                    i1_control, opts
+                )
 
                 # Add additional core-hole basis functions
                 if self.extra_basis:
-                    control_content = self.add_additional_basis(
+                    control_content = control_utils.add_additional_basis(
                         self.elements, control_content, f"{el}1"
                     )
 
@@ -622,7 +389,7 @@ class Projector(ForceOccupation):
                 }
 
                 # Add or change user-specified keywords to the control file
-                opts = self.mod_keywords(self.ad_cont_opts, opts)
+                opts = control_utils.mod_keywords(self.ad_cont_opts, opts)
 
                 i2_control = f"{self.run_loc}/{el}{i}/init_2/control.in"
 
@@ -635,11 +402,13 @@ class Projector(ForceOccupation):
                 )
 
                 # Change control file
-                control_content = self.change_control_keywords(i2_control, opts)
+                control_content = control_utils.change_control_keywords(
+                    i2_control, opts
+                )
 
                 # Add additional core-hole basis functions
                 if self.extra_basis:
-                    control_content = self.add_additional_basis(
+                    control_content = control_utils.add_additional_basis(
                         self.elements, control_content, f"{el}1"
                     )
 
@@ -688,7 +457,7 @@ class Projector(ForceOccupation):
                     opts["KS_method"] = ks_method
 
                 # Add or change user-specified keywords to the control file
-                opts = self.mod_keywords(self.ad_cont_opts, opts)
+                opts = control_utils.mod_keywords(self.ad_cont_opts, opts)
 
                 # Location of the hole control file
                 h_control = f"{self.run_loc}/{el}{i}/hole/control.in"
@@ -709,11 +478,11 @@ class Projector(ForceOccupation):
                 control_content[self.v_index] = self.valence
 
                 # Change control file
-                control_content = self.change_control_keywords(h_control, opts)
+                control_content = control_utils.change_control_keywords(h_control, opts)
 
                 # Add additional core-hole basis functions
                 if self.extra_basis:
-                    control_content = self.add_additional_basis(
+                    control_content = control_utils.add_additional_basis(
                         self.elements, control_content, f"{el}1"
                     )
 
@@ -756,7 +525,7 @@ class Basis(ForceOccupation):
                     opts["KS_method"] = ks_method
 
                 # Allow users to modify and add keywords
-                opts = self.mod_keywords(self.ad_cont_opts, opts)
+                opts = control_utils.mod_keywords(self.ad_cont_opts, opts)
 
                 i += 1
 
@@ -819,11 +588,11 @@ class Basis(ForceOccupation):
                     write_control.writelines(control_content)
 
                 # Change control file keywords
-                control_content = self.change_control_keywords(control, opts)
+                control_content = control_utils.change_control_keywords(control, opts)
 
                 # Add additional core-hole basis functions
                 if self.extra_basis:
-                    control_content = self.add_additional_basis(
+                    control_content = control_utils.add_additional_basis(
                         self.elements, control_content, f"{el}1"
                     )
 

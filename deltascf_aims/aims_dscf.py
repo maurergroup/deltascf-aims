@@ -13,8 +13,13 @@ import deltascf_aims.calc_dscf as cds
 from deltascf_aims import force_occupation
 from deltascf_aims.plot import XPSSpectrum
 from deltascf_aims.schmid_pseudo_voigt import broaden
-from deltascf_aims.utils import utils
-from deltascf_aims.utils.utils import ExcitedCalc, GroundCalc
+
+from deltascf_aims.utils import (
+    calculations_utils,
+    checks_utils,
+    control_utils,
+    geometry_utils,
+)
 
 
 class Start:
@@ -168,14 +173,14 @@ class Start:
         """Check for lattice vectors and k-grid in input file."""
         self.found_l_vecs = False
         if self.geometry_input is not None:
-            utils.check_constrained_geom(self.geometry_input)
-            self.found_l_vecs = utils.check_lattice_vecs(self.geometry_input)
+            checks_utils.check_constrained_geom(self.geometry_input)
+            self.found_l_vecs = checks_utils.check_lattice_vecs(self.geometry_input)
         else:
             self.found_l_vecs = False
 
         self.found_k_grid = False
         if self.control_input is not None:
-            self.found_k_grid = utils.check_k_grid(self.control_input)
+            self.found_k_grid = checks_utils.check_k_grid(self.control_input)
         else:
             self.found_k_grid = False
 
@@ -241,7 +246,7 @@ class Start:
         # Build the structure if given
         elif self.ase:
             if self.spec_mol is not None:
-                self.atoms = utils.build_geometry(self.spec_mol)
+                self.atoms = geometry_utils.build_geometry(self.spec_mol)
             if self.geometry_input is not None:
                 self.atoms = read(self.geometry_input.name)
 
@@ -399,7 +404,7 @@ class Start:
         atoms : Atoms
             ASE atoms object with a calculator added
         """
-        self.atoms.calc = utils.create_calc(
+        self.atoms.calc = calculations_utils.create_calc(
             self.nprocs, binary, self.run_cmd, self.species, self.basis_set
         )
 
@@ -449,7 +454,7 @@ class Process:
         self.gmp = gmp
 
         # Ensure that the constrained atom(s) have been given
-        utils.check_args(("constrained_atom", self.start.constr_atom))
+        checks_utils.check_args(("constrained_atom", self.start.constr_atom))
 
     def calc_dscf_energies(self) -> tuple[list[float], str]:
         """
@@ -525,9 +530,9 @@ class Process:
             resolution of the spectral curve - lower values increase the resolution
         """
         data = []
-        bin_val = 0.00
+        bin_val = 0.0
         for peak in peaks:
-            data.append(f"{bin_val!s} {peak!s}\n")
+            data.append(f"{bin_val} {peak}\n")
             bin_val += bin_width
 
         with open(f"{element}_xps_spectrum.txt", "w") as spec:
@@ -551,7 +556,7 @@ class Process:
         xps_spec.plot(xps, self.exclude_mabe)
 
 
-class Projector(GroundCalc, ExcitedCalc):
+class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
     """
     Force occupation of Kohn-Sham states and project onto basis functions.
 
@@ -607,7 +612,7 @@ class Projector(GroundCalc, ExcitedCalc):
         )
 
         # Get methods from ExcitedCalc
-        super(GroundCalc, self).__init__(start)
+        super(calculations_utils.GroundCalc, self).__init__(start)
 
         self.start = start
         self.run_type = run_type
@@ -621,10 +626,12 @@ class Projector(GroundCalc, ExcitedCalc):
         self.ground_control = f"{self.start.run_loc}/ground/control.in"
 
         # Convert control options to a dictionary
-        self.control_opts = utils.convert_opts_to_dict(control_opts, pbc)
+        self.control_opts = control_utils.convert_opts_to_dict(control_opts, pbc)
 
         # Raise a warning if no additional control options have been specified
-        utils.warn_no_extra_control_opts(self.control_opts, start.control_input)
+        calculations_utils.warn_no_extra_control_opts(
+            self.control_opts, start.control_input
+        )
 
         # if isinstance(self.start.spec_at_constr, list):
         #     self.constr_atoms = self.start.spec_at_constr
@@ -656,7 +663,7 @@ class Projector(GroundCalc, ExcitedCalc):
         prev_calc = self.check_prereq_calc(current_calc, self.constr_atoms, "projector")
 
         # Check that the current calculation has not already been run
-        utils.check_curr_prev_run(
+        checks_utils.check_curr_prev_run(
             self.run_type,
             self.start.run_loc,
             self.constr_atoms,
@@ -673,13 +680,13 @@ class Projector(GroundCalc, ExcitedCalc):
 
         # Check that the constrained atoms have been given
         if current_calc != "hole":
-            utils.check_params(self.start)
+            checks_utils.check_params(self.start)
         else:
-            utils.check_params(self.start, include_hpc=False)
+            checks_utils.check_params(self.start, include_hpc=False)
 
         # Check required arguments have been given
         if check_args:
-            utils.check_args(("ks_range", self.ks_range))
+            checks_utils.check_args(("ks_range", self.ks_range))
 
     def _call_setups(self, proj: force_occupation.Projector) -> None:
         """
@@ -742,7 +749,7 @@ class Projector(GroundCalc, ExcitedCalc):
             Element symbols to constrain
         """
         if len(self.start.spec_at_constr) > 0:
-            element_symbols = utils.get_element_symbols(
+            element_symbols = geometry_utils.get_element_symbols(
                 self.ground_geom, self.start.spec_at_constr
             )[0]
             self.constr_atoms = element_symbols
@@ -840,7 +847,7 @@ class Projector(GroundCalc, ExcitedCalc):
         element_symbols = self._get_element_symbols()
 
         # Get the atom indices to constrain
-        self.atom_specifier = utils.get_atoms(
+        self.atom_specifier = geometry_utils.get_atoms(
             self.constr_atoms,
             self.start.spec_at_constr,
             self.ground_geom,
@@ -883,7 +890,7 @@ class Projector(GroundCalc, ExcitedCalc):
         element_symbols = self._get_element_symbols()
 
         # Get the atom indices to constrain
-        self.atom_specifier = utils.get_atoms(
+        self.atom_specifier = geometry_utils.get_atoms(
             self.constr_atoms,
             self.start.spec_at_constr,
             self.ground_geom,
@@ -895,7 +902,7 @@ class Projector(GroundCalc, ExcitedCalc):
         # Add any additional options to the control file
         for i in range(len(self.atom_specifier)):
             if len(self.control_opts) > 0:
-                utils.add_control_opts(
+                control_utils.add_control_opts(
                     self.start,
                     self.constr_atoms[0],
                     self.atom_specifier[i],
@@ -926,7 +933,7 @@ class Projector(GroundCalc, ExcitedCalc):
         element_symbols = self._get_element_symbols()
 
         # Get the atom indices to constrain
-        self.atom_specifier = utils.get_atoms(
+        self.atom_specifier = geometry_utils.get_atoms(
             self.constr_atoms,
             self.start.spec_at_constr,
             self.ground_geom,
@@ -959,12 +966,12 @@ class Projector(GroundCalc, ExcitedCalc):
 
         # Add a tag to the geometry file to identify the molecule name
         if self.start.spec_mol is not None:
-            utils.add_molecule_identifier(self.start, self.atom_specifier)
+            geometry_utils.add_molecule_identifier(self.start, self.atom_specifier)
 
         # Add any additional control options to the hole control file
         for i in range(len(self.atom_specifier)):
             if len(self.control_opts) > 0:
-                utils.add_control_opts(
+                control_utils.add_control_opts(
                     self.start,
                     self.constr_atoms[0],
                     self.atom_specifier[i],
@@ -983,7 +990,7 @@ class Projector(GroundCalc, ExcitedCalc):
         return self.atom_specifier, spec_run_info
 
 
-class Basis(GroundCalc, ExcitedCalc):
+class Basis(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
     """
     Force occupation of the basis states directly.
 
@@ -1045,7 +1052,7 @@ class Basis(GroundCalc, ExcitedCalc):
         # Get methods from ExcitedCalc
         # Ignore pyright error as I don't think it understands MRO and thinks this calls
         # the GroundCalc __init__
-        super(GroundCalc, self).__init__(start)  # pyright: ignore
+        super(calculations_utils.GroundCalc, self).__init__(start)  # pyright: ignore
 
         self.start = start
         self.run_type = run_type
@@ -1060,10 +1067,12 @@ class Basis(GroundCalc, ExcitedCalc):
         self.ground_control = f"{self.start.run_loc}/ground/control.in"
 
         # Convert control options to a dictionary
-        self.control_opts = utils.convert_opts_to_dict(control_opts, None)
+        self.control_opts = control_utils.convert_opts_to_dict(control_opts, None)
 
         # Raise a warning if no additional control options have been specified
-        utils.warn_no_extra_control_opts(self.control_opts, start.control_input)
+        calculations_utils.warn_no_extra_control_opts(
+            self.control_opts, start.control_input
+        )
 
         # Convert constr_atoms to a list
         if not isinstance(self.start.constr_atom, list):
@@ -1072,11 +1081,9 @@ class Basis(GroundCalc, ExcitedCalc):
             self.constr_atoms = self.start.constr_atom
 
     def _calc_checks(self) -> None:
-        """
-        Perform checks before running the excited calculation.
-        """
+        """Perform checks before running the excited calculation."""
         # Check that the current calculation has not already been run
-        utils.check_curr_prev_run(
+        checks_utils.check_curr_prev_run(
             self.run_type,
             self.start.run_loc,
             self.constr_atoms,
@@ -1087,10 +1094,10 @@ class Basis(GroundCalc, ExcitedCalc):
         )
 
         # Check that the constrained atoms have been given
-        utils.check_params(self.start, include_hpc=False)
+        checks_utils.check_params(self.start, include_hpc=False)
 
         # Check that the required arguments have been given
-        utils.check_args(
+        checks_utils.check_args(
             ("ks_max", self.ks_max),
             ("n_qn", self.n_qn),
             ("l_qn", self.l_qn),
@@ -1107,7 +1114,7 @@ class Basis(GroundCalc, ExcitedCalc):
             Element symbols to constrain
         """
         if len(self.start.spec_at_constr) > 0:
-            element_symbols = utils.get_element_symbols(
+            element_symbols = geometry_utils.get_element_symbols(
                 self.ground_geom, self.start.spec_at_constr
             )[0]
             self.constr_atoms = element_symbols
@@ -1132,7 +1139,7 @@ class Basis(GroundCalc, ExcitedCalc):
         element_symbols = self._get_element_symbols()
 
         # Get the atom indices to constrain
-        self.atom_specifier = utils.get_atoms(
+        self.atom_specifier = geometry_utils.get_atoms(
             self.constr_atoms,
             self.start.spec_at_constr,
             self.ground_geom,
@@ -1166,6 +1173,8 @@ class Basis(GroundCalc, ExcitedCalc):
 
         # Add molecule ID to geometry file
         if self.start.spec_mol is not None:
-            utils.add_molecule_identifier(self.start, self.atom_specifier, basis=True)
+            geometry_utils.add_molecule_identifier(
+                self.start, self.atom_specifier, basis=True
+            )
 
         return self.atom_specifier

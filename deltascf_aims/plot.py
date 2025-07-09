@@ -174,9 +174,8 @@ class XPSSpectrum:
         plt.xlabel("Energy / eV")
         plt.ylabel("Intensity")
         ylims = plt.ylim((0, self.y_max * 1.4))
-        plt.xlim(
-            self.x_max, self.x_min
-        )  # Reverse to match experimental XPS conventions
+        # Reverse to match experimental XPS conventions
+        plt.xlim(self.x_max, self.x_min)
 
         # Plot the spectrum
         plt.plot(self.plot_x, self.plot_y, label="Simulated XPS spectrum")

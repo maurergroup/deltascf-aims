@@ -1,422 +1,20 @@
 import glob
 import os
-import warnings
-from sys import platform
-from typing import Any, Literal
+import warnings.warn
+from typing import Literal
 
 import numpy as np
 import yaml
-from ase import Atoms
-from ase.build import molecule
 from ase.calculators.aims import Aims
-from ase.data.pubchem import pubchem_atoms_search
 from ase.io import write
-from click import BadParameter, File, MissingParameter, progressbar
-
-import deltascf_aims.force_occupation as fo
-
-
-def add_control_opts(
-    start,
-    constr_atom: str,
-    i_atom: int | str,
-    calc: str,
-    control_opts: dict,
-) -> None:
-    """
-    Add additional control options to the control file.
-
-    Parameters
-    ----------
-    start
-        Instance of Start class
-    constr_atoms : str
-        Constrained atom
-    i_atom : int | str
-        Atom index to add the control options to
-    calc : str
-        Name of the calculation to add the control options to
-    control_opts : dict
-        Control options
-    """
-    # Convert non-string array-type structures to strings
-    for key, opt in control_opts.items():
-        if not isinstance(opt, str):  # Must be list, tuple, or set
-            control_opts[key] = " ".join(str(i) for i in opt)
-
-    parsed_control_opts = fo.ForceOccupation.get_control_keywords(
-        f"{start.run_loc}/{constr_atom}{i_atom}/{calc}/control.in"
-    )
-    mod_control_opts = fo.ForceOccupation.mod_keywords(
-        control_opts, parsed_control_opts
-    )
-    control_content = fo.ForceOccupation.change_control_keywords(
-        f"{start.run_loc}/{constr_atom}{i_atom}/{calc}/control.in",
-        mod_control_opts,
-    )
-
-    with open(
-        f"{start.run_loc}/{constr_atom}{i_atom}/{calc}/control.in",
-        "w",
-    ) as control_file:
-        control_file.writelines(control_content)
-
-
-def add_molecule_identifier(
-    start, atom_specifier: list[int], basis: bool = False
-) -> None:
-    """
-    Add a string to the geometry.in to parse when plotting to identify it.
-
-    Parameters
-    ----------
-    start: Start
-        Instance of Start
-    atom_specifier : list[int]
-        Atom indices as given in geometry.in
-    basis : bool, optional
-        Whether a basis calculation is being run
-    """
-    hole = "" if basis else "/hole"
-
-    with open(
-        f"{start.run_loc}/{start.constr_atom}{atom_specifier[0]}{hole}/geometry.in",
-    ) as hole_geom:
-        lines = hole_geom.readlines()
-
-    # Check that the molecule identifier is not already in the file
-    for line in lines:
-        if start.spec_mol in line:
-            return
-
-    lines.insert(4, f"# {start.spec_mol}\n")
-
-    with open(
-        f"{start.run_loc}/{start.constr_atom}{atom_specifier[0]}{hole}/geometry.in",
-        "w",
-    ) as hole_geom:
-        hole_geom.writelines(lines)
-
-
-def build_geometry(geometry: str) -> Atoms | list[Atoms]:
-    """
-    Try getting geometry data from various databases to create a geometry.in file.
-
-    Parameters
-    ----------
-    geometry : str
-        Name or formula of the system to be created
-
-    Returns
-    -------
-    atoms : Atoms | list[Atoms]
-        Atoms object, or list of atoms objects
-
-    Raises
-    ------
-    SystemExit
-        Exit the program if the system is not found in any database
-    """
-    try:
-        atoms = molecule(geometry)
-        print("molecule found in ASE database")
-    except KeyError:
-        print("molecule not found in ASE database, searching PubChem...")
-    else:
-        return atoms
-
-    try:
-        atoms = pubchem_atoms_search(name=geometry)
-        print("molecule found as a PubChem name")
-    except ValueError:
-        print(f"{geometry} not found in PubChem name")
-    else:
-        return atoms
-
-    try:
-        atoms = pubchem_atoms_search(cid=geometry)
-        print("molecule found in PubChem CID")
-    except ValueError:
-        print(f"{geometry} not found in PubChem CID")
-    else:
-        return atoms
-
-    try:
-        atoms = pubchem_atoms_search(smiles=geometry)
-        print("molecule found in PubChem SMILES")
-    except ValueError as err:
-        print(f"{geometry} not found in PubChem smiles")
-        print(f"{geometry} not found in PubChem or ASE database")
-        print("aborting...")
-        raise SystemExit from err
-    else:
-        return atoms
-
-
-def check_args(*args: Any) -> None:
-    """
-    Check if the required arguments have been specified.
-
-    Parameters
-    ----------
-    *args: Any
-        Arguments to check
-
-    Raises
-    ------
-    MissingParameter
-        A required parameter has not been given
-    """
-    # TODO: Check that this function is working correctly
-    # TODO: Check if this works with the locals() commented out below
-    # def_args = locals()
-    # for arg in def_args["args"]:
-    for arg in args:
-        if arg[1] is None:
-            if arg[0] == "spec_mol":
-                # Convert to list and back to assign to tuple
-                arg = list(arg)
-                arg[0] = "molecule"
-                arg = tuple(arg)
-
-            raise MissingParameter(param_hint=f"'--{arg[0]}'", param_type="option")
-
-
-def check_constrained_geom(geom_file: str) -> None:
-    """
-    Check for `constrain_relaxation` keywords in the geometry.in.
-
-    Parameters
-    ----------
-    geom_file : str
-        Path to geometry.in file
-
-    Raises
-    ------
-    SystemExit
-        Exit the program if the `constrain_relaxation` keyword is found
-    """
-    for line in geom_file:
-        if "constrain_relaxation" in line:
-            print("`constrain_relaxation` keyword found in geometry.in")
-            print("ensure that no atoms are fixed in the geometry.in file")
-            print(
-                "the geometry of the structure should have already been relaxed before "
-                "running single-point calculations"
-            )
-            print("aborting...")
-            raise SystemExit(1)
-
-
-def check_curr_prev_run(
-    run_type: Literal["ground", "hole", "init_1", "init_2"],
-    run_loc: str,
-    constr_atoms: list[str] | str,
-    atom_specifier: list[int],
-    constr_method: Literal["projector", "basis"],
-    hpc: bool,
-    force: bool = False,
-) -> None:
-    """
-
-    Check if the current calculation has previously been run.
-
-    Parameters
-    ----------
-    run_type : Literal["ground", "hole", "init_1", "init_2"]
-        Type of calculation to check for
-    run_loc : str
-        Path to the calculation directory
-    constr_atoms : list[str] | str
-        Constrained atoms
-    atom_specifier : list[int]
-        list of atom indices
-    constr_method : Literal["projector", "basis"]
-        Method of constraining atom occupations
-    hpc : bool
-        Whether to run on a HPC
-    force : bool, optional
-        Force the calculation to run
-
-    Raises
-    ------
-    SystemExit
-        Exit the program if the calculation has already been run
-    """
-    if run_type == "ground":
-        search_path = f"{run_loc}/{run_type}/aims.out"
-    elif constr_method == "projector":
-        search_path = (
-            f"{run_loc}/{constr_atoms[0]}{atom_specifier[0]}/{run_type}/aims.out"
-        )
-    elif constr_method == "basis":
-        search_path = f"{run_loc}/{constr_atoms[0]}{atom_specifier[0]}/aims.out"
-
-    if os.path.isfile(search_path) and not hpc and not force:
-        warnings.warn("Calculation has already been completed")
-        cont = None
-        while cont != "y":
-            cont = str(input("Do you want to continue? (y/n) ")).lower()
-
-            if cont == "n":
-                print("aborting...")
-                raise SystemExit(1)
-
-            if cont == "y":
-                break
-
-
-def check_k_grid(control_file: str) -> bool:
-    """
-    Check if there is a k_grid in the control.in.
-
-    Parameters
-    ----------
-    control_file : str
-        Path to control.in file
-
-    Returns
-    -------
-    k_grid : bool
-        Whether the k_grid input parameter is found
-    """
-    k_grid = False
-
-    for line in control_file:
-        if "k_grid" in line:
-            k_grid = True
-
-    return k_grid
-
-
-def check_lattice_vecs(geom_file: str) -> bool:
-    """
-    Check if lattice vectors are given in the geometry.in file.
-
-    Parameters
-    ----------
-    geom_file : str
-        Path to geometry.in file
-
-    Returns
-    -------
-    l_vecs : bool
-        True if lattice vectors are found, False otherwise
-    """
-    l_vecs = False
-
-    for line in geom_file:
-        if "lattice_vector" in line:
-            l_vecs = True
-
-    return l_vecs
-
-
-def check_params(start, include_hpc=False) -> None:
-    """
-    Check that the parameters given in Start are valid.
-
-    Parameters
-    ----------
-    start
-        Instance of the Start class
-    include_hpc : bool, optional
-        Include the hpc parameter in the check
-
-    Raises
-    ------
-    MissingParameter
-        A required parameter has not been given
-    BadParameter
-        An incompatible parameter has been given
-    """
-    if include_hpc and start.hpc:
-        raise BadParameter(
-            "the -h/--hpc flag is only supported for the 'hole' run type"
-        )
-
-    if len(start.spec_at_constr) == 0 and len(start.constr_atom) == 0:
-        raise MissingParameter(
-            param_hint="-c/--constrained_atom or -s/--specific_atom_constraint",
-            param_type="option",
-        )
-
-
-def check_species_in_control(control_content: list[str], species: str) -> bool:
-    """
-    Check if the species basis set definition exists in control.in.
-
-    Parameters
-    ----------
-    control_content : list[str]
-        Lines from the control.in file
-    species : str
-        Element of the basis set to search for
-
-    Returns
-    -------
-    bool
-        True if the basis set for the species was found in control.in, False otherwise
-
-    """
-    for line in control_content:
-        spl = line.split()
-
-        if len(spl) > 0 and spl[0] == "species" and species == spl[1]:
-            return True
-
-    return False
-
-
-def convert_opts_to_dict(opts: tuple[str], pbc: tuple[int] | None) -> dict:
-    """
-    Convert the control options from a tuple to a dictionary.
-
-    Parameters
-    ----------
-    opts : tuple[str]
-        tuple of control options
-    pbc : tuple[int]
-        tuple of k-points
-
-    Returns
-    -------
-    opts_dict : dict
-        Dictionary of control options
-    """
-    opts_dict = {}
-
-    for opt in opts:
-        spl = opt.split(sep="=")
-
-        opts_dict[spl[0]] = spl[1]
-
-    # Also add k_grid if given
-    if pbc is not None:
-        opts_dict.update({"k_grid": pbc})
-
-    return opts_dict
-
-
-def convert_tuple_key_to_str(control_opts: dict) -> dict:
-    """
-    Convert any keys given as tuples to strings in control_opts.
-
-    Parameters
-    ----------
-    control_opts : dict
-        Options for the control.in file
-
-    Returns
-    -------
-    control_opts : dict
-        Ammended control.in file options
-    """
-    for i in control_opts.items():
-        if isinstance(i[1], tuple):
-            control_opts[i[0]] = " ".join(str(j) for j in i[1])
-
-    return control_opts
+from click import File, progressbar
+
+from deltascf_aims.utils.checks import check_spin_polarised
+from deltascf_aims.utils.control import (
+    add_additional_basis,
+    add_control_opts,
+    write_control,
+)
 
 
 def create_calc(
@@ -453,173 +51,6 @@ def create_calc(
     )
 
 
-def get_atoms(
-    constr_atoms: list[str] | str,
-    spec_at_constr: list[int],
-    geometry_path: str,
-    element_symbols: str | list[str],
-) -> list[int]:
-    """
-    Get the atom indices to constrain from the geometry file.
-
-    Parameters
-    ----------
-    constr_atoms : list[str] | str
-        list of elements to constrain
-    spec_at_constr : list[int]
-        list of atom indices to constrain
-    geometry_path : str
-        Path to the geometry file
-    element_symbols : str | list[str]
-        Element symbols to constrain
-
-    Returns
-    -------
-    list[int]
-        list of atom indices to constrain
-
-    Raises
-    ------
-    Click.MissingParameter
-        A required parameter has not been given
-    ValueError
-        An invalid parameter has been given
-    """
-    elements = get_all_elements()
-    atom_specifier = []
-
-    # For if the user supplied element symbols to constrain
-    if isinstance(constr_atoms, list):
-        # Check validity of specified elements
-        for atom in constr_atoms:
-            if atom not in elements:
-                raise ValueError("invalid element specified")
-
-        print("Calculating all target atoms in geometry.in")
-
-        # Constrain all atoms of the target element
-        for atom in constr_atoms:
-            with open(geometry_path) as geom_in:
-                atom_counter = 0
-
-                for line in geom_in:
-                    spl = line.split()
-
-                    if len(spl) > 0 and "atom" in spl[0]:
-                        atom_counter += 1
-                        element = spl[-1]  # Identify atom
-                        identifier = spl[0]  # Extra check that line is an atom
-
-                        if "atom" in identifier and element == atom:
-                            atom_specifier.append(atom_counter)
-
-    # For if the user supplied atom indices to constrain
-    elif len(spec_at_constr) > 0:
-        # Check validity of specified elements
-        for atom in element_symbols:
-            if atom not in elements:
-                raise ValueError("Invalid element specified")
-
-        atom_specifier = list(spec_at_constr)
-
-    else:
-        raise MissingParameter(
-            param_hint="-c/--constrained_atom or -s/--specific_atom_constraint",
-            param_type="option",
-        )
-
-    print("Specified atom indices:", atom_specifier)
-
-    return atom_specifier
-
-
-def get_all_elements() -> list[str]:
-    """
-    Get a list of all element symbols supported by FHI-aims.
-
-    Returns
-    -------
-    elements : list[str]
-        Element symbols
-    """
-    # Find the root directory of the package
-    current_path = os.path.dirname(os.path.realpath(__file__))
-
-    # Get all supported elements in FHI-aims
-    with open(f"{current_path}/elements.yml") as elements_file:
-        return yaml.load(elements_file, Loader=yaml.SafeLoader)
-
-
-def get_element_symbols(geom: str, spec_at_constr: list[int]) -> list[str]:
-    """
-    Find the element symbols from specified atom indices in a geometry file.
-
-    Parameters
-    ----------
-    geom : str
-        Path to the geometry file
-    spec_at_constr : list[int]
-        list of atom indices
-
-    Returns
-    -------
-    list[str]
-        list of element symbols
-    """
-    with open(geom) as geom_file:
-        lines = geom_file.readlines()
-
-    atom_lines = []
-
-    # Copy only the lines which specify atom coors into a new list
-    for line in lines:
-        spl = line.split()
-        if len(line) > 0 and spl[0] == "atom":
-            atom_lines.append(line)
-
-    element_symbols = []
-
-    # Get the element symbols from the atom coors
-    # Uniquely add each element symbol
-    for atom in spec_at_constr:
-        element = atom_lines[atom].split()[-1]
-
-        if element not in element_symbols:
-            element_symbols.append(element)
-
-    return element_symbols
-
-
-def _check_spin_polarised(lines: list[str]) -> bool:
-    """
-    Check if the FHI-aims calculation was spin polarised.
-
-    Parameters
-    ----------
-    lines : list[str]
-        Lines from the aims.out file
-
-    Returns
-    -------
-    bool
-        Whether the calculation was spin polarised or not
-    """
-    spin_polarised = False
-
-    for line in lines:
-        spl = line.split()
-        if len(spl) == 2:
-            # Don't break the loop if spin polarised calculation is found as if the
-            # keyword is specified again, it is the last one that is used
-            if spl[0] == "spin" and spl[1] == "collinear":
-                spin_polarised = True
-
-            if spl[0] == "spin" and spl[1] == "none":
-                spin_polarised = False
-
-    return spin_polarised
-
-
 def print_ks_states(run_loc: str) -> None:
     """
     Print the Kohn-Sham eigenvalues from a calculation.
@@ -638,7 +69,7 @@ def print_ks_states(run_loc: str) -> None:
         lines = aims.readlines()
 
     # Check if the calculation was spin polarised
-    spin_polarised = _check_spin_polarised(lines)
+    spin_polarised = check_spin_polarised(lines)
 
     # Parse line to find the start of the KS eigenvalues
     target_line = "  State    Occupation    Eigenvalue [Ha]    Eigenvalue [eV]"
@@ -722,7 +153,7 @@ def set_env_vars() -> None:
     os.system("export MKL_NUM_THREADS=1")
     os.system("export MKL_DYNAMIC=FALSE")
 
-    if platform == "linux" or platform == "linux2":
+    if platform in {"linux", "linux2"}:
         os.system("ulimit -s unlimited")
     elif platform == "darwin":
         os.system("ulimit -s hard")
@@ -732,7 +163,7 @@ def set_env_vars() -> None:
 
 def warn_no_extra_control_opts(opts: dict, inp: File | None) -> None:
     """
-    Raise a warning if not additional control options have been specified.
+    Raise a warning if no additional control options have been specified.
 
     Parameters
     ----------
@@ -748,69 +179,6 @@ def warn_no_extra_control_opts(opts: dict, inp: File | None) -> None:
             "found in the 'control.in' file",
             stacklevel=2,
         )
-
-
-def write_control(
-    run_loc: str,
-    control_opts: dict,
-    atoms: Atoms,
-    int_grid: str,
-    add_extra_basis: bool,
-    defaults: str,
-) -> None:
-    """
-    Write a control.in file.
-
-    Parameters
-    ----------
-    run_loc : str
-        Path to the calculation directory
-    control_opts : dict
-        Dictionary of control options
-    atoms : Atoms
-        ASE atoms object
-    int_grid : str
-        Basis set density
-    add_extra_basis : bool
-        True if extra basis functions are to be added to the basis set, False
-        otherwise
-    defaults : str
-        Path to the species_defaults directory
-    """
-    # Firstly create the control file if it doesn't exist
-    if not os.path.isfile(f"{run_loc}/control.in"):
-        os.system(f"touch {run_loc}/control.in")
-
-    control_opts = convert_tuple_key_to_str(control_opts)
-
-    # Use the static method from ForceOccupation
-    lines = fo.ForceOccupation.change_control_keywords(
-        f"{run_loc}/control.in", control_opts
-    )
-
-    with open(f"{run_loc}/control.in", "w") as control:
-        control.writelines(lines)
-
-    # Then add the basis set
-    elements = list(set(atoms.get_chemical_symbols()))
-
-    for el in elements:
-        # TODO Add extra basis functions for ground state calculations
-        # if add_extra_basis:
-        #     basis_set = glob.glob(f"{defaults}/ch_basis_sets/{int_grid}/*{el}_default")[
-        #         0
-        #     ]
-
-        #     os.system(f"cat {basis_set} >> {run_loc}/control.in")
-
-        if not check_species_in_control(lines, el):
-            basis_set = glob.glob(f"{defaults}/defaults_2020/{int_grid}/*{el}_default")[
-                0
-            ]
-            os.system(f"cat {basis_set} >> {run_loc}/control.in")
-
-    # Copy it to the ground directory
-    os.system(f"cp {run_loc}/control.in {run_loc}/ground")
 
 
 class GroundCalc:
@@ -901,9 +269,7 @@ class GroundCalc:
         with open(f"{current_path}/elements.yml") as elements:
             elements = yaml.load(elements, Loader=yaml.SafeLoader)
 
-        new_content = fo.ForceOccupation.add_additional_basis(
-            elements, control_content, constr_atom
-        )
+        new_content = add_additional_basis(elements, control_content, constr_atom)
 
         with open(control_in.name, "w") as control:
             control.writelines(new_content)
@@ -1225,7 +591,7 @@ class ExcitedCalc:
                     f"/{run_type} && {self.start.run_cmd} {self.start.nprocs} "
                     f"{self.start.binary} | tee aims.out {spec_run_info}"
                 )
-                if run_type != "init_1" and run_type != "init_2":
+                if run_type not in {"init_1", "init_2"}:
                     print_ks_states(
                         f"{self.start.run_loc}{constr_atoms[0]}{atom_specifier[i]}/{run_type}/"
                     )
