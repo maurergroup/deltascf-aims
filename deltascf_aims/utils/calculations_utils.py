@@ -1,7 +1,7 @@
 import glob
 import os
-import warnings.warn
 from typing import Literal
+from warnings import warn
 
 import numpy as np
 import yaml
@@ -9,8 +9,8 @@ from ase.calculators.aims import Aims
 from ase.io import write
 from click import File, progressbar
 
-from deltascf_aims.utils.checks import check_spin_polarised
-from deltascf_aims.utils.control import (
+from deltascf_aims.utils.checks_utils import check_spin_polarised
+from deltascf_aims.utils.control_utils import (
     add_additional_basis,
     add_control_opts,
     write_control,
@@ -158,7 +158,7 @@ def set_env_vars() -> None:
     elif platform == "darwin":
         os.system("ulimit -s hard")
     else:
-        warnings.warn("OS not supported, please ensure ulimit is set to unlimited")
+        warn("OS not supported, please ensure ulimit is set to unlimited")
 
 
 def warn_no_extra_control_opts(opts: dict, inp: File | None) -> None:
@@ -174,7 +174,7 @@ def warn_no_extra_control_opts(opts: dict, inp: File | None) -> None:
 
     """
     if len(opts) < 1 and inp is None:
-        warnings.warn(
+        warn(
             "No extra control options provided, using default options which can be "
             "found in the 'control.in' file",
             stacklevel=2,

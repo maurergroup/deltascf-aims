@@ -5,7 +5,7 @@ import warnings
 import yaml
 from ase import Atoms
 
-from deltascf_aims.utils.checks import check_species_in_control
+from deltascf_aims.utils.checks_utils import check_species_in_control
 
 
 def add_additional_basis(elements, content, target_atom) -> list[str]:
