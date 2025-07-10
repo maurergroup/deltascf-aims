@@ -1,4 +1,4 @@
-import os
+from pathlib import Path
 
 import yaml
 from ase import Atoms
@@ -108,7 +108,7 @@ def get_all_elements() -> list[str]:
         Element symbols
     """
     # Find the root directory of the package
-    current_path = os.path.dirname(os.path.realpath(__file__))
+    current_path = Path(__file__).parent.resolve()
 
     # Get all supported elements in FHI-aims
     with open(f"{current_path}/elements.yml") as elements_file:

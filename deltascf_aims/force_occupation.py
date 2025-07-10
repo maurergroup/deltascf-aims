@@ -2,6 +2,8 @@ import glob
 import os
 import shutil
 import warnings
+from pathlib import Path
+from typing import Any, Final, Literal
 
 from deltascf_aims.utils import control_utils, geometry_utils
 
@@ -12,31 +14,56 @@ class ForceOccupation:
 
     ...
 
+    Parameters
+    ----------
+    element_symbols : list[str]
+        List of element symbols to constrain.
+    run_loc : Path
+        Path to the run directory.
+    geometry : Path
+        Path to the geometry file.
+    ad_cont_opts : dict[str, str]
+        Additional control options.
+    atom_specifier : list[int]
+        List of atom indentifiers of atoms by geometry.in index.
+    extra_basis : bool
+        Whether to add extra basis functions to the control file.
+
     Attributes
     ----------
-        element_symbols : List[str]
-            list of element symbols to constrain
-
-
-    TODO
+    element_symbols : list[str]
+        list of element symbols to constrain
+    run_loc : Path
+        Path to the run directory.
+    geometry : Path
+        Path to the geometry file.
+    ad_cont_opts : dict[str, Any]
+        Additional control options.
+    atom_specifier : list[int]
+        List of atom identifiers of atoms by geometry.in index.
+    extra_basis : bool
+        Whether to add extra basis functions to the control file.
     """
+
+    AZIMUTHAL_REFS: Final[dict[str, int]] = {"s": 1, "p": 2, "d": 3, "f": 4, "g": 5}
 
     def __init__(
         self,
-        element_symbols,
-        run_loc,
-        geometry,
-        ad_cont_opts,
-        atom_specifier,
-        extra_basis,
+        element_symbols: list[str],
+        run_loc: Path,
+        geometry: Path,
+        ad_cont_opts: dict[str, str],
+        atom_specifier: list[int],
+        extra_basis: bool,
     ):
-        self.element_symbols = element_symbols
-        self.run_loc = run_loc
-        self.geometry = geometry
-        self.ad_cont_opts = ad_cont_opts
-        self.atom_specifier = atom_specifier
-        self.extra_basis = extra_basis
-        self.current_path = os.path.dirname(os.path.realpath(__file__))
+        self._element_symbols = element_symbols
+        self._run_loc = run_loc
+        self._geometry = geometry
+        self._ad_cont_opts = ad_cont_opts
+        self._atom_specifier = atom_specifier
+        self._extra_basis = extra_basis
+
+        self.current_path = Path(__file__).parent.resolve()
 
         # Convert k_grid key to a string from a tuple
         # Writing the options for a hole calculation doesn't use ASE, so it must be
@@ -44,17 +71,40 @@ class ForceOccupation:
         if "k_grid" in ad_cont_opts:
             ad_cont_opts["k_grid"] = " ".join(map(str, ad_cont_opts["k_grid"]))
 
-        self.new_control = f"{self.run_loc}/ground/control.in.new"
+        self.new_control = run_loc / "ground/control.in.new"
         self.elements = geometry_utils.get_all_elements()
-        self.azimuthal_refs = {"s": 1, "p": 2, "d": 3, "f": 4, "g": 5}
 
-    def calculate_highest_E_orbital(self, orb_list: list[str]) -> str:
+    @property
+    def element_symbols(self) -> list[str]:
+        return self._element_symbols
+
+    @property
+    def run_loc(self) -> Path:
+        return self._run_loc
+
+    @property
+    def geometry(self) -> Path:
+        return self._geometry
+
+    @property
+    def ad_cont_opts(self) -> dict[str, str]:
+        return self._ad_cont_opts
+
+    @property
+    def atom_specifier(self) -> list[int]:
+        return self._atom_specifier
+
+    @property
+    def extra_basis(self) -> bool:
+        return self._extra_basis
+
+    def calculate_highest_E_orbital(self, orb_list: list[str]) -> str:  # noqa: N802
         """
         Determine the highest energy orbital according to the Madelung rule.
 
         Parameters
         ----------
-        orb_list : List[str]
+        orb_list : list[str]
             list of orbitals
 
         Returns
@@ -62,7 +112,7 @@ class ForceOccupation:
         str
            highest energy orbital
         """
-        madelung_1 = [int(i[0]) + self.azimuthal_refs[i[1]] for i in orb_list]
+        madelung_1 = [int(i[0]) + self.AZIMUTHAL_REFS[i[1]] for i in orb_list]
         max_i_vals = [i for i, j in enumerate(madelung_1) if j == max(madelung_1)]
 
         # If multiple max values, take the one with the highest n
@@ -73,7 +123,7 @@ class ForceOccupation:
 
     def get_electronic_structure(self, atom: str) -> str:
         """
-        Get valence electronic structure of target atom.
+        Get the valence electronic structure of the target atom.
 
         Adapted from scipython.com question P2.5.12.
 
@@ -92,13 +142,7 @@ class ForceOccupation:
 
         # Create and order a list of tuples, (n+l, n, l), corresponding to the order
         # in which the corresponding orbitals are filled using the Madelung rule.
-        nl_pairs = []
-
-        for n in range(1, 8):
-            for l in range(n):
-                nl_pairs.append((n + l, n, l))
-
-        nl_pairs.sort()
+        nl_pairs = sorted((n + l, n, l) for n in range(1, 8) for l in range(n))
 
         inl = 0
         n_elec = 0
@@ -139,15 +183,15 @@ class ForceOccupation:
 
         return self.valence
 
-    def add_partial_charge(
-        self, content, target_atom, at_num, partial_charge
+    def modify_basis_set_charge(
+        self, content: list[str], target_atom: str, at_num: int, partial_charge: float
     ) -> tuple[int, int, str, list[str]]:
         """
-        Add a partial charge to a basis set in a control.in file.
+        Add a partial charge to a basis set of the control.in content.
 
         Parameters
         ----------
-        content : List[str]
+        content : list[str]
             list of lines in the control file
         target_atom : str
             element symbol of target atom
@@ -158,16 +202,18 @@ class ForceOccupation:
 
         Returns
         -------
-        nuclear_index : int
+        int
             index of the nucleus in the control file
-        nucleus : str
+        int
+            index of the valence orbital in the control file
+        str
             nucleus line in the control file
-        content : List[str]
+        list[str]
             list of lines in the control file
         """
         # Ensure returned variables are bound
-        nuclear_index = 0
-        valence_index = 0
+        nuclear_idx = 0
+        valence_idx = 0
         nucleus = ""
 
         for j, line in enumerate(content):
@@ -176,33 +222,31 @@ class ForceOccupation:
             if target_atom + "1" in spl:
                 # Add to nucleus
                 if f"    nucleus             {at_num}\n" in content[j:]:
-                    nuclear_index = (
+                    nuclear_idx = (
                         content[j:].index(f"    nucleus             {at_num}\n") + j
                     )
-                    nucleus = content[nuclear_index]  # save for hole
-                    content[nuclear_index] = (
+                    nucleus = content[nuclear_idx]  # save for hole
+                    content[nuclear_idx] = (
                         f"    nucleus             {at_num + partial_charge}\n"
                     )
                 elif f"    nucleus      {at_num}\n" in content[j:]:
-                    nuclear_index = (
-                        content[j:].index(f"    nucleus      {at_num}\n") + j
-                    )
-                    nucleus = content[nuclear_index]  # save for hole
-                    content[nuclear_index] = (
+                    nuclear_idx = content[j:].index(f"    nucleus      {at_num}\n") + j
+                    nucleus = content[nuclear_idx]  # save for hole
+                    content[nuclear_idx] = (
                         f"    nucleus      {at_num + partial_charge}\n"
                     )
 
                 # Add to valence orbital
                 if "#     ion occupancy\n" in content[j:]:
-                    vbs_index = content[j:].index("#     valence basis states\n") + j
-                    io_index = content[j:].index("#     ion occupancy\n") + j
+                    vbs_idx = content[j:].index("#     valence basis states\n") + j
+                    io_idx = content[j:].index("#     ion occupancy\n") + j
 
                     # Check which orbital to add 0.1 to
                     valence_structure = []
                     i_orbital = []
 
                     for count, valence_orbital in enumerate(
-                        content[vbs_index + 1 : io_index]
+                        content[vbs_idx + 1 : io_idx]
                     ):
                         i_orbital.append(count)
                         valence_structure.append("".join(valence_orbital.split()[1:]))
@@ -213,11 +257,11 @@ class ForceOccupation:
                     )
 
                     # Add the 0.1 electron
-                    valence_index = vbs_index + addition_state + 1
-                    content[valence_index] = valence.strip("\n") + "1\n"
+                    valence_idx = vbs_idx + addition_state + 1
+                    content[valence_idx] = valence.strip("\n") + "1\n"
                     break
 
-        return nuclear_index, valence_index, nucleus, content
+        return nuclear_idx, valence_idx, nucleus, content
 
 
 class Projector(ForceOccupation):
@@ -226,27 +270,56 @@ class Projector(ForceOccupation):
 
     ...
 
+    Parameters
+    ----------
+    element_symbols : list[str]
+        list of element symbols to constrain
+    run_loc : Path
+        Path to the run directory.
+    geometry : Path
+        Path to the geometry file.
+    ad_cont_opts : dict[str, Any]
+        Additional control options.
+    atom_specifier : list[int]
+        List of atom identifiers of atoms by geometry.in index.
+    extra_basis : bool
+        Whether to add extra basis functions to the control file.
+
     Attributes
     ----------
-    TODO
+    element_symbols : list[str]
+        list of element symbols to constrain
+    run_loc : Path
+        Path to the run directory.
+    geometry : Path
+        Path to the geometry file.
+    ad_cont_opts : dict[str, Any]
+        Additional control options.
+    atom_specifier : list[int]
+        List of atom identifiers of atoms by geometry.in index.
+    extra_basis : bool
+        Whether to add extra basis functions to the control file.
     """
 
-    def __init__(self, parent_instance):
-        # Inherit all the variables from an instance of the parent class
-        vars(self).update(vars(parent_instance))
+    def __init__(self, *args: Any):
+        super().__init__(*args)
 
-    def setup_init_1(self, basis_type: str, defaults: str, control: str):
+    def setup_init_1(
+        self, basis_type: str, defaults: Path, control: Path, pbc: bool
+    ) -> None:
         """
         Write new directories and control files for the first init calculation.
 
         Parameters
         ----------
         basis_type : str
-            Type of the basis set to use
+            Basis set type to use.
         defaults : str
-            Default location of the basis sets
+            Default location of the basis sets.
         control : str
-            Path to the control file
+            Path to the control file.
+        pbc : bool
+            If the calculation is periodic.
         """
         # Default control file options
         opts = {
@@ -258,6 +331,11 @@ class Projector(ForceOccupation):
             # "force_single_restartfile": ".true.",
         }
 
+        # Enforce that the ks_method serial to write appropriate restart files for dscf
+        # calculations if the calculation is periodic
+        if pbc:
+            opts["KS_method"] = "serial"
+
         # Add or change user-specified keywords to/in the control file
         opts = control_utils.mod_keywords(self.ad_cont_opts, opts)
 
@@ -267,9 +345,9 @@ class Projector(ForceOccupation):
         # Loop over each element to constrain
         for el in self.element_symbols:
             # Find species defaults location from location of binary
-            basis_set = glob.glob(
-                f"{defaults}/defaults_2020/{basis_type}/*{el}_default"
-            )
+            basis_dir = Path(defaults) / "defaults_2020" / basis_type
+            basis_set = list(basis_dir.glob(f"*{el}_default"))
+
             # Append the contents of the found basis set file to self.new_control
             if basis_set:
                 with (
@@ -285,7 +363,7 @@ class Projector(ForceOccupation):
                 )
 
             # Change basis set label for core hole atom
-            with open(self.new_control) as read_control:
+            with self.new_control.open("r") as read_control:
                 new_basis_content = read_control.readlines()
 
             for j, line in enumerate(new_basis_content):
@@ -296,24 +374,27 @@ class Projector(ForceOccupation):
                     break
 
             # Write it to intermediate control file
-            with open(self.new_control, "w") as write_control:
+            with self.new_control.open("w") as write_control:
                 write_control.writelines(new_basis_content)
 
             # Loop over each individual atom to constrain
             for i in self.atom_specifier:
                 # TODO: fix this for individual atom constraints
 
-                i1_control = f"{self.run_loc}/{el}{i}/init_1/control.in"
-                i1_geometry = f"{self.run_loc}/{el}{i}/init_1/geometry.in"
+                i1_control = self.run_loc / f"{el}{i}/init_1/control.in"
+                i1_geometry = self.run_loc / f"{el}{i}/init_1/geometry.in"
 
                 # Create new directory and control file for init_1 calc
-                os.makedirs(f"{self.run_loc}/{el}{i}/init_1", exist_ok=True)
+                (self.run_loc / f"{el}{i}" / "init_1").mkdir(
+                    parents=True, exist_ok=True
+                )
                 shutil.copyfile(self.new_control, i1_control)
+
                 # Create new geometry file for init_1 calc
-                shutil.copyfile(f"{self.run_loc}/ground/geometry.in", i1_geometry)
+                shutil.copyfile(self.run_loc / "ground/geometry.in", i1_geometry)
 
                 # Change geometry file
-                with open(i1_geometry) as read_geom:
+                with i1_geometry.open("r") as read_geom:
                     geom_content = read_geom.readlines()
 
                 # Change all core hole atoms to {atom}{num}
@@ -332,7 +413,7 @@ class Projector(ForceOccupation):
                         #     partial_hole_atom = f" {el}1\n"
                         #     geom_content[j] = " ".join(spl[0:-1]) + partial_hole_atom
 
-                with open(i1_geometry, "w") as write_geom:
+                with i1_geometry.open("w") as write_geom:
                     write_geom.writelines(geom_content)
 
                 # Change control file
@@ -351,42 +432,62 @@ class Projector(ForceOccupation):
                     self.v_index,
                     self.nucleus,
                     control_content,
-                ) = self.add_partial_charge(
+                ) = self.modify_basis_set_charge(
                     control_content,
                     el,
                     self.elements.index(el) + 1,
                     opts["charge"],
                 )
 
-                with open(i1_control, "w") as write_control:
+                with i1_control.open("w") as write_control:
                     write_control.writelines(control_content)
 
-        print("init_1 files written successfully")
+        print("Wrote init_1 files")
 
-    def setup_init_2(self, ks_start, ks_stop, occ, occ_type, spin, pbc):
-        """Write new directories and control files for the second init calculation."""
-        ks_method = ""
-        if occ_type == "force_occupation_projector":
-            ks_method = "serial"
-        if occ_type == "deltascf_projector" and not pbc:
-            ks_method = "parallel"
-        if occ_type == "deltascf_projector" and pbc:
-            ks_method = "serial"
+    def setup_init_2(
+        self,
+        ks_range: tuple[int, int],
+        occ: float,
+        occ_type: Literal["deltascf_projector", "force_occupation_projector"],
+        spin: Literal[1, 2],
+        pbc: bool,
+    ) -> None:
+        """
+        Write new directories and control files for the second init calculation.
 
+        Parameters
+        ----------
+        ks_range : tuple[int, int]
+            KS states to calculate MOM over.
+        occ : float
+            Occupation value to constrain specified state to.
+        occ_type : Literal["deltascf_projector", "force_occupation_projector"]
+            FHI-aims projector keyword.
+        spin : Literal[1, 2]
+            Spin channel the KS state to constrain belongs to.
+        pbc : bool
+            If the calculation is periodic.
+        """
         # Loop over each element to constrain
         for el in self.element_symbols:
             # Loop over each individual atom to constrain
             for i in self.atom_specifier:
+                # TODO change i in occ_type so that it matches better with the KS range
                 opts = {
                     "spin": "collinear",
                     "charge": 1.1,
                     "sc_iter_limit": 1,
-                    occ_type: f"{i} {spin} {occ} {ks_start} {ks_stop}",
-                    "KS_method": ks_method,
+                    occ_type: f"{i} {spin} {occ} {ks_range[0]} {ks_range[1]}",
                     "restart": "restart_file",
                     "restart_save_iterations": 1,
                     # "force_single_restartfile": ".true.",
                 }
+
+                # Enforce that the use of ks_method serial
+                if occ_type == "force_occupation_projector" or (
+                    occ_type == "force_occupation_projector" and pbc
+                ):
+                    opts["KS_method"] = "serial"
 
                 # Add or change user-specified keywords to the control file
                 opts = control_utils.mod_keywords(self.ad_cont_opts, opts)
@@ -394,11 +495,13 @@ class Projector(ForceOccupation):
                 i2_control = f"{self.run_loc}/{el}{i}/init_2/control.in"
 
                 # Create new directory for init_2 calc
-                os.makedirs(f"{self.run_loc}/{el}{i}/init_2", exist_ok=True)
+                init_2_dir = self.run_loc / f"{el}{i}/init_2"
+                init_2_dir.mkdir(parents=True, exist_ok=True)
+                i2_control = init_2_dir / "control.in"
                 shutil.copyfile(self.new_control, i2_control)
                 shutil.copyfile(
-                    f"{self.run_loc}/{el}{i}/init_1/geometry.in",
-                    f"{self.run_loc}/{el}{i}/init_2/geometry.in",
+                    self.run_loc / f"{el}{i}/init_1/geometry.in",
+                    init_2_dir / "geometry.in",
                 )
 
                 # Change control file
@@ -413,64 +516,83 @@ class Projector(ForceOccupation):
                     )
 
                 # Add partial charge to the control file
-                _, _, _, control_content = self.add_partial_charge(
+                _, _, _, control_content = self.modify_basis_set_charge(
                     control_content, el, self.elements.index(el) + 1, opts["charge"] - 1
                 )
 
-                with open(i2_control, "w") as write_control:
+                with i2_control.open("w") as write_control:
                     write_control.writelines(control_content)
 
-        print("init_2 files written successfully")
+        print("Wrote init_2 files")
 
-    def setup_hole(self, ks_start, ks_stop, occ, occ_type, spin, pbc):
-        """Write new hole directories and control files for the hole calculation."""
+    def setup_hole(
+        self,
+        ks_range: tuple[int, int],
+        occ: float,
+        occ_type: Literal["deltascf_projector", "force_occupation_projector"],
+        spin: Literal[1, 2],
+        pbc: bool,
+    ) -> None:
+        """
+        Write new hole directories and control files for the hole calculation.
+
+        Parameters
+        ----------
+        ks_range : tuple[int, int]
+            KS states to calculate MOM over.
+        occ : float
+            Occupation value to constrain specified state to.
+        occ_type : Literal["deltascf_projector", "force_occupation_projector"]
+            FHI-aims projector keyword.
+        spin : Literal[1, 2]
+            Spin channel the KS state to constrain belongs to.
+        pbc : bool
+            If the calculation is periodic.
+        """
         # Calculate original valence state
         val_spl = self.valence.split("\n")
         del val_spl[-1]
         val_spl.append(".\n")
         self.valence = "".join(val_spl)
 
-        # Enforce that the old method uses ks_method serial
-        ks_method = ""
-        if occ_type == "force_occupation_projector":
-            ks_method = "serial"
-
-        ks_method = "serial" if occ_type == "deltascf_projector" and pbc else None
-
         # Loop over each element to constrain
         for el in self.element_symbols:
             # Loop over each individual atom to constrain
             for i in self.atom_specifier:
+                # TODO change i in occ_type so that it matches better with the KS range
                 opts = {
                     "spin": "collinear",
                     "charge": 1.0,
                     "sc_iter_limit": 500,
                     "sc_init_iter": 75,
-                    occ_type: f"{i} {spin} {occ} {ks_start} {ks_stop}",
-                    "KS_method": ks_method,
+                    occ_type: f"{i} {spin} {occ} {ks_range[0]} {ks_range[1]}",
                     "restart": "restart_file",
                     # "force_single_restartfile": ".true.",
+                    "output": "mulliken",
                     # "output": "cube spin_density",
                 }
 
-                if ks_method is not None:
-                    opts["KS_method"] = ks_method
+                # Enforce that the use of ks_method serial
+                if occ_type == "force_occupation_projector" or (
+                    occ_type == "force_occupation_projector" and pbc
+                ):
+                    opts["KS_method"] = "serial"
 
                 # Add or change user-specified keywords to the control file
                 opts = control_utils.mod_keywords(self.ad_cont_opts, opts)
 
                 # Location of the hole control file
-                h_control = f"{self.run_loc}/{el}{i}/hole/control.in"
+                h_control = self.run_loc / f"{el}{i}/hole/control.in"
 
                 # Create new directory for hole calc
-                os.makedirs(f"{self.run_loc}/{el}{i}/hole", exist_ok=True)
+                (self.run_loc / f"{el}{i}" / "hole").mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(
-                    f"{self.run_loc}/{el}{i}/init_1/geometry.in",
-                    f"{self.run_loc}/{el}{i}/hole/geometry.in",
+                    self.run_loc / f"{el}{i}/init_1/geometry.in",
+                    self.run_loc / f"{el}{i}/hole/geometry.in",
                 )
                 shutil.copyfile(self.new_control, h_control)
 
-                with open(h_control) as read_control:
+                with h_control.open("r") as read_control:
                     control_content = read_control.readlines()
 
                 # Set nuclear and valence orbitals back to integer values
@@ -487,12 +609,13 @@ class Projector(ForceOccupation):
                     )
 
                 # Write the data to the file
-                with open(h_control, "w") as write_control:
+                with h_control.open("w") as write_control:
                     write_control.writelines(control_content)
 
-        print("hole files written successfully")
+        print("Wrote hole files")
 
 
+# TODO also update Basis
 class Basis(ForceOccupation):
     """Create input files for basis calculations."""
 

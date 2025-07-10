@@ -2,7 +2,7 @@ import glob
 import os
 import warnings
 from pathlib import Path
-from typing import Literal, Union
+from typing import Literal
 
 import click
 import numpy as np
@@ -13,7 +13,6 @@ import deltascf_aims.calc_dscf as cds
 from deltascf_aims import force_occupation
 from deltascf_aims.plot import XPSSpectrum
 from deltascf_aims.schmid_pseudo_voigt import broaden
-
 from deltascf_aims.utils import (
     calculations_utils,
     checks_utils,
@@ -121,10 +120,10 @@ class Start:
     ):
         self.hpc = hpc
         self.spec_mol = spec_mol
-        self.geometry_input = geometry_input
-        self.control_input = control_input
+        self.geometry_input = Path(geometry_input)
+        self.control_input = Path(control_input)
         self.binary = binary
-        self.run_loc = run_location
+        self.run_loc = Path(run_location)
         self.constr_atom = constr_atom
         self.occupation = occupation
         self.n_atoms = n_atoms
@@ -212,7 +211,7 @@ class Start:
             self.ase = False  # Do not use if control.in is specified
 
     # @_check_help_arg
-    def create_structure(self) -> Union[Atoms, list[Atoms]]:
+    def create_structure(self) -> Atoms | list[Atoms]:
         """
         Initialise an ASE atoms object from geometry.in or an ASE database.
 
@@ -697,18 +696,18 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
         proj : ForceOccupation.Projector
             Instance of ForceOccupation
         """
-        proj.setup_init_1(self.start.basis_set, self.start.species, self.ground_control)
+        proj.setup_init_1(
+            self.start.basis_set, self.start.species, self.ground_control, self.pbc
+        )
         proj.setup_init_2(
-            self.ks_range[0],
-            self.ks_range[1],
+            self.ks_range,
             self.start.occupation,
             self.occ_type,
             self.spin,
             self.start.found_k_grid,
         )
         proj.setup_hole(
-            self.ks_range[0],
-            self.ks_range[1],
+            self.ks_range,
             self.start.occupation,
             self.occ_type,
             self.spin,
@@ -739,19 +738,19 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
             f"/{end}/"
         )
 
-    def _get_element_symbols(self) -> Union[str, list[str]]:
+    def _get_element_symbols(self) -> list[str]:
         """
         Create a list of element symbols to constrain.
 
         Returns
         -------
-        element_symbols : Union[str, list[str]]
+        element_symbols : list[str]
             Element symbols to constrain
         """
         if len(self.start.spec_at_constr) > 0:
             element_symbols = geometry_utils.get_element_symbols(
                 self.ground_geom, self.start.spec_at_constr
-            )[0]
+            )
             self.constr_atoms = element_symbols
         else:
             element_symbols = self.constr_atoms
@@ -836,7 +835,7 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
 
     def setup_excited(self) -> tuple[list[int], str]:
         """
-        Setup files and parameters required for the init and hole calculations.
+        Set up files and parameters required for the init and hole calculations.
 
         Returns
         -------
@@ -857,7 +856,7 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
         self._calc_checks("init_1", check_restart=False, check_args=True)
 
         # Create the ForceOccupation object
-        fo = force_occupation.ForceOccupation(
+        proj = force_occupation.Projector(
             element_symbols,
             self.start.run_loc,
             self.ground_geom,
@@ -868,11 +867,9 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
 
         # TODO allow this for multiple constrained atoms using n_atoms
         for atom in element_symbols:
-            fo.get_electronic_structure(atom)
+            proj.get_electronic_structure(atom)
 
-        proj = force_occupation.Projector(fo)
         self._call_setups(proj)
-
         spec_run_info = ""
 
         return self.atom_specifier, spec_run_info
@@ -948,7 +945,7 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
             self._calc_checks("hole", check_restart=False, check_args=True)
 
             # Create the ForceOccupation object
-            fo = force_occupation.ForceOccupation(
+            proj = force_occupation.Projector(
                 element_symbols,
                 self.start.run_loc,
                 self.ground_geom,
@@ -958,10 +955,9 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
             )
 
             for atom in element_symbols:
-                fo.get_electronic_structure(atom)
+                proj.get_electronic_structure(atom)
 
             # Setup files required for the initialisation and hole calculations
-            proj = force_occupation.Projector(fo)
             self._call_setups(proj)
 
         # Add a tag to the geometry file to identify the molecule name
@@ -1104,7 +1100,7 @@ class Basis(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
             ("m_qn", self.m_qn),
         )
 
-    def _get_element_symbols(self) -> Union[str, list[str]]:
+    def _get_element_symbols(self) -> str | list[str]:
         """
         Create a list of element symbols to constrain
 
