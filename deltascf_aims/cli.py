@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import click
 
 from deltascf_aims import main
@@ -58,28 +60,16 @@ from deltascf_aims.utils.click_extras import (
     "--run_location",
     default="./",
     show_default=True,
-    type=click.Path(file_okay=False, dir_okay=True),
+    type=click.Path(file_okay=False, dir_okay=True, path_type=Path),
     help="optionally specify a custom location to run the calculation",
 )
 @click.option(
     "-c",
     "--constrained_atom",
     "constr_atom",
-    cls=NotRequiredIf,
-    not_required_if=["spec_at_constr"],
     type=str,
     # multiple=true,  # TODO: allow for multiple atoms to be constrained
     help="atom to constrain; constrain all atoms of this element",
-)
-@click.option(
-    "-s",
-    "--specific_atom_constraint",
-    "spec_at_constr",
-    cls=NotRequiredIf,
-    not_required_if=["constr_atom"],
-    type=click.IntRange(min=1, max_open=True),
-    nargs=2,
-    help="specify specific atoms to constrain by their index in a geometry file",
 )
 @click.option(
     "-o",
@@ -151,7 +141,6 @@ def initialise(
     binary,
     run_location,
     constr_atom,
-    spec_at_constr,
     occupation,
     n_atoms,
     basis_set,
@@ -192,7 +181,6 @@ def initialise(
         binary,
         run_location,
         constr_atom,
-        spec_at_constr,
         occupation,
         n_atoms,
         basis_set,

@@ -285,15 +285,17 @@ def change_control_keywords(control, opts) -> list[str]:
     return content
 
 
-def convert_opts_to_dict(opts: tuple[str], pbc: tuple[int] | None) -> dict:
+def convert_opts_to_dict(
+    opts: tuple[str, ...], pbc: tuple[int, int, int] | None
+) -> dict:
     """
     Convert the control options from a tuple to a dictionary.
 
     Parameters
     ----------
-    opts : tuple[str]
+    opts : tuple[str, ...]
         tuple of control options
-    pbc : tuple[int]
+    pbc : tuple[int, int, int]
         tuple of k-points
 
     Returns

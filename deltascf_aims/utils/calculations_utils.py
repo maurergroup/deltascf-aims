@@ -1,5 +1,6 @@
 import glob
 import os
+from pathlib import Path
 from typing import Literal
 from warnings import warn
 
@@ -18,7 +19,7 @@ from deltascf_aims.utils.control_utils import (
 
 
 def create_calc(
-    procs: int, binary: str, aims_cmd: str, species: str, int_grid: str
+    procs: int, binary: Path, aims_cmd: str, species: Path, int_grid: str
 ) -> Aims:
     """
     Create an ASE calculator object.
@@ -27,11 +28,11 @@ def create_calc(
     ----------
     procs : int
         number of processors to use
-    binary : str
+    binary : Path
         path to aims binary
     aims_cmd : str
         command to run aims
-    species : str
+    species : Path
         path to species directory
     int_grid : str
         basis set density

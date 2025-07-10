@@ -1,6 +1,4 @@
-from types import NoneType
-
-from deltascf_aims.aims_dscf import Basis, Process, Projector, Start
+from deltascf_aims.core import Basis, Process, Projector, Start
 
 
 def start(*args):
@@ -10,8 +8,8 @@ def start(*args):
     ctx = args.pop(0)
     start = Start(*args)
 
-    if not isinstance(start.spec_at_constr, NoneType) and len(start.spec_at_constr) > 0:
-        start.check_for_geometry_input()
+    # if not isinstance(start.spec_at_constr, NoneType) and len(start.spec_at_constr) > 0:
+    start.check_for_geometry_input()
 
     start.check_for_pbcs()
     start.check_ase_usage()

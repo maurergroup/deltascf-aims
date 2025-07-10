@@ -1,5 +1,5 @@
-import glob
 import os
+import shutil
 import warnings
 from pathlib import Path
 from typing import Literal
@@ -44,8 +44,6 @@ class Start:
             optionally specify a custom location to run the calculation
         constr_atom : str
             atom to be constrained
-        spec_at_constr : click.IntRange(min=1, max_open=True)
-            atom to constrain; constrain all atoms of this element
         occupation : float
             occupation of the core hole
         n_atoms : click.IntRange(1)
@@ -108,7 +106,6 @@ class Start:
         binary,
         run_location,
         constr_atom,
-        spec_at_constr,
         occupation,
         n_atoms,
         basis_set,
@@ -120,14 +117,13 @@ class Start:
     ):
         self.hpc = hpc
         self.spec_mol = spec_mol
-        self.geometry_input = Path(geometry_input)
-        self.control_input = Path(control_input)
+        self.geometry_input = geometry_input
+        self.control_input = control_input
         self.binary = binary
-        self.run_loc = Path(run_location)
+        self.run_loc = run_location
         self.constr_atom = constr_atom
         self.occupation = occupation
         self.n_atoms = n_atoms
-        self.spec_at_constr = spec_at_constr
         self.basis_set = basis_set
         self.use_extra_basis = use_extra_basis
         self.print_output = print_output
@@ -185,24 +181,16 @@ class Start:
 
     def check_constr_keywords(self) -> None:
         """
-        Ensure that constr_atom or spec_at_constr are given.
+        Ensure that constr_atom is given.
 
         Raises
         ------
         click.MissingParameter
             The param_hint option has not been provided
         """
-        # Add 1 to the second value in the tuple in place
-        try:
-            self.spec_at_constr = (self.spec_at_constr[0], self.spec_at_constr[1] + 1)
-            self.spec_at_constr = list(range(*self.spec_at_constr))
-        except TypeError:
-            self.spec_at_constr = ()
-
-        if self.constr_atom is None and len(self.spec_at_constr) == 0:
+        if self.constr_atom is None:  # and len(self.spec_at_constr) == 0:
             raise click.MissingParameter(
-                param_hint="-c/--constrained_atom or -s/--specific_atom_constraint",
-                param_type="option",
+                param_hint="-c/--constrained_atom", param_type="option"
             )
 
     def check_ase_usage(self) -> None:
@@ -230,7 +218,7 @@ class Start:
         # Find the structure if not given
         if self.spec_mol is None and self.geometry_input is None:
             try:
-                self.atoms = read(f"./{self.run_loc}/ground/geometry.in")
+                self.atoms = read(self.run_loc / "ground" / "geometry.in", index=-1)  # pyright: ignore[reportAttributeAccessIssue]
                 print(
                     "molecule argument not provided, defaulting to using existing "
                     "geometry.in file from the ground state calculation"
@@ -247,31 +235,23 @@ class Start:
             if self.spec_mol is not None:
                 self.atoms = geometry_utils.build_geometry(self.spec_mol)
             if self.geometry_input is not None:
-                self.atoms = read(self.geometry_input.name)
+                self.atoms = read(self.geometry_input.name, index=-1)  # pyright: ignore[reportAttributeAccessIssue]
 
         return self.atoms
 
-    def find_constr_atom_element(self) -> None:
-        """Find the element of the atom to perform XPS/NEXAFS for."""
-        # TODO: add support for multiple constrained atoms
-        for atom in self.atoms:
-            if atom.index in self.spec_at_constr:
-                self.constr_atom = atom.symbol
-                break
-
     # @_check_help_arg
-    def check_for_bin(self) -> tuple[str, str]:
+    def check_for_bin(self) -> tuple[Path, Path]:
         """
         Check if a binary is saved in ./aims_bin_loc.txt.
 
         Returns
         -------
-        current_path : str
+        current_path : pathlib.Path
             path to the current working directory
-        bin_path : str
+        bin_path : pathlib.Path
             path to the location of the FHI-aims binary
         """
-        current_path = os.path.dirname(os.path.realpath(__file__))
+        current_path = Path(__file__).resolve().parent
 
         if Path(f"{current_path}/aims_bin_loc.txt").exists():
             with open(f"{current_path}/aims_bin_loc.txt") as f:
@@ -288,9 +268,9 @@ class Start:
         except IndexError:
             bin_path = ""
 
-        return current_path, bin_path
+        return current_path, Path(bin_path)
 
-    def bin_path_prompt(self, current_path: str, bin_path: str) -> str:
+    def bin_path_prompt(self, current_path: Path, bin_path: Path) -> Path:
         """
         Ensure the user has entered the path to the binary.
 
@@ -298,29 +278,30 @@ class Start:
 
         Parameters
         ----------
-        current_path : str
+        current_path : pathlib.Path
             path to the current working directory
-        bin_path : str
+        bin_path : pathlib.Path
             path to the location of the FHI-aims binary
 
         Returns
         -------
-        binary : str
+        binary : pathlib.Path
             path to the location of the FHI-aims binary
         """
-        if not Path(bin_path).is_file() or self.binary or bin_path == "":
+        if not bin_path.is_file() or self.binary:
             marker = (
                 "\n# Enter the path to the FHI-aims binary above this line\n"
                 "# Ensure that the binary is located in the build directory of FHIaims\n"
                 "# and that the full absolute path is provided"
             )
             bin_line = click.edit(marker)
+            bin_line = Path(bin_line) if bin_line is not None else None
             if bin_line is not None:
-                if Path(str(bin_line).split()[0]).exists():
-                    with open(f"{current_path}/aims_bin_loc.txt", "w") as f:
-                        f.write(bin_line)
+                if bin_line.is_file():
+                    with current_path.joinpath("aims_bin_loc.txt").open("w") as f:
+                        f.write(str(bin_line))
 
-                    with open(f"{current_path}/aims_bin_loc.txt") as f:
+                    with current_path.joinpath("aims_bin_loc.txt").open() as f:
                         self.binary = f.readlines()[0]
 
                 else:
@@ -333,36 +314,35 @@ class Start:
                     "path to the FHI-aims binary could not be found"
                 )
 
-        elif Path(bin_path).exists():
+        elif bin_path.is_file():
             print(f"specified binary path: {bin_path}")
-            self.binary = bin_path
+            self.binary: Path = bin_path
 
         else:
             raise FileNotFoundError("path to the FHI-aims binary could not be found")
 
         return self.binary
 
-    def check_species_path(self, binary: str) -> None:
+    def check_species_path(self, binary: Path) -> None:
         """
         Check if the species_defaults directory exists in the correct location.
 
         Parameters
         ----------
-        binary : str
+        binary : pathlib.Path
             path to the location of the FHI-aims binary
         """
-        self.species = f"{Path(binary).parent.parent}/species_defaults/"
+        self.species = binary.parent.parent / "species_defaults"
 
         # TODO: check if the warnings module could be used here
         # Check if the species_defaults directory exists in the correct location
-        if not Path(self.species).exists():
+        if not self.species.is_dir():
             print(
-                "\nError: ensure the FHI-aims binary is in the 'build' directory of the FHI-aims"
-                " source code directory, and that the 'species_defaults' directory exists"
+                "\nError: ensure the FHI-aims binary is in the `build` directory of the"
+                " FHI-aims source code directory, and that the `species_defaults` "
+                "directory exists"
             )
-            msg = (
-                f"species_defaults directory not found in {Path(binary).parent.parent}"
-            )
+            msg = f"species_defaults directory not found in {binary.parent.parent}"
             raise NotADirectoryError(msg)
 
     @property
@@ -389,13 +369,13 @@ class Start:
         """
         self._atoms = atoms
 
-    def add_calc(self, binary: str) -> Atoms:
+    def add_calc(self, binary: Path) -> Atoms:
         """
         Add an ASE calculator to an Atoms object.
 
         Parameters
         ----------
-        binary : str
+        binary : Path
             path to the location of the FHI-aims binary
 
         Returns
@@ -561,44 +541,36 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
 
     ...
 
-    Attributes
+    Parameters
     ----------
     start : Start
         instance of the Start object
-    run_type : click.Choice(["ground", "init_1", "init_2", "hole"])
+    run_type : Literal["ground", "init_1", "init_2", "hole"]
         type of calculation to perform
-    occ_type : click.Choice(["deltascf_projector", "force_occupation_projector"])
+    occ_type : Literal["deltascf_projector", "force_occupation_projector"]
         use either the refactored or original projector keyword
-    pbc : tuple[int]
+    pbc : tuple[int, int, int]
         k-grid for a periodic calculation
     l_vecs : list[list[float]]
         lattice vectors in a 3x3 matrix of floats
-    spin : click.Choice(["1", "2"])
+    spin : Literal[1, 2]
         spin channel of the constraint
-    ks_range : click.IntRange(1)
+    ks_range : tuple[int, int]
         range of Kohn-Sham states to constrain
-    control_opts : tuple[str]
+    control_opts : tuple[str, ...]
         additional control options to be added to the control.in file
-
-    Methods
-    -------
-    check_periodic()
-        Check if the lattice vectors and k_grid have been provided
-    run_ground()
-        Run the ground state calculation
-    setup_excited_calcs()
-        Setup files and parameters required for the initialisation and hole
-        calculations
-    pre_init_2(fo, atom_specifier)
-        Setup everything for the 2nd init calculation
-    pre_hole(fo, atom_specifier)
-        Setup everything for the hole calculation
-    run_excited(start, atom_specifier)
-        Run the projector calculations
     """
 
     def __init__(
-        self, start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts
+        self,
+        start: Start,
+        run_type: Literal["ground", "init_1", "init_2", "hole"],
+        occ_type: Literal["deltascf_projector", "force_occupation_projector"],
+        pbc: tuple[int, int, int],
+        l_vecs: list[list[float]],
+        spin: Literal[1, 2],
+        ks_range: tuple[int, int],
+        control_opts: tuple[str, ...],
     ):
         # Get methods from GroundCalc
         super().__init__(
@@ -614,15 +586,17 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
         super(calculations_utils.GroundCalc, self).__init__(start)
 
         self.start = start
-        self.run_type = run_type
-        self.occ_type = occ_type
+        self.run_type: Literal["ground", "init_1", "init_2", "hole"] = run_type
+        self.occ_type: Literal["deltascf_projector", "force_occupation_projector"] = (
+            occ_type
+        )
         self.pbc = pbc
         self.l_vecs = l_vecs
-        self.spin = spin
+        self.spin: Literal[1, 2] = spin
         self.ks_range = ks_range
 
-        self.ground_geom = f"{self.start.run_loc}/ground/geometry.in"
-        self.ground_control = f"{self.start.run_loc}/ground/control.in"
+        self.ground_geom = self.start.run_loc / "ground/geometry.in"
+        self.ground_control = self.start.run_loc / "ground/control.in"
 
         # Convert control options to a dictionary
         self.control_opts = control_utils.convert_opts_to_dict(control_opts, pbc)
@@ -631,14 +605,6 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
         calculations_utils.warn_no_extra_control_opts(
             self.control_opts, start.control_input
         )
-
-        # if isinstance(self.start.spec_at_constr, list):
-        #     self.constr_atoms = self.start.spec_at_constr
-        if not isinstance(self.start.constr_atom, list):
-            # Convert constr_atom to a list
-            self.constr_atoms = [self.start.constr_atom]
-        else:
-            self.constr_atoms = self.start.constr_atom
 
     def _calc_checks(
         self,
@@ -659,13 +625,15 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
             Whether to check if the required CLI arguments were given or not
         """
         # Check that the previous calculation has been run
-        prev_calc = self.check_prereq_calc(current_calc, self.constr_atoms, "projector")
+        prev_calc = self.check_prereq_calc(
+            current_calc, self.start.constr_atom, "projector"
+        )
 
         # Check that the current calculation has not already been run
         checks_utils.check_curr_prev_run(
             self.run_type,
             self.start.run_loc,
-            self.constr_atoms,
+            self.start.constr_atom,
             self.atom_specifier,
             "projector",
             self.start.hpc,
@@ -675,7 +643,7 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
         # Check that the restart files exist from the previous calculation
         if check_restart:
             for i_atom in self.atom_specifier:
-                self.check_restart_files(self.constr_atoms, prev_calc, i_atom)
+                self.check_restart_files(self.start.constr_atom, prev_calc, i_atom)
 
         # Check that the constrained atoms have been given
         if current_calc != "hole":
@@ -697,7 +665,10 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
             Instance of ForceOccupation
         """
         proj.setup_init_1(
-            self.start.basis_set, self.start.species, self.ground_control, self.pbc
+            self.start.basis_set,
+            self.start.species,
+            self.ground_control,
+            self.pbc is not None,
         )
         proj.setup_init_2(
             self.ks_range,
@@ -727,35 +698,18 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
         end : str
             location to copy the restart files to
         """
-        os.path.isfile(
-            glob.glob(
-                f"{self.start.run_loc}/{self.constr_atoms[0]}{atom}/{begin}/*restart*"
-            )[0]
-        )
-        os.system(
-            f"cp {self.start.run_loc}/{self.constr_atoms[0]}{atom}/{begin}/"
-            f"*restart* {self.start.run_loc}/{self.constr_atoms[0]}{atom}"
-            f"/{end}/"
-        )
-
-    def _get_element_symbols(self) -> list[str]:
-        """
-        Create a list of element symbols to constrain.
-
-        Returns
-        -------
-        element_symbols : list[str]
-            Element symbols to constrain
-        """
-        if len(self.start.spec_at_constr) > 0:
-            element_symbols = geometry_utils.get_element_symbols(
-                self.ground_geom, self.start.spec_at_constr
+        next(
+            (self.start.run_loc / f"{self.start.constr_atom}{atom}" / begin).glob(
+                "*restart*"
             )
-            self.constr_atoms = element_symbols
-        else:
-            element_symbols = self.constr_atoms
+        ).is_file()
 
-        return element_symbols
+        source_pattern = self.start.run_loc / f"{self.start.constr_atom}{atom}" / begin
+        dest_dir = self.start.run_loc / f"{self.constr_atom}{atom}" / end
+
+        # Copy all restart files from source to destination
+        for restart_file in source_pattern.glob("*restart*"):
+            shutil.copy2(restart_file, dest_dir)
 
     def check_periodic(self) -> None:
         """Check if the lattice vectors and k_grid have been provided."""
@@ -767,27 +721,26 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
         # Try to parse the k-grid if other calculations have been run
         try:
             pbc_list = []
-            for control in glob.glob(
-                f"{self.start.run_loc}/**/control.in", recursive=True
-            ):
-                with open(control) as control_lines:
+            for control in self.start.run_loc.rglob("control.in"):
+                with control.open() as control_lines:
                     for line in control_lines:
                         if "k_grid" in line:
-                            pbc_list.append(line.split()[1:])
+                            pbc_list.extend([line.split()[1:]])
 
             # If different k_grids have been used for different calculations,
             # then enforce the user to provide the k_grid
-            if not pbc_list.count(pbc_list[0]) == len(pbc_list):
+            if pbc_list.count(pbc_list[0]) == len(pbc_list):
+                pbc_list = tuple([int(i) for i in pbc_list[0][1:]])
+                self.control_opts["k_grid"] = pbc_list
+            else:
                 raise click.MissingParameter(param_hint="-p/--pbc", param_type="option")
-            pbc_list = tuple([int(i) for i in pbc_list[0]])
-            self.control_opts["k_grid"] = pbc_list
 
         except IndexError as err:
             raise click.MissingParameter(
                 param_hint="-p/--pbc", param_type="option"
             ) from err
 
-    def add_l_vecs(self, geom):
+    def add_l_vecs(self, geometry: Path) -> None:
         """
         Add lattice vectors to the geometry.in file.
 
@@ -796,7 +749,7 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
         geom : str
             path to the geometry file
         """
-        with open(geom) as geom_file:
+        with geometry.open() as geom_file:
             geom_content = geom_file.readlines()
 
         # Check if the lattice vectors are already in the file
@@ -830,7 +783,7 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
                     f"{self.l_vecs[i][2]}\n",
                 )
 
-        with open(geom, "w") as geom_file:
+        with geometry.open("w") as geom_file:
             geom_file.writelines(geom_content)
 
     def setup_excited(self) -> tuple[list[int], str]:
@@ -842,22 +795,16 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
             spec_run_info : str
                 redirection location for STDERR of calculation
         """
-        # Get the element symbols to constrain
-        element_symbols = self._get_element_symbols()
-
         # Get the atom indices to constrain
         self.atom_specifier = geometry_utils.get_atoms(
-            self.constr_atoms,
-            self.start.spec_at_constr,
-            self.ground_geom,
-            element_symbols,
+            self.ground_geom, self.start.constr_atom
         )
 
         self._calc_checks("init_1", check_restart=False, check_args=True)
 
         # Create the ForceOccupation object
         proj = force_occupation.Projector(
-            element_symbols,
+            self.start.constr_atom,
             self.start.run_loc,
             self.ground_geom,
             self.control_opts,
@@ -866,8 +813,7 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
         )
 
         # TODO allow this for multiple constrained atoms using n_atoms
-        for atom in element_symbols:
-            proj.get_electronic_structure(atom)
+        proj.get_electronic_structure(self.start.constr_atom)
 
         self._call_setups(proj)
         spec_run_info = ""
@@ -883,15 +829,9 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
             spec_run_info : str
                 Redirection location for STDERR of calculation
         """
-        # Get the element symbols to constrain
-        element_symbols = self._get_element_symbols()
-
         # Get the atom indices to constrain
         self.atom_specifier = geometry_utils.get_atoms(
-            self.constr_atoms,
-            self.start.spec_at_constr,
-            self.ground_geom,
-            element_symbols,
+            self.ground_geom, self.start.constr_atom
         )
 
         self._calc_checks("init_2")
@@ -901,7 +841,7 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
             if len(self.control_opts) > 0:
                 control_utils.add_control_opts(
                     self.start,
-                    self.constr_atoms[0],
+                    self.start.constr_atom,
                     self.atom_specifier[i],
                     "init_2",
                     self.control_opts,
@@ -926,15 +866,9 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
             Indices for atoms as specified in geometry.in, redirection location for
             STDERR of calculation
         """
-        # Get element symbols to constrain
-        element_symbols = self._get_element_symbols()
-
         # Get the atom indices to constrain
         self.atom_specifier = geometry_utils.get_atoms(
-            self.constr_atoms,
-            self.start.spec_at_constr,
-            self.ground_geom,
-            element_symbols,
+            self.ground_geom, self.start.constr_atom
         )
 
         # Check for if init_2 hasn't been run
@@ -946,7 +880,7 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
 
             # Create the ForceOccupation object
             proj = force_occupation.Projector(
-                element_symbols,
+                self.start.constr_atom
                 self.start.run_loc,
                 self.ground_geom,
                 self.control_opts,
@@ -954,8 +888,7 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
                 self.start.use_extra_basis,
             )
 
-            for atom in element_symbols:
-                proj.get_electronic_structure(atom)
+            proj.get_electronic_structure(self.start.constr_atom)
 
             # Setup files required for the initialisation and hole calculations
             self._call_setups(proj)
@@ -969,7 +902,7 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
             if len(self.control_opts) > 0:
                 control_utils.add_control_opts(
                     self.start,
-                    self.constr_atoms[0],
+                    self.start.constr_atom,
                     self.atom_specifier[i],
                     "hole",
                     self.control_opts,
@@ -992,15 +925,15 @@ class Basis(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
 
     ...
 
-    Attributes
+    Parameters
     ----------
     start : Start
         Instance of the Start object
-    run_type : click.Choice(["ground", "hole"])
+    run_type : Literal["ground", "hole"]
         Type of calculation to perform
-    occ_type : click.Choice(["deltascf_basis", "force_occupation_basis"])
-        Method of constraining the occupation
-    multiplicity : click.Choice(["1", "2"])
+    occ_type : Literal["deltascf_basis", "force_occupation_basis"]
+        Method for constraining the occupation
+    multiplicity : Literal[1, 2]
         Spin channel of the constraint
     n_qn : int
         Principal quantum number for the basis function to constrain
@@ -1009,34 +942,25 @@ class Basis(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
     m_qn : int
         Magnetic quantum number for the basis function to constrain
     ks_max : int
-        Highest energy Kohn-Sham state to constrain
-    control_opts : tuple[str]
+        Highest energy Kohn-Sham state to include in the MOM
+    control_opts : tuple[str, ...]
         Additional control options to be added to the control.in file
-    ground_geom : str
-        Location of the ground state geometry file
-    ground_control : str
-        Location of the ground state control file
-    control_opts : tuple[str]
-        Additional control options to be added to the control.in file
-    constr_atoms : list[int]
-        Atom indices to constrain
-    atom_specifier : list[int]
-        Atom indices as specified in geometry.in
     """
 
     def __init__(
         self,
-        start,
-        run_type,
-        occ_type,
-        multiplicity,
-        n_qn,
-        l_qn,
-        m_qn,
-        ks_max,
-        control_opts,
+        start: Start,
+        run_type: Literal["ground", "hole"],
+        occ_type: Literal["deltascf_basis", "force_occupation_basis"],
+        multiplicity: Literal[1, 2],
+        n_qn: int,
+        l_qn: int,
+        m_qn: int,
+        ks_max: int,
+        control_opts: tuple[str, ...],
     ):
-        super(Basis, self).__init__(
+        # Get methods from GroundCalc
+        super().__init__(
             start.run_loc,
             start.atoms,
             start.basis_set,
@@ -1046,21 +970,19 @@ class Basis(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
         )
 
         # Get methods from ExcitedCalc
-        # Ignore pyright error as I don't think it understands MRO and thinks this calls
-        # the GroundCalc __init__
-        super(calculations_utils.GroundCalc, self).__init__(start)  # pyright: ignore
+        super(calculations_utils.GroundCalc, self).__init__(start)
 
         self.start = start
-        self.run_type = run_type
-        self.occ_type = occ_type
-        self.multiplicity = multiplicity
+        self.run_type: Literal["ground", "hole"] = run_type
+        self.occ_type: Literal["deltascf_basis", "force_occupation_basis"] = occ_type
+        self.multiplicity: Literal[1, 2] = multiplicity
         self.n_qn = n_qn
         self.l_qn = l_qn
         self.m_qn = m_qn
         self.ks_max = ks_max
 
-        self.ground_geom = f"{self.start.run_loc}/ground/geometry.in"
-        self.ground_control = f"{self.start.run_loc}/ground/control.in"
+        self.ground_geom = self.start.run_loc / "ground/geometry.in"
+        self.ground_control = self.start.run_loc / "ground/control.in"
 
         # Convert control options to a dictionary
         self.control_opts = control_utils.convert_opts_to_dict(control_opts, None)
@@ -1070,19 +992,13 @@ class Basis(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
             self.control_opts, start.control_input
         )
 
-        # Convert constr_atoms to a list
-        if not isinstance(self.start.constr_atom, list):
-            self.constr_atoms = [self.start.constr_atom]
-        else:
-            self.constr_atoms = self.start.constr_atom
-
     def _calc_checks(self) -> None:
         """Perform checks before running the excited calculation."""
         # Check that the current calculation has not already been run
         checks_utils.check_curr_prev_run(
             self.run_type,
             self.start.run_loc,
-            self.constr_atoms,
+            self.start.constr_atom,
             self.atom_specifier,
             "basis",
             self.start.hpc,
@@ -1100,28 +1016,9 @@ class Basis(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
             ("m_qn", self.m_qn),
         )
 
-    def _get_element_symbols(self) -> str | list[str]:
-        """
-        Create a list of element symbols to constrain
-
-        Returns
-        -------
-        element_symbols : Union[str, list[str]]
-            Element symbols to constrain
-        """
-        if len(self.start.spec_at_constr) > 0:
-            element_symbols = geometry_utils.get_element_symbols(
-                self.ground_geom, self.start.spec_at_constr
-            )[0]
-            self.constr_atoms = element_symbols
-        else:
-            element_symbols = self.constr_atoms
-
-        return element_symbols
-
     def setup_excited(self) -> list[int]:
         """
-        Setup files and parameters required for the hole calculation.
+        Set up files and parameters required for the hole calculation.
 
         Returns
         -------
@@ -1129,24 +1026,19 @@ class Basis(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
             Indices for atoms as specified in geometry.in
         """
         # Do this outside of _calc_checks as atom_specifier is needed for that function
-        self.check_prereq_calc("hole", self.constr_atoms, "basis")
-
-        # Get the element symbols to constrain
-        element_symbols = self._get_element_symbols()
+        self.check_prereq_calc("hole", self.start.constr_atom, "basis")
 
         # Get the atom indices to constrain
         self.atom_specifier = geometry_utils.get_atoms(
-            self.constr_atoms,
-            self.start.spec_at_constr,
             self.ground_geom,
-            element_symbols,
+            self.start.constr_atom
         )
 
         self._calc_checks()
 
         # Create the directories required for the hole calculation
-        fo = force_occupation.ForceOccupation(
-            element_symbols,
+        basis = force_occupation.Basis(
+            self.start.constr_atom,
             self.start.run_loc,
             self.ground_geom,
             self.control_opts,
@@ -1154,7 +1046,6 @@ class Basis(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
             self.start.use_extra_basis,
         )
 
-        basis = force_occupation.Basis(fo)
         basis.setup_basis(
             self.multiplicity,
             self.n_qn,

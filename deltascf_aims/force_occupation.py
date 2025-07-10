@@ -1,5 +1,3 @@
-import glob
-import os
 import shutil
 import warnings
 from pathlib import Path
@@ -363,7 +361,7 @@ class Projector(ForceOccupation):
                 )
 
             # Change basis set label for core hole atom
-            with self.new_control.open("r") as read_control:
+            with self.new_control.open() as read_control:
                 new_basis_content = read_control.readlines()
 
             for j, line in enumerate(new_basis_content):
@@ -394,7 +392,7 @@ class Projector(ForceOccupation):
                 shutil.copyfile(self.run_loc / "ground/geometry.in", i1_geometry)
 
                 # Change geometry file
-                with i1_geometry.open("r") as read_geom:
+                with i1_geometry.open() as read_geom:
                     geom_content = read_geom.readlines()
 
                 # Change all core hole atoms to {atom}{num}
@@ -464,7 +462,7 @@ class Projector(ForceOccupation):
         occ_type : Literal["deltascf_projector", "force_occupation_projector"]
             FHI-aims projector keyword.
         spin : Literal[1, 2]
-            Spin channel the KS state to constrain belongs to.
+            Spin channel of the KS state to constrain.
         pbc : bool
             If the calculation is periodic.
         """
@@ -545,7 +543,7 @@ class Projector(ForceOccupation):
         occ_type : Literal["deltascf_projector", "force_occupation_projector"]
             FHI-aims projector keyword.
         spin : Literal[1, 2]
-            Spin channel the KS state to constrain belongs to.
+            Spin channel of the KS state to constrain.
         pbc : bool
             If the calculation is periodic.
         """
@@ -592,7 +590,7 @@ class Projector(ForceOccupation):
                 )
                 shutil.copyfile(self.new_control, h_control)
 
-                with h_control.open("r") as read_control:
+                with h_control.open() as read_control:
                     control_content = read_control.readlines()
 
                 # Set nuclear and valence orbitals back to integer values
@@ -615,18 +613,82 @@ class Projector(ForceOccupation):
         print("Wrote hole files")
 
 
-# TODO also update Basis
 class Basis(ForceOccupation):
-    """Create input files for basis calculations."""
+    """
+    Create input files for basis calculations.
 
-    def __init__(self, parent_instance):
-        # Inherit all the variables from an instance of the parent class
-        vars(self).update(vars(parent_instance))
+    ...
+
+    Parameters
+    ----------
+    element_symbols : list[str]
+        list of element symbols to constrain
+    run_loc : Path
+        Path to the run directory.
+    geometry : Path
+        Path to the geometry file.
+    ad_cont_opts : dict[str, Any]
+        Additional control options.
+    atom_specifier : list[int]
+        List of atom identifiers of atoms by geometry.in index.
+    extra_basis : bool
+        Whether to add extra basis functions to the control file.
+
+    Attributes
+    ----------
+    element_symbols : list[str]
+        list of element symbols to constrain
+    run_loc : Path
+        Path to the run directory.
+    geometry : Path
+        Path to the geometry file.
+    ad_cont_opts : dict[str, Any]
+        Additional control options.
+    atom_specifier : list[int]
+        List of atom identifiers of atoms by geometry.in index.
+    extra_basis : bool
+        Whether to add extra basis functions to the control file.
+    """
+
+    def __init__(self, *args: Any):
+        super().__init__(*args)
 
     def setup_basis(
-        self, spin, n_qn, l_qn, m_qn, occ_no, ks_max, occ_type, basis_set, defaults
-    ):
-        """Write new directories and control files for basis calculations."""
+        self,
+        spin: Literal[1, 2],
+        n_qn: int,
+        l_qn: int,
+        m_qn: int,
+        occ_no: float,
+        ks_max: int,
+        occ_type: Literal["deltascf_basis", "force_occupation_basis"],
+        basis_set: str,
+        defaults: Path,
+    ) -> None:
+        """
+        Write new directories and control files for basis calculations.
+
+        Parameters
+        ----------
+        spin : Literal[1, 2]
+            Spin channel of the KS state to constrain.
+        n_qn : int
+            Principal quantum number of the orbital to constrain.
+        l_qn : int
+            Azimuthal quantum number of the orbital to constrain.
+        m_qn : int
+            Magnetic quantum number of the orbital to constrain.
+        occ_no : float
+            Occupation number of the orbital to constrain.
+        ks_max : int
+            Maximum KS state to include in the MOM.
+        occ_type : Literal["deltascf_basis", "force_occupation_basis"]
+            FHI-aims basis keyword.
+        basis_set : str
+            Basis set type to use.
+        defaults : Path
+            Default location of the basis sets.
+        """
         # Enforce that the old method uses ks_method serial
         ks_method = "serial" if occ_type == "force_occupation_basis" else None
 
@@ -652,24 +714,24 @@ class Basis(ForceOccupation):
 
                 i += 1
 
-                control = f"{self.run_loc}/{el}{i}/control.in"
-                geometry = f"{self.run_loc}/{el}{i}/geometry.in"
+                control = self.run_loc / f"{el}{i}/control.in"
+                geometry = self.run_loc / f"{el}{i}/geometry.in"
 
                 # Create new directories and .in files for each constrained atom
-                os.makedirs(f"{self.run_loc}/{el}{i}/", exist_ok=True)
+                (self.run_loc / f"{el}{i}").mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(
-                    f"{self.run_loc}/ground/control.in",
+                    self.run_loc / "ground/control.in",
                     control,
                 )
                 shutil.copyfile(
-                    f"{self.run_loc}/ground/geometry.in",
+                    self.run_loc / "ground/geometry.in",
                     geometry,
                 )
 
                 # Create new geometry file for hole calc by adding label for
                 # core hole basis set
                 # Change geometry file
-                with open(geometry) as read_geom:
+                with geometry.open() as read_geom:
                     geom_content = read_geom.readlines()
 
                 # Change core hole atom to {atom}{num}
@@ -684,19 +746,20 @@ class Basis(ForceOccupation):
 
                         atom_counter += 1
 
-                with open(geometry, "w") as write_geom:
+                with geometry.open("w") as write_geom:
                     write_geom.writelines(geom_content)
 
                 # Change control file
                 # Find species defaults location from location of binary and
                 # add basis set to control file from defaults
-                basis_set_file = glob.glob(
-                    f"{defaults}/defaults_2020/{basis_set}/??_{el}_default"
-                )
-                os.system(f"cat {basis_set_file[0]} >> {control}")
+                basis_dir = Path(defaults) / "defaults_2020" / basis_set
+                basis_set_files = list(basis_dir.glob(f"??_{el}_default"))
+
+                with basis_set_files[0].open("r") as src, control.open("a") as dst:
+                    shutil.copyfileobj(src, dst)
 
                 # Change basis set label for core hole atom
-                with open(control) as read_control:
+                with control.open() as read_control:
                     control_content = read_control.readlines()
 
                 for j, line in enumerate(control_content):
@@ -707,7 +770,7 @@ class Basis(ForceOccupation):
                         break
 
                 # Write the new label to the file
-                with open(control, "w") as write_control:
+                with control.open("w") as write_control:
                     write_control.writelines(control_content)
 
                 # Change control file keywords
@@ -720,7 +783,7 @@ class Basis(ForceOccupation):
                     )
 
                 # Write the keywords and basis functions to the file
-                with open(control, "w") as write_control:
+                with control.open("w") as write_control:
                     write_control.writelines(control_content)
 
         print("files and directories written successfully")

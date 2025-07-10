@@ -1,6 +1,6 @@
-import os
-import warnings
+from pathlib import Path
 from typing import Any, Literal
+from warnings import warn
 
 from click import BadParameter, MissingParameter
 
@@ -61,25 +61,24 @@ def check_constrained_geom(geom_file: str) -> None:
 
 
 def check_curr_prev_run(
-    run_type: Literal["ground", "hole", "init_1", "init_2"],
-    run_loc: str,
-    constr_atoms: list[str] | str,
+    run_type: Literal["ground", "init_1", "init_2", "hole"],
+    run_loc: Path,
+    constr_atom: str,
     atom_specifier: list[int],
     constr_method: Literal["projector", "basis"],
     hpc: bool,
     force: bool = False,
 ) -> None:
     """
-
     Check if the current calculation has previously been run.
 
     Parameters
     ----------
     run_type : Literal["ground", "hole", "init_1", "init_2"]
         Type of calculation to check for
-    run_loc : str
+    run_loc : Path
         Path to the calculation directory
-    constr_atoms : list[str] | str
+    constr_atoms : str
         Constrained atoms
     atom_specifier : list[int]
         list of atom indices
@@ -96,16 +95,16 @@ def check_curr_prev_run(
         Exit the program if the calculation has already been run
     """
     if run_type == "ground":
-        search_path = f"{run_loc}/{run_type}/aims.out"
+        search_path = run_loc / run_type / "aims.out"
     elif constr_method == "projector":
         search_path = (
-            f"{run_loc}/{constr_atoms[0]}{atom_specifier[0]}/{run_type}/aims.out"
+            run_loc / f"{constr_atom}{atom_specifier[0]}" / run_type / "aims.out"
         )
     elif constr_method == "basis":
-        search_path = f"{run_loc}/{constr_atoms[0]}{atom_specifier[0]}/aims.out"
+        search_path = run_loc / f"{constr_atom}{atom_specifier[0]}" / "aims.out"
 
-    if os.path.isfile(search_path) and not hpc and not force:
-        warnings.warn("Calculation has already been completed")
+    if search_path.is_file() and not hpc and not force:
+        warn("Calculation has already been completed", stacklevel=2)
         cont = None
         while cont != "y":
             cont = str(input("Do you want to continue? (y/n) ")).lower()
@@ -164,7 +163,7 @@ def check_lattice_vecs(geom_file: str) -> bool:
     return l_vecs
 
 
-def check_params(start, include_hpc=False) -> None:
+def check_params(start, include_hpc: bool = False) -> None:
     """
     Check that the parameters given in Start are valid.
 
@@ -172,7 +171,7 @@ def check_params(start, include_hpc=False) -> None:
     ----------
     start
         Instance of the Start class
-    include_hpc : bool, optional
+    include_hpc : bool, default=False
         Include the hpc parameter in the check
 
     Raises

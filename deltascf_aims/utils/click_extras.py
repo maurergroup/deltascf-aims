@@ -29,19 +29,14 @@ def get_long_arg_name(ctx, arg):
 
 
 class ShowHelpSubCmd(Argument):
-    """
-    Enable the help documentation to be shown for subcommands if '--help' is specified
-    as part of the subcommand's args before any code is executed for the parent cmd.
-    """
+    """Short circuit to show help documentation if --help is passed in a subcommand."""
 
     def handle_parse_result(self, ctx, opts, args):
         # Check if '--help' exists on the command line
         if any(arg in ctx.help_option_names for arg in args):
-
             # If asking for help, check if we are in a subcommand
             for arg in opts.values():
                 if arg in ctx.command.commands:
-
                     # Matches a subcommand name, and '--help' is present
                     args = [arg] + args
 
@@ -152,9 +147,10 @@ class MutuallyInclusive(Option):
         mut_ex_arg_long = get_long_arg_name(ctx, self.mutually_inclusive)
 
         if self.mutually_inclusive.intersection(opts) and self.name not in opts:
-            raise UsageError(
+            msg = (
                 f"`{curr_arg_long}` is mutually inclusive with arguments"
                 f"`{mut_ex_arg_long}`."
             )
+            raise UsageError(msg)
 
         return super().handle_parse_result(ctx, opts, args)
