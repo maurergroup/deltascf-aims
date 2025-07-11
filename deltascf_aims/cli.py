@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import TYPE_CHECKING, Literal
 
 import click
 
@@ -6,8 +7,10 @@ from deltascf_aims import main
 from deltascf_aims.utils.click_extras import (
     MutuallyExclusive,
     MutuallyInclusive,
-    NotRequiredIf,
 )
+
+if TYPE_CHECKING:
+    from deltascf_aims.core import Start
 
 
 @click.group()
@@ -25,18 +28,18 @@ from deltascf_aims.utils.click_extras import (
     "-m",
     "--molecule",
     "spec_mol",
-    cls=NotRequiredIf,
-    not_required_if=["geometry_input"],
+    cls=MutuallyExclusive,
+    mutually_exclusive=["geometry_input"],
     type=str,
     help="molecule to be used in the calculation",
 )
 @click.option(
     "-e",
     "--geometry_input",
-    cls=NotRequiredIf,
-    not_required_if=["spec_mol"],
+    cls=MutuallyExclusive,
+    mutually_exclusive=["spec_mol"],
     nargs=1,
-    type=click.File(),
+    type=click.Path(exists=True, dir_okay=False, writable=True, path_type=Path),
     help="specify a custom geometry.in instead of using a structure from pubchem "
     "or ASE",
 )
@@ -44,7 +47,7 @@ from deltascf_aims.utils.click_extras import (
     "-i",
     "--control_input",
     nargs=1,
-    type=click.File(),
+    type=click.Path(exists=True, dir_okay=False, writable=True, path_type=Path),
     help="specify a custom control.in instead of automatically generating one",
 )
 @click.option(
@@ -114,7 +117,7 @@ from deltascf_aims.utils.click_extras import (
     help="force the calculation to run even if it has already been run",
 )
 @click.option(
-    "--aims_cmd",
+    "--run_cmd",
     default="mpirun -n",
     show_default=True,
     nargs=1,
@@ -132,24 +135,24 @@ from deltascf_aims.utils.click_extras import (
 )
 @click.version_option()
 @click.pass_context
-def initialise(
-    ctx,
-    hpc,
-    spec_mol,
-    geometry_input,
-    control_input,
-    binary,
-    run_location,
-    constr_atom,
-    occupation,
-    n_atoms,
-    basis_set,
-    use_extra_basis,
-    print_output,
-    force,
-    aims_cmd,
-    nprocs,
-):
+def initialise(  # noqa: PLR0913
+    ctx: click.Context,
+    hpc: bool,
+    spec_mol: str,
+    geometry_input: Path,
+    control_input: Path,
+    binary: bool,
+    run_location: Path,
+    constr_atom: str,
+    occupation: float,
+    n_atoms: int,
+    basis_set: str,
+    use_extra_basis: bool,
+    print_output: bool,
+    force: bool,
+    run_cmd: str,
+    nprocs: int,
+) -> None:
     """
     Automation of core-hole constrained occupation methods in FHI-aims.
 
@@ -172,24 +175,7 @@ def initialise(
     #     click.echo(ctx.get_help())
     #     raise SystemExit(0)
 
-    return main.start(
-        ctx,
-        hpc,
-        spec_mol,
-        geometry_input,
-        control_input,
-        binary,
-        run_location,
-        constr_atom,
-        occupation,
-        n_atoms,
-        basis_set,
-        use_extra_basis,
-        print_output,
-        force,
-        aims_cmd,
-        nprocs,
-    )
+    return main.start(**locals())
 
 
 @initialise.command()
@@ -216,17 +202,10 @@ def initialise(
     help="give the k-grid for a periodic calculation",
 )
 @click.option(
-    "-l",
-    "--lattice_vectors",
-    "l_vecs",
-    nargs=3,
-    help="provide the lattice vectors as 3 vectors of length 3",
-)
-@click.option(
     "-s",
     "--spin",
-    type=click.Choice(["1", "2"]),
-    default="1",
+    type=click.Choice([1, 2]),
+    default=1,
     show_default=True,
     help="set the spin channel of the constraint",
 )
@@ -245,11 +224,17 @@ def initialise(
     help="provide additional options to be used in 'control.in' in a key=value format",
 )
 @click.pass_obj
-def projector(start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts):
+def projector(
+    start: "Start",
+    run_type: Literal["ground", "init_1", "init_2", "hole"],
+    occ_type: Literal["deltascf_projector", "force_occupation_projector"],
+    pbc: tuple[int, int, int] | None,
+    spin: Literal[1, 2],
+    ks_range: tuple[int, int] | None,
+    control_opts: tuple[str, ...],
+) -> None:
     """Force occupation through defining the Kohn-Sham states to occupy."""
-    return main.projector(
-        start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_opts
-    )
+    return main.projector(**locals())
 
 
 @initialise.command()
@@ -271,8 +256,8 @@ def projector(start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_op
 @click.option(
     "-s",
     "--spin",
-    type=click.Choice(["1", "2"]),
-    default="1",
+    type=click.Choice([1, 2]),
+    default=1,
     show_default=True,
     help="set the spin channel for the constraint",
 )
@@ -280,7 +265,6 @@ def projector(start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_op
     "-n",
     "--n_quantum_number",
     "n_qn",
-    required=True,
     type=int,
     help="principal quantum number of constrained state",
 )
@@ -288,7 +272,6 @@ def projector(start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_op
     "-l",
     "--l_quantum_number",
     "l_qn",
-    required=True,
     type=int,
     help="orbital momentum quantum number of constrained state",
 )
@@ -296,14 +279,12 @@ def projector(start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_op
     "-m",
     "--m_quantum_number",
     "m_qn",
-    required=True,
     type=int,
     help="magnetic quantum number for projection of orbital momentum",
 )
 @click.option(
     "-k",
     "--ks_max",
-    required=True,
     type=click.IntRange(1),
     help="maximum Kohn-Sham state to constrain",
 )
@@ -315,11 +296,19 @@ def projector(start, run_type, occ_type, pbc, l_vecs, spin, ks_range, control_op
     help="provide additional options to be used in 'control.in' in a key=value format",
 )
 @click.pass_obj
-def basis(start, run_type, occ_type, spin, n_qn, l_qn, m_qn, ks_max, control_opts):
+def basis(
+    start: "Start",
+    run_type: Literal["ground", "hole"],
+    occ_type: Literal["deltascf_basis", "force_occupation_basis"],
+    spin: Literal[1, 2],
+    n_qn: int | None,
+    l_qn: int | None,
+    m_qn: int | None,
+    ks_max: int | None,
+    control_opts: tuple[str, ...],
+) -> None:
     """Force occupation through basis functions."""
-    return main.basis(
-        start, run_type, occ_type, spin, n_qn, l_qn, m_qn, ks_max, control_opts
-    )
+    return main.basis(**locals())
 
 
 @initialise.command()
@@ -409,30 +398,18 @@ def basis(start, run_type, occ_type, spin, n_qn, l_qn, m_qn, ks_max, control_opt
     help="global minimum percentage",
 )
 @click.pass_obj
-def plot(
-    start,
-    graph,
-    intensity,
-    asym,
-    a,
-    b,
-    gl_ratio,
-    omega,
-    include_name,
-    exclude_mabe,
-    gmp,
-):
+def plot(  # noqa: PLR0913
+    start: "Start",
+    graph: bool,
+    intensity: float,
+    asym: bool,
+    a: float,
+    b: float,
+    gl_ratio: float,
+    omega: float,
+    include_name: bool,
+    exclude_mabe: bool,
+    gmp: float,
+) -> None:
     """Plot the simulated XPS spectra."""
-    return main.plot(
-        start,
-        graph,
-        intensity,
-        asym,
-        a,
-        b,
-        gl_ratio,
-        omega,
-        include_name,
-        exclude_mabe,
-        gmp,
-    )
+    return main.plot(**locals())

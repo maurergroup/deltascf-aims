@@ -1,6 +1,7 @@
 import glob
 import os
-import warnings
+from pathlib import Path
+from warnings import warn
 
 import yaml
 from ase import Atoms
@@ -31,7 +32,7 @@ def add_additional_basis(elements, content, target_atom) -> list[str]:
         if "# Additional basis functions for atom with a core hole" in line:
             return content
 
-    current_path = os.path.dirname(os.path.realpath(__file__))
+    current_path = Path(__file__).parent
 
     # Get the additional basis set
     if "dscf_utils" in current_path.split("/"):
@@ -106,7 +107,7 @@ def add_additional_basis(elements, content, target_atom) -> list[str]:
         content.insert(insert_point, f"{el_ad_basis}\n")
         return content
 
-    warnings.warn("There was an error with adding the additional basis function")
+    warn("There was an error with adding the additional basis function")
     return content
 
 
@@ -370,8 +371,6 @@ def write_control(
         os.system(f"touch {run_loc}/control.in")
 
     control_opts = convert_tuple_key_to_str(control_opts)
-
-    # Use the static method from ForceOccupation
     lines = change_control_keywords(f"{run_loc}/control.in", control_opts)
 
     with open(f"{run_loc}/control.in", "w") as control:

@@ -1,4 +1,3 @@
-import os
 import shutil
 import warnings
 from pathlib import Path
@@ -6,6 +5,7 @@ from typing import Literal
 
 import click
 import numpy as np
+import numpy.typing as npt
 from ase import Atoms
 from ase.io import read
 
@@ -35,7 +35,8 @@ class Start:
         spec_mol : str
             molecule to be used in the calculation
         geometry_input : click.File()
-            specify a custom geometry.in instead of using a structure from PubChem or ASE
+            specify a custom geometry.in instead of using a structure from PubChem or
+            ASE
         control_input : click.File()
             specify a custom control.in instead of automatically generating one
         binary : bool
@@ -97,23 +98,23 @@ class Start:
             Add an ASE calculator to an Atoms object
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
-        hpc,
-        spec_mol,
-        geometry_input,
-        control_input,
-        binary,
-        run_location,
-        constr_atom,
-        occupation,
-        n_atoms,
-        basis_set,
-        use_extra_basis,
-        print_output,
-        force,
-        run_cmd,
-        nprocs,
+        hpc: bool,
+        spec_mol: str,
+        geometry_input: Path,
+        control_input: Path,
+        binary: bool,
+        run_location: Path,
+        constr_atom: str,
+        occupation: float,
+        n_atoms: int,
+        basis_set: str,
+        use_extra_basis: bool,
+        print_output: bool,
+        force: bool,
+        run_cmd: str,
+        nprocs: int,
     ):
         self.hpc = hpc
         self.spec_mol = spec_mol
@@ -159,20 +160,13 @@ class Start:
             The param_hint option has not been provided
 
         """
-        if not self.geometry_input:
+        if not self.geometry_input and not self.spec_mol:
             raise click.MissingParameter(
-                param_hint="-e/--geometry_input", param_type="option"
+                param_hint="-e/--geometry_input or -m/--molecule", param_type="option"
             )
 
     def check_for_pbcs(self) -> None:
         """Check for lattice vectors and k-grid in input file."""
-        self.found_l_vecs = False
-        if self.geometry_input is not None:
-            checks_utils.check_constrained_geom(self.geometry_input)
-            self.found_l_vecs = checks_utils.check_lattice_vecs(self.geometry_input)
-        else:
-            self.found_l_vecs = False
-
         self.found_k_grid = False
         if self.control_input is not None:
             self.found_k_grid = checks_utils.check_k_grid(self.control_input)
@@ -199,13 +193,13 @@ class Start:
             self.ase = False  # Do not use if control.in is specified
 
     # @_check_help_arg
-    def create_structure(self) -> Atoms | list[Atoms]:
+    def create_structure(self) -> Atoms:
         """
         Initialise an ASE atoms object from geometry.in or an ASE database.
 
         Returns
         -------
-        Union[Atoms, list[Atoms]]
+        ase.Atoms
             ASE atoms object
 
         Raises
@@ -237,7 +231,7 @@ class Start:
             if self.geometry_input is not None:
                 self.atoms = read(self.geometry_input.name, index=-1)  # pyright: ignore[reportAttributeAccessIssue]
 
-        return self.atoms
+        return self.atoms  # pyright: ignore[reportReturnType]
 
     # @_check_help_arg
     def check_for_bin(self) -> tuple[Path, Path]:
@@ -291,7 +285,7 @@ class Start:
         if not bin_path.is_file() or self.binary:
             marker = (
                 "\n# Enter the path to the FHI-aims binary above this line\n"
-                "# Ensure that the binary is located in the build directory of FHIaims\n"
+                "# Ensure that the binary is located in the build directory of FHIaims\n"  # noqa: E501
                 "# and that the full absolute path is provided"
             )
             bin_line = click.edit(marker)
@@ -302,7 +296,7 @@ class Start:
                         f.write(str(bin_line))
 
                     with current_path.joinpath("aims_bin_loc.txt").open() as f:
-                        self.binary = f.readlines()[0]
+                        self.binary = Path(f.readlines()[0])
 
                 else:
                     raise FileNotFoundError(
@@ -316,7 +310,7 @@ class Start:
 
         elif bin_path.is_file():
             print(f"specified binary path: {bin_path}")
-            self.binary: Path = bin_path
+            self.binary = bin_path
 
         else:
             raise FileNotFoundError("path to the FHI-aims binary could not be found")
@@ -401,24 +395,70 @@ class Process:
 
     ...
 
+    Parameters
+    ----------
+    start : Start
+        instance of the Start object containing initial setup and configuration
+    graph : bool
+        whether to generate and display a graphical plot of the XPS spectrum
+    intensity : float, default=1
+        peak intensity scaling factor for the spectrum
+    asym : bool, default=False
+        whether to apply asymmetric peak broadening
+    a : float, default=0.2
+        asymmetry parameter for peak broadening
+    b : float, default=0.0
+        secondary asymmetry parameter for peak broadening
+    gl_ratio : float, default=0.5
+        Gaussian-Lorentzian mixing ratio for pseudo-Voigt broadening
+    omega : float, default=0.35
+        peak width parameter for broadening
+    include_name : bool, default=True
+        whether to include molecule name in output files
+    exclude_mabe : bool, default=False
+        whether to exclude Mean Absolute Binding Energy calculation
+    gmp : float, default=0.003
+        percentage of the maximum peak height to cut off the plot on the x-axis
+
     Attributes
     ----------
-    TODO
+    start : Start
+        instance of the Start object containing initial setup and configuration
+    graph : bool
+        whether to generate and display a graphical plot of the XPS spectrum
+    intensity : float
+        peak intensity scaling factor for the spectrum
+    asym : bool
+        whether to apply asymmetric peak broadening
+    a : float
+        asymmetry parameter for peak broadening
+    b : float
+        secondary asymmetry parameter for peak broadening
+    gl_ratio : float
+        Gaussian-Lorentzian mixing ratio for pseudo-Voigt broadening
+    omega : float
+        peak width parameter for broadening
+    include_name : bool
+        whether to include molecule name in output files
+    exclude_mabe : bool
+        whether to exclude Mean Absolute Binding Energy calculation
+    gmp : float
+        graphical margin parameter for plotting
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
-        start,
-        graph,
-        intensity=1,
-        asym=False,
-        a=0.2,
-        b=0.0,
-        gl_ratio=0.5,
-        omega=0.35,
-        include_name=True,
-        exclude_mabe=False,
-        gmp=0.003,
+        start: Start,
+        graph: bool,
+        intensity: float = 1,
+        asym: bool = False,
+        a: float = 0.2,
+        b: float = 0.0,
+        gl_ratio: float = 0.5,
+        omega: float = 0.35,
+        include_name: bool = True,
+        exclude_mabe: bool = False,
+        gmp: float = 0.003,
     ):
         self.start = start
         self.graph = graph
@@ -465,9 +505,11 @@ class Process:
         file_type : Literal["peaks", "spectrum"]
             type of file to move
         """
-        os.system(f"mv {element}_xps_{file_type}.txt {self.start.run_loc}")
+        source_file = f"{element}_xps_{file_type}.txt"
+        destination = self.start.run_loc / f"{element}_xps_{file_type}.txt"
+        shutil.move(source_file, destination)
 
-    def call_broaden(self, xps) -> np.ndarray:
+    def call_broaden(self, xps: list[float]) -> npt.NDArray[np.float64]:
         """
         Apply pseudo-Voigt peak broadening.
 
@@ -478,10 +520,10 @@ class Process:
 
         Returns
         -------
-        peaks : np.ndarray
+        peaks : npt.NDArray[np.float64]
             broadened peaks
         """
-        peaks = broaden(
+        return broaden(
             0,
             1000,
             self.intensity,
@@ -493,15 +535,15 @@ class Process:
             self.b,
         )
 
-        return peaks
-
-    def write_spectrum_to_file(self, peaks, element, bin_width=0.01) -> None:
+    def write_spectrum_to_file(
+        self, peaks: npt.NDArray[np.float64], element: str, bin_width: float = 0.01
+    ) -> None:
         """
         Write the spectrum to a text file.
 
         Parameters
         ----------
-        peaks : np.ndarray
+        peaks : npt.NDArray[np.float64]
             broadened peaks
         element : str
             element the binding energies were calculated for
@@ -517,13 +559,13 @@ class Process:
         with open(f"{element}_xps_spectrum.txt", "w") as spec:
             spec.writelines(data)
 
-    def plot_xps(self, xps):
+    def plot_xps(self, xps: list[float]) -> None:
         """
         Plot the XPS spectrum and save as pdf and png files.
 
         Parameters
         ----------
-        xps : list
+        xps : list[float]
             list of individual binding energies.
         """
         xps_spec = XPSSpectrum(
@@ -551,8 +593,6 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
         use either the refactored or original projector keyword
     pbc : tuple[int, int, int]
         k-grid for a periodic calculation
-    l_vecs : list[list[float]]
-        lattice vectors in a 3x3 matrix of floats
     spin : Literal[1, 2]
         spin channel of the constraint
     ks_range : tuple[int, int]
@@ -567,7 +607,6 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
         run_type: Literal["ground", "init_1", "init_2", "hole"],
         occ_type: Literal["deltascf_projector", "force_occupation_projector"],
         pbc: tuple[int, int, int],
-        l_vecs: list[list[float]],
         spin: Literal[1, 2],
         ks_range: tuple[int, int],
         control_opts: tuple[str, ...],
@@ -591,7 +630,6 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
             occ_type
         )
         self.pbc = pbc
-        self.l_vecs = l_vecs
         self.spin: Literal[1, 2] = spin
         self.ks_range = ks_range
 
@@ -619,9 +657,9 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
         ----------
         current_calc : Literal["init_1", "init_2", "hole"]
             Type of excited calculation that will be run
-        check_restart : bool, optional
+        check_restart : bool, default=True
             Whether to check for the existance of restart files or not
-        check_args : bool, optional
+        check_args : bool, default=False
             Whether to check if the required CLI arguments were given or not
         """
         # Check that the previous calculation has been run
@@ -657,14 +695,15 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
 
     def _call_setups(self, proj: force_occupation.Projector) -> None:
         """
-        Set up files and parameters for the initialization and hole calculations.
+        Set up files and parameters for the initialisation and hole calculations.
 
         Parameters
         ----------
-        proj : ForceOccupation.Projector
-            Instance of ForceOccupation
+        proj : force_occupation.Projector
+            Instance of Projector
         """
         proj.setup_init_1(
+            self.ks_range,
             self.start.basis_set,
             self.start.species,
             self.ground_control,
@@ -705,7 +744,7 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
         ).is_file()
 
         source_pattern = self.start.run_loc / f"{self.start.constr_atom}{atom}" / begin
-        dest_dir = self.start.run_loc / f"{self.constr_atom}{atom}" / end
+        dest_dir = self.start.run_loc / f"{self.start.constr_atom}{atom}" / end
 
         # Copy all restart files from source to destination
         for restart_file in source_pattern.glob("*restart*"):
@@ -739,52 +778,6 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
             raise click.MissingParameter(
                 param_hint="-p/--pbc", param_type="option"
             ) from err
-
-    def add_l_vecs(self, geometry: Path) -> None:
-        """
-        Add lattice vectors to the geometry.in file.
-
-        Parameters
-        ----------
-        geom : str
-            path to the geometry file
-        """
-        with geometry.open() as geom_file:
-            geom_content = geom_file.readlines()
-
-        # Check if the lattice vectors are already in the file
-        lv_line_1 = None
-        for i, line in enumerate(geom_content):
-            if "lattice_vector" in line:
-                lv_line_1 = i
-                break
-
-        # Add lattice vectors to the geometry file
-        if lv_line_1 is not None:  # Replace existing lattice vectors
-            for i in range(3):
-                geom_content[lv_line_1 + i] = (
-                    f"lattice_vector {self.l_vecs[i][0]} {self.l_vecs[i][1]} "
-                    f"{self.l_vecs[i][2]}\n"
-                )
-
-        elif self.start.ase:  # Add after ASE header
-            for i in range(5, 8):
-                geom_content.insert(
-                    i,
-                    f"lattice_vector {self.l_vecs[i - 5][0]} {self.l_vecs[i - 5][1]} "
-                    f" {self.l_vecs[i - 5][2]}\n",
-                )
-
-        else:
-            for i in range(3):  # Add to the top of the file
-                geom_content.insert(
-                    i,
-                    f"lattice_vector {self.l_vecs[i][0]} {self.l_vecs[i][1]} "
-                    f"{self.l_vecs[i][2]}\n",
-                )
-
-        with geometry.open("w") as geom_file:
-            geom_file.writelines(geom_content)
 
     def setup_excited(self) -> tuple[list[int], str]:
         """
@@ -880,7 +873,7 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
 
             # Create the ForceOccupation object
             proj = force_occupation.Projector(
-                self.start.constr_atom
+                self.start.constr_atom,
                 self.start.run_loc,
                 self.ground_geom,
                 self.control_opts,
@@ -1030,8 +1023,7 @@ class Basis(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
 
         # Get the atom indices to constrain
         self.atom_specifier = geometry_utils.get_atoms(
-            self.ground_geom,
-            self.start.constr_atom
+            self.ground_geom, self.start.constr_atom
         )
 
         self._calc_checks()

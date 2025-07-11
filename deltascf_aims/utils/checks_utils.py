@@ -1,8 +1,11 @@
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 from warnings import warn
 
 from click import BadParameter, MissingParameter
+
+if TYPE_CHECKING:
+    from deltascf_aims.core import Start
 
 
 def check_args(*args: Any) -> None:
@@ -27,20 +30,20 @@ def check_args(*args: Any) -> None:
         if arg[1] is None:
             if arg[0] == "spec_mol":
                 # Convert to list and back to assign to tuple
-                arg = list(arg)
+                arg = list(arg)  # noqa: PLW2901
                 arg[0] = "molecule"
-                arg = tuple(arg)
+                arg = tuple(arg)  # noqa: PLW2901
 
             raise MissingParameter(param_hint=f"'--{arg[0]}'", param_type="option")
 
 
-def check_constrained_geom(geom_file: str) -> None:
+def check_constrained_geom(geom_file: Path) -> None:
     """
     Check for `constrain_relaxation` keywords in the geometry.in.
 
     Parameters
     ----------
-    geom_file : str
+    geom_file : pathlib.Path
         Path to geometry.in file
 
     Raises
@@ -48,16 +51,17 @@ def check_constrained_geom(geom_file: str) -> None:
     SystemExit
         Exit the program if the `constrain_relaxation` keyword is found
     """
-    for line in geom_file:
-        if "constrain_relaxation" in line:
-            print("`constrain_relaxation` keyword found in geometry.in")
-            print("ensure that no atoms are fixed in the geometry.in file")
-            print(
-                "the geometry of the structure should have already been relaxed before "
-                "running single-point calculations"
-            )
-            print("aborting...")
-            raise SystemExit(1)
+    with geom_file.open() as f:
+        for line in f:
+            if "constrain_relaxation" in line:
+                print("`constrain_relaxation` keyword found in geometry.in")
+                print("ensure that no atoms are fixed in the geometry.in file")
+                print(
+                    "the geometry of the structure should have already been relaxed "
+                    "before running the single-point calculations"
+                )
+                print("aborting...")
+                raise SystemExit(1)
 
 
 def check_curr_prev_run(
@@ -117,13 +121,13 @@ def check_curr_prev_run(
                 break
 
 
-def check_k_grid(control_file: str) -> bool:
+def check_k_grid(control_file: Path) -> bool:
     """
     Check if there is a k_grid in the control.in.
 
     Parameters
     ----------
-    control_file : str
+    control_file : pathlib.Path
         Path to control.in file
 
     Returns
@@ -133,37 +137,15 @@ def check_k_grid(control_file: str) -> bool:
     """
     k_grid = False
 
-    for line in control_file:
-        if "k_grid" in line:
-            k_grid = True
+    with control_file.open() as f:
+        for line in f:
+            if "k_grid" in line:
+                k_grid = True
 
     return k_grid
 
 
-def check_lattice_vecs(geom_file: str) -> bool:
-    """
-    Check if lattice vectors are given in the geometry.in file.
-
-    Parameters
-    ----------
-    geom_file : str
-        Path to geometry.in file
-
-    Returns
-    -------
-    l_vecs : bool
-        True if lattice vectors are found, False otherwise
-    """
-    l_vecs = False
-
-    for line in geom_file:
-        if "lattice_vector" in line:
-            l_vecs = True
-
-    return l_vecs
-
-
-def check_params(start, include_hpc: bool = False) -> None:
+def check_params(start: "Start", include_hpc: bool = False) -> None:
     """
     Check that the parameters given in Start are valid.
 
@@ -186,9 +168,9 @@ def check_params(start, include_hpc: bool = False) -> None:
             "the -h/--hpc flag is only supported for the 'hole' run type"
         )
 
-    if len(start.spec_at_constr) == 0 and len(start.constr_atom) == 0:
+    if start.constr_atom in [None, ""]:
         raise MissingParameter(
-            param_hint="-c/--constrained_atom or -s/--specific_atom_constraint",
+            param_hint="-c/--constrained_atom",
             param_type="option",
         )
 

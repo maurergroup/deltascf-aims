@@ -140,12 +140,12 @@ class ForceOccupation:
 
         # Create and order a list of tuples, (n+l, n, l), corresponding to the order
         # in which the corresponding orbitals are filled using the Madelung rule.
-        nl_pairs = sorted((n + l, n, l) for n in range(1, 8) for l in range(n))
+        nl_pairs = sorted((n + ell, n, ell) for n in range(1, 8) for ell in range(n))
 
         inl = 0
         n_elec = 0
         n = 1
-        l = 0
+        ell = 0
         config = [["1s", 0]]
         noble_gas_config = ("", "")
         s_config = ""
@@ -154,8 +154,8 @@ class ForceOccupation:
         for i in range(len(self.elements[: self.atom_index])):
             n_elec += 1
 
-            if n_elec > 2 * (2 * l + 1):  # Subshell full
-                if l == 1:
+            if n_elec > 2 * (2 * ell + 1):  # Subshell full
+                if ell == 1:
                     # Save this noble gas configuration
                     noble_gas_config = (
                         ".".join(["{:2s}{:d}".format(*e) for e in config]),
@@ -164,8 +164,8 @@ class ForceOccupation:
 
                 # Start a new subshell
                 inl += 1
-                _, n, l = nl_pairs[inl]
-                config.append([f"{n}{l_letter[l]}", 1])
+                _, n, ell = nl_pairs[inl]
+                config.append([f"{n}{l_letter[ell]}", 1])
                 n_elec = 1
 
             # add an electron to the current subshell
@@ -303,13 +303,20 @@ class Projector(ForceOccupation):
         super().__init__(*args)
 
     def setup_init_1(
-        self, basis_type: str, defaults: Path, control: Path, pbc: bool
+        self,
+        ks_range: tuple[int, int],
+        basis_type: str,
+        defaults: Path,
+        control: Path,
+        pbc: bool,
     ) -> None:
         """
         Write new directories and control files for the first init calculation.
 
         Parameters
         ----------
+        ks_range : tuple[int, int]
+            KS states to calculate MOM over.
         basis_type : str
             Basis set type to use.
         defaults : str
@@ -375,8 +382,8 @@ class Projector(ForceOccupation):
             with self.new_control.open("w") as write_control:
                 write_control.writelines(new_basis_content)
 
-            # Loop over each individual atom to constrain
-            for i in self.atom_specifier:
+            # Loop over each KS state to constrain
+            for i in [*list(range(*ks_range)), ks_range[-1]]:
                 # TODO: fix this for individual atom constraints
 
                 i1_control = self.run_loc / f"{el}{i}/init_1/control.in"
@@ -468,9 +475,8 @@ class Projector(ForceOccupation):
         """
         # Loop over each element to constrain
         for el in self.element_symbols:
-            # Loop over each individual atom to constrain
-            for i in self.atom_specifier:
-                # TODO change i in occ_type so that it matches better with the KS range
+            # Loop over each KS state to constrain
+            for i in [*list(range(*ks_range)), ks_range[-1]]:
                 opts = {
                     "spin": "collinear",
                     "charge": 1.1,
@@ -555,9 +561,8 @@ class Projector(ForceOccupation):
 
         # Loop over each element to constrain
         for el in self.element_symbols:
-            # Loop over each individual atom to constrain
-            for i in self.atom_specifier:
-                # TODO change i in occ_type so that it matches better with the KS range
+            # Loop over each KS state to constrain
+            for i in [*list(range(*ks_range)), ks_range[-1]]:
                 opts = {
                     "spin": "collinear",
                     "charge": 1.0,
@@ -712,7 +717,7 @@ class Basis(ForceOccupation):
                 # Allow users to modify and add keywords
                 opts = control_utils.mod_keywords(self.ad_cont_opts, opts)
 
-                i += 1
+                i += 1  # noqa: PLW2901
 
                 control = self.run_loc / f"{el}{i}/control.in"
                 geometry = self.run_loc / f"{el}{i}/geometry.in"

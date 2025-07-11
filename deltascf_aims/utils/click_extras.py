@@ -79,45 +79,6 @@ class MutuallyExclusive(Option):
         return super().handle_parse_result(ctx, opts, args)
 
 
-class NotRequiredIf(Option):
-    """
-    Allow one of two arguments to be required mutually exclusively.
-
-    ...
-
-    Attributes
-    ----------
-    not_required_if : set
-        A set of arguments that are not allowed if this argument is present.
-    name : str
-        The name of the option.
-    """
-
-    def __init__(self, *args, **kwargs):
-        self.not_required_if = set(kwargs.pop("not_required_if", []))
-        help = kwargs.get("help", "")
-
-        if self.not_required_if:
-            ex_str = ", ".join(self.not_required_if)
-            kwargs["help"] = f"{help} [required, or: `{ex_str}`]"
-
-        super().__init__(*args, **kwargs)
-
-    def handle_parse_result(self, ctx, opts, args):
-        curr_arg_long = get_long_arg_name(ctx, self.name)
-        mut_ex_arg_long = get_long_arg_name(ctx, self.not_required_if)
-
-        if self.not_required_if.difference(opts) and self.name not in opts:
-            raise UsageError(f"`{curr_arg_long}` is required, or: `{mut_ex_arg_long}`.")
-
-        if self.not_required_if.intersection(opts) and self.name in opts:
-            raise UsageError(
-                f"`{curr_arg_long}` is mutually exclusive with `{mut_ex_arg_long}`."
-            )
-
-        return super().handle_parse_result(ctx, opts, args)
-
-
 class MutuallyInclusive(Option):
     """
     Allow a click option to be mutually inclusive with another option.

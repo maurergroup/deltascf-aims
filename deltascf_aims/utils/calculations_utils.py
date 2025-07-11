@@ -8,7 +8,7 @@ import numpy as np
 import yaml
 from ase.calculators.aims import Aims
 from ase.io import write
-from click import File, progressbar
+from click import progressbar
 
 from deltascf_aims.utils.checks_utils import check_spin_polarised
 from deltascf_aims.utils.control_utils import (
@@ -162,7 +162,7 @@ def set_env_vars() -> None:
         warn("OS not supported, please ensure ulimit is set to unlimited")
 
 
-def warn_no_extra_control_opts(opts: dict, inp: File | None) -> None:
+def warn_no_extra_control_opts(opts: dict, inp: Path | None) -> None:
     """
     Raise a warning if no additional control options have been specified.
 
@@ -170,7 +170,7 @@ def warn_no_extra_control_opts(opts: dict, inp: File | None) -> None:
     ----------
     opts : dict
         additional control options to be added to the control.in file
-    inp : File | None
+    inp : pathlib.Path | None
         path to custom control.in file
 
     """
