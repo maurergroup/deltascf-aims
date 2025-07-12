@@ -30,7 +30,6 @@ def start(**kwargs: Any) -> None:
 def projector(**kwargs: Any) -> None:
     """Automate an FHI-aims core-level constraint calculation run using projector."""
     # Get start object
-    print(kwargs)
     start = kwargs["start"]
 
     # Do this here rather than start to avoid it being called for process which must
@@ -39,7 +38,7 @@ def projector(**kwargs: Any) -> None:
 
     proj = Projector(**kwargs)
 
-    if start.found_k_grid and proj.pbc is None:
+    if (start.found_l_vecs or start.found_k_grid) and proj.pbc is None:
         proj.check_periodic()
 
     if start.use_extra_basis:
@@ -59,31 +58,22 @@ def projector(**kwargs: Any) -> None:
                 start.nprocs,
                 start.binary,
                 start.atoms.calc,
+                start.constr_atom,
             )
 
         case "init_1":
             atom_specifier, spec_run_info = proj.setup_excited()
-            proj.run_excited(
-                atom_specifier, proj.start.constr_atom, "init_1", spec_run_info
-            )
+            proj.run_excited(atom_specifier, proj.start.constr_atom, "init_1")
 
         case "init_2":
             atom_specifier, spec_run_info = proj.pre_init_2()
-            proj.run_excited(
-                atom_specifier, proj.start.constr_atom, "init_2", spec_run_info
-            )
+            proj.run_excited(atom_specifier, proj.start.constr_atom, "init_2")
 
         case "hole":
             atom_specifier, spec_run_info = proj.pre_hole()
 
             if not start.hpc:  # Don't run on HPC
-                proj.run_excited(
-                    atom_specifier, proj.start.constr_atom, "hole", spec_run_info
-                )
-
-        case _:
-            msg = f"Invalid run_type: {proj.run_type}"
-            raise ValueError(msg)
+                proj.run_excited(atom_specifier, proj.start.constr_atom, "hole")
 
 
 def basis(**kwargs: Any) -> None:
@@ -109,12 +99,12 @@ def basis(**kwargs: Any) -> None:
             basis.run_ground(
                 basis.control_opts,
                 start.use_extra_basis,
-                None,
                 start.print_output,
                 start.run_cmd,
                 start.nprocs,
                 start.binary,
                 start.atoms.calc,
+                start.constr_atom,
             )
 
         case "hole":
@@ -125,13 +115,8 @@ def basis(**kwargs: Any) -> None:
                     atom_specifier,
                     basis.start.constr_atom,
                     "hole",
-                    None,
                     basis_constr=True,
                 )
-
-        case _:
-            msg = f"Invalid run_type: {basis.run_type}"
-            raise ValueError(msg)
 
 
 def plot(**kwargs: Any) -> None:

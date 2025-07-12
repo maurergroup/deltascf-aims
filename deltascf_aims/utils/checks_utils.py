@@ -139,10 +139,33 @@ def check_k_grid(control_file: Path) -> bool:
 
     with control_file.open() as f:
         for line in f:
-            if "k_grid" in line:
+            spl = line.split()
+            if len(spl) > 0 and spl[0] == "k_grid":
                 k_grid = True
 
     return k_grid
+
+
+def check_lattice_vecs(geom_file: Path) -> bool:
+    """
+    Check if lattice vectors are given in the geometry.in file.
+
+    Parameters
+    ----------
+    geom_file : pathlib.Path
+        Path to geometry.in file
+
+    Returns
+    -------
+    l_vecs : bool
+        True if lattice vectors are found, False otherwise
+    """
+    l_vecs = False
+    for line in geom_file.open():
+        if "lattice_vector" in line:
+            l_vecs = True
+
+    return l_vecs
 
 
 def check_params(start: "Start", include_hpc: bool = False) -> None:

@@ -167,6 +167,13 @@ class Start:
 
     def check_for_pbcs(self) -> None:
         """Check for lattice vectors and k-grid in input file."""
+        self.found_l_vecs = False
+        if self.geometry_input is not None:
+            checks_utils.check_constrained_geom(self.geometry_input)
+            self.found_l_vecs = checks_utils.check_lattice_vecs(self.geometry_input)
+        else:
+            self.found_l_vecs = False
+
         self.found_k_grid = False
         if self.control_input is not None:
             self.found_k_grid = checks_utils.check_k_grid(self.control_input)
@@ -704,8 +711,6 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
         """
         proj.setup_init_1(
             self.ks_range,
-            self.start.basis_set,
-            self.start.species,
             self.ground_control,
             self.pbc is not None,
         )
@@ -769,7 +774,7 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
             # If different k_grids have been used for different calculations,
             # then enforce the user to provide the k_grid
             if pbc_list.count(pbc_list[0]) == len(pbc_list):
-                pbc_list = tuple([int(i) for i in pbc_list[0][1:]])
+                pbc_list = tuple([int(i) for i in pbc_list[0]])
                 self.control_opts["k_grid"] = pbc_list
             else:
                 raise click.MissingParameter(param_hint="-p/--pbc", param_type="option")
@@ -926,7 +931,7 @@ class Basis(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
         Type of calculation to perform
     occ_type : Literal["deltascf_basis", "force_occupation_basis"]
         Method for constraining the occupation
-    multiplicity : Literal[1, 2]
+    spin : Literal[1, 2]
         Spin channel of the constraint
     n_qn : int
         Principal quantum number for the basis function to constrain
@@ -945,7 +950,7 @@ class Basis(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
         start: Start,
         run_type: Literal["ground", "hole"],
         occ_type: Literal["deltascf_basis", "force_occupation_basis"],
-        multiplicity: Literal[1, 2],
+        spin: Literal[1, 2],
         n_qn: int,
         l_qn: int,
         m_qn: int,
@@ -968,7 +973,7 @@ class Basis(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
         self.start = start
         self.run_type: Literal["ground", "hole"] = run_type
         self.occ_type: Literal["deltascf_basis", "force_occupation_basis"] = occ_type
-        self.multiplicity: Literal[1, 2] = multiplicity
+        self.spin: Literal[1, 2] = spin
         self.n_qn = n_qn
         self.l_qn = l_qn
         self.m_qn = m_qn
@@ -1035,19 +1040,16 @@ class Basis(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
             self.ground_geom,
             self.control_opts,
             self.atom_specifier,
-            self.start.use_extra_basis,
         )
 
         basis.setup_basis(
-            self.multiplicity,
+            self.spin,
             self.n_qn,
             self.l_qn,
             self.m_qn,
             self.start.occupation,
             self.ks_max,
             self.occ_type,
-            self.start.basis_set,
-            self.start.species,
         )
 
         # Add molecule ID to geometry file

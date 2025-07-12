@@ -1,6 +1,5 @@
-import glob
-import os
 from pathlib import Path
+from typing import TYPE_CHECKING
 from warnings import warn
 
 import yaml
@@ -8,8 +7,13 @@ from ase import Atoms
 
 from deltascf_aims.utils.checks_utils import check_species_in_control
 
+if TYPE_CHECKING:
+    from deltascf_aims.core import Start
 
-def add_additional_basis(elements, content, target_atom) -> list[str]:
+
+def add_additional_basis(  # noqa: PLR0912
+    elements: list[str], content: list[str], target_atom: str
+) -> list[str]:
     """
     Insert an additional basis set to control.in.
 
@@ -32,15 +36,9 @@ def add_additional_basis(elements, content, target_atom) -> list[str]:
         if "# Additional basis functions for atom with a core hole" in line:
             return content
 
-    current_path = Path(__file__).parent
-
     # Get the additional basis set
-    if "dscf_utils" in current_path.split("/"):
-        with open(f"{current_path}/utils/add_basis_functions.yml") as f:
-            ad_basis = yaml.safe_load(f)
-    else:
-        with open(f"{current_path}/utils/add_basis_functions.yml") as f:
-            ad_basis = yaml.safe_load(f)
+    with (Path(__file__).parent / "add_basis_functions.yml").open() as f:
+        ad_basis = yaml.safe_load(f)
 
     if [*target_atom][-1][0] == "1":
         root_target_atom = "".join([*target_atom][:-1])
@@ -79,7 +77,8 @@ def add_additional_basis(elements, content, target_atom) -> list[str]:
     separator = 80 * "#"
     content.append(separator + "\n")
 
-    # Find the line which contains the appropriate row of '#'s after the species and element
+    # Find the line which contains the appropriate row of '#'s after the species and
+    # element
     div_counter = 0
     insert_point = 0
     for i, line in enumerate(content[basis_def_start:]):
@@ -107,12 +106,12 @@ def add_additional_basis(elements, content, target_atom) -> list[str]:
         content.insert(insert_point, f"{el_ad_basis}\n")
         return content
 
-    warn("There was an error with adding the additional basis function")
+    warn("There was an error with adding the additional basis function", stacklevel=2)
     return content
 
 
 def add_control_opts(
-    start,
+    start: "Start",
     constr_atom: str,
     i_atom: int | str,
     calc: str,
@@ -139,29 +138,23 @@ def add_control_opts(
         if not isinstance(opt, str):  # Must be list, tuple, or set
             control_opts[key] = " ".join(str(i) for i in opt)
 
-    parsed_control_opts = get_control_keywords(
-        f"{start.run_loc}/{constr_atom}{i_atom}/{calc}/control.in"
-    )
+    control_in = start.run_loc.joinpath(f"{constr_atom}{i_atom}/{calc}/control.in")
+
+    parsed_control_opts = get_control_keywords(control_in)
     mod_control_opts = mod_keywords(control_opts, parsed_control_opts)
-    control_content = change_control_keywords(
-        f"{start.run_loc}/{constr_atom}{i_atom}/{calc}/control.in",
-        mod_control_opts,
-    )
+    control_content = change_control_keywords(control_in, mod_control_opts)
 
-    with open(
-        f"{start.run_loc}/{constr_atom}{i_atom}/{calc}/control.in",
-        "w",
-    ) as control_file:
-        control_file.writelines(control_content)
+    with control_in.open("w") as f:
+        f.writelines(control_content)
 
 
-def get_control_keywords(control) -> dict:
+def get_control_keywords(control: Path) -> dict:
     """
     Get the keywords in a control.in file.
 
     Parameters
     ----------
-    control : str
+    control : pathlib.Path
         path to the control file
 
     Returns
@@ -170,7 +163,7 @@ def get_control_keywords(control) -> dict:
         dictionary of keywords in the control file
     """
     # Find and replace keywords in control file
-    with open(control) as read_control:
+    with control.open() as read_control:
         content = read_control.readlines()
 
     # Get keywords
@@ -193,20 +186,20 @@ def get_control_keywords(control) -> dict:
     return opts
 
 
-def mod_keywords(ad_cont_opts, opts) -> dict:
+def mod_keywords(ad_cont_opts: dict[str, str], opts: dict[str, str]) -> dict[str, str]:
     """
     Update default or parsed keywords with user-specified keywords.
 
     Parameters
     ----------
-    ad_cont_opts : dict
+    ad_cont_opts : dict[str, str]
         User-specified keywords
-    opts : dict
+    opts : dict[str, str]
         Default keywords
 
     Returns
     -------
-    opts : dict
+    opts : dict[str, str]
         Keywords
     """
     for key in list(ad_cont_opts.keys()):
@@ -215,15 +208,15 @@ def mod_keywords(ad_cont_opts, opts) -> dict:
     return opts
 
 
-def change_control_keywords(control, opts) -> list[str]:
+def change_control_keywords(control: Path, opts: dict[str, str]) -> list[str]:
     """
     Modify the keywords in a control.in file from a dictionary of options.
 
     Parameters
     ----------
-    control : str
+    control : Path
         path to the control file
-    opts : dict
+    opts : dict[str, str]
         dictionary of keywords to change
 
     Returns
@@ -318,7 +311,7 @@ def convert_opts_to_dict(
     return opts_dict
 
 
-def convert_tuple_key_to_str(control_opts: dict) -> dict:
+def convert_tuple_key_to_str(control_opts: dict[str, str | tuple]) -> dict[str, str]:
     """
     Convert any keys given as tuples to strings in control_opts.
 
@@ -336,63 +329,81 @@ def convert_tuple_key_to_str(control_opts: dict) -> dict:
         if isinstance(i[1], tuple):
             control_opts[i[0]] = " ".join(str(j) for j in i[1])
 
-    return control_opts
+    return control_opts  # pyright: ignore[reportReturnType]
 
 
 def write_control(
-    run_loc: str,
+    run_loc: Path,
     control_opts: dict,
     atoms: Atoms,
     int_grid: str,
+    defaults: Path,
     add_extra_basis: bool,
-    defaults: str,
+    constr_atom: str | None = None,
 ) -> None:
     """
     Write a control.in file.
 
     Parameters
     ----------
-    run_loc : str
+    run_loc : pathlib.Path
         Path to the calculation directory
-    control_opts : dict
+    control_opts : dict[str, str]
         Dictionary of control options
     atoms : Atoms
         ASE atoms object
     int_grid : str
         Basis set density
-    add_extra_basis : bool
-        True if extra basis functions are to be added to the basis set, False
-        otherwise
-    defaults : str
+    defaults : Path
         Path to the species_defaults directory
+    add_extra_basis : bool
+        Whether to add extra core-hole augmented basis functions basis set
+    constr_atom : str | None, default = None
+        Constrained atom symbol - only needed if add_extra_basis is True
     """
     # Firstly create the control file if it doesn't exist
-    if not os.path.isfile(f"{run_loc}/control.in"):
-        os.system(f"touch {run_loc}/control.in")
+    control_in = run_loc / "control.in"
+
+    if not control_in.is_file():
+        control_in.touch()
 
     control_opts = convert_tuple_key_to_str(control_opts)
-    lines = change_control_keywords(f"{run_loc}/control.in", control_opts)
+    lines = change_control_keywords(control_in, control_opts)
 
-    with open(f"{run_loc}/control.in", "w") as control:
-        control.writelines(lines)
+    with control_in.open("w") as f:
+        f.writelines(lines)
 
     # Then add the basis set
     elements = list(set(atoms.get_chemical_symbols()))
 
     for el in elements:
-        # TODO Add extra basis functions for ground state calculations
-        # if add_extra_basis:
-        #     basis_set = glob.glob(f"{defaults}/ch_basis_sets/{int_grid}/*{el}_default")[
-        #         0
-        #     ]
+        # Add extra basis functions
+        if add_extra_basis and constr_atom is not None:
+            with control_in.open() as c:
+                control_content = c.readlines()
 
-        #     os.system(f"cat {basis_set} >> {run_loc}/control.in")
+            current_path = Path(__file__).resolve().parent
+
+            with (current_path / "elements.yml").open() as yf:
+                elements = yaml.load(yf, Loader=yaml.SafeLoader)
+
+            new_content = add_additional_basis(elements, control_content, constr_atom)
+
+            with control_in.open("w") as c:
+                # Write the new content to the control.in file
+                c.writelines(new_content)
 
         if not check_species_in_control(lines, el):
-            basis_set = glob.glob(f"{defaults}/defaults_2020/{int_grid}/*{el}_default")[
-                0
-            ]
-            os.system(f"cat {basis_set} >> {run_loc}/control.in")
+            basis_sets = list(
+                (defaults / "defaults_2020" / int_grid).glob(f"*{el}_default")
+            )
+
+            if len(basis_sets) != 0:
+                basis_set = basis_sets[0]
+                with basis_set.open() as src, (run_loc / "control.in").open("a") as dst:
+                    dst.write(src.read())
 
     # Copy it to the ground directory
-    os.system(f"cp {run_loc}/control.in {run_loc}/ground")
+    ground_dir = run_loc / "ground"
+    ground_dir.mkdir(exist_ok=True)
+    (run_loc / "control.in").replace(ground_dir / "control.in")
