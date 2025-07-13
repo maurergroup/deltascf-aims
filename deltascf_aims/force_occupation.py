@@ -19,7 +19,7 @@ class ForceOccupation:
         Path to the run directory.
     geometry : Path
         Path to the geometry file.
-    ad_cont_opts : dict[str, str]
+    add_constr_opts : dict[str, str]
         Additional control options.
     atom_specifier : list[int]
         List of atom indentifiers of atoms by geometry.in index.
@@ -32,7 +32,7 @@ class ForceOccupation:
         Path to the run directory.
     geometry : Path
         Path to the geometry file.
-    ad_cont_opts : dict[str, Any]
+    add_constr_opts : dict[str, Any]
         Additional control options.
     atom_specifier : list[int]
         List of atom identifiers of atoms by geometry.in index.
@@ -45,13 +45,13 @@ class ForceOccupation:
         constr_atom: str,
         run_loc: Path,
         geometry: Path,
-        ad_cont_opts: dict[str, str],
+        add_constr_opts: dict[str, str],
         atom_specifier: list[int],
     ):
         self._constr_atom = constr_atom
         self._run_loc = run_loc
         self._geometry = geometry
-        self._ad_cont_opts = ad_cont_opts
+        self._add_constr_opts = add_constr_opts
         self._atom_specifier = atom_specifier
 
         self.current_path = Path(__file__).parent.resolve()
@@ -59,8 +59,8 @@ class ForceOccupation:
         # Convert k_grid key to a string from a tuple
         # Writing the options for a hole calculation doesn't use ASE, so it must be
         # converted to a string here
-        if "k_grid" in ad_cont_opts:
-            ad_cont_opts["k_grid"] = " ".join(map(str, ad_cont_opts["k_grid"]))
+        if "k_grid" in add_constr_opts:
+            add_constr_opts["k_grid"] = " ".join(map(str, add_constr_opts["k_grid"]))
 
         self.new_control = run_loc / "ground/control.in.new"
         self.elements = geometry_utils.get_all_elements()
@@ -78,8 +78,8 @@ class ForceOccupation:
         return self._geometry
 
     @property
-    def ad_cont_opts(self) -> dict[str, str]:
-        return self._ad_cont_opts
+    def add_constr_opts(self) -> dict[str, str]:
+        return self._add_constr_opts
 
     @property
     def atom_specifier(self) -> list[int]:
@@ -206,7 +206,7 @@ class ForceOccupation:
         for j, line in enumerate(content):
             spl = line.split()
 
-            if target_atom + "1" in spl:
+            if len(spl) > 1 and target_atom == spl[1]:
                 # Add to nucleus
                 if f"    nucleus             {at_num}\n" in content[j:]:
                     nuclear_idx = (
@@ -265,7 +265,7 @@ class Projector(ForceOccupation):
         Path to the run directory.
     geometry : Path
         Path to the geometry file.
-    ad_cont_opts : dict[str, Any]
+    add_constr_opts : dict[str, Any]
         Additional control options.
     atom_specifier : list[int]
         List of atom identifiers of atoms by geometry.in index.
@@ -280,7 +280,7 @@ class Projector(ForceOccupation):
         Path to the run directory.
     geometry : Path
         Path to the geometry file.
-    ad_cont_opts : dict[str, Any]
+    add_constr_opts : dict[str, Any]
         Additional control options.
     atom_specifier : list[int]
         List of atom identifiers of atoms by geometry.in index.
@@ -324,7 +324,7 @@ class Projector(ForceOccupation):
             opts["KS_method"] = "serial"
 
         # Add or change user-specified keywords to/in the control file
-        opts = control_utils.mod_keywords(self.ad_cont_opts, opts)
+        opts = control_utils.mod_keywords(self.add_constr_opts, opts)
 
         # Create a new intermediate file and write basis sets to it
         shutil.copyfile(control, self.new_control)
@@ -406,7 +406,7 @@ class Projector(ForceOccupation):
                 opts["KS_method"] = "serial"
 
             # Add or change user-specified keywords to the control file
-            opts = control_utils.mod_keywords(self.ad_cont_opts, opts)
+            opts = control_utils.mod_keywords(self.add_constr_opts, opts)
 
             i2_control = f"{self.run_loc}/{self.constr_atom}{i}/init_2/control.in"
 
@@ -485,7 +485,7 @@ class Projector(ForceOccupation):
                 opts["KS_method"] = "serial"
 
             # Add or change user-specified keywords to the control file
-            opts = control_utils.mod_keywords(self.ad_cont_opts, opts)
+            opts = control_utils.mod_keywords(self.add_constr_opts, opts)
 
             # Location of the hole control file
             h_control = self.run_loc / f"{self.constr_atom}{i}/hole/control.in"
@@ -531,7 +531,7 @@ class Basis(ForceOccupation):
         Path to the run directory.
     geometry : Path
         Path to the geometry file.
-    ad_cont_opts : dict[str, Any]
+    add_constr_opts : dict[str, Any]
         Additional control options.
     atom_specifier : list[int]
         List of atom identifiers of atoms by geometry.in index.
@@ -544,7 +544,7 @@ class Basis(ForceOccupation):
         Path to the run directory.
     geometry : Path
         Path to the geometry file.
-    ad_cont_opts : dict[str, Any]
+    add_constr_opts : dict[str, Any]
         Additional control options.
     atom_specifier : list[int]
         List of atom identifiers of atoms by geometry.in index.
@@ -602,7 +602,7 @@ class Basis(ForceOccupation):
                 opts["KS_method"] = ks_method
 
             # Allow users to modify and add keywords
-            opts = control_utils.mod_keywords(self.ad_cont_opts, opts)
+            opts = control_utils.mod_keywords(self.add_constr_opts, opts)
 
             i += 1  # noqa: PLW2901
 

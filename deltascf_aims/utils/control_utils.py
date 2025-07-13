@@ -138,7 +138,7 @@ def add_control_opts(
         if not isinstance(opt, str):  # Must be list, tuple, or set
             control_opts[key] = " ".join(str(i) for i in opt)
 
-    control_in = start.run_loc.joinpath(f"{constr_atom}{i_atom}/{calc}/control.in")
+    control_in = start.run_loc.joinpath(f"{constr_atom}{i_atom}", calc, "control.in")
 
     parsed_control_opts = get_control_keywords(control_in)
     mod_control_opts = mod_keywords(control_opts, parsed_control_opts)

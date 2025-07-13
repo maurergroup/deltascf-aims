@@ -870,9 +870,6 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
         )
 
         # Check for if init_2 hasn't been run
-        if not self.start.hpc:
-            self._calc_checks("hole")
-
         if self.start.hpc:
             self._calc_checks("hole", check_restart=False, check_args=True)
 
@@ -883,25 +880,26 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
                 self.ground_geom,
                 self.control_opts,
                 self.atom_specifier,
-                self.start.use_extra_basis,
             )
 
             proj.get_electronic_structure(self.start.constr_atom)
 
             # Setup files required for the initialisation and hole calculations
             self._call_setups(proj)
+        else:
+            self._calc_checks("hole")
 
         # Add a tag to the geometry file to identify the molecule name
         if self.start.spec_mol is not None:
             geometry_utils.add_molecule_identifier(self.start, self.atom_specifier)
 
         # Add any additional control options to the hole control file
-        for i in range(len(self.atom_specifier)):
+        for i in [*list(range(*self.ks_range)), self.ks_range[-1]]:
             if len(self.control_opts) > 0:
                 control_utils.add_control_opts(
                     self.start,
                     self.start.constr_atom,
-                    self.atom_specifier[i],
+                    i,
                     "hole",
                     self.control_opts,
                 )
@@ -910,7 +908,7 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
             if not self.start.hpc:
                 self._cp_restart_files(self.atom_specifier[i], "init_2", "hole")
 
-        # Don't redirect STDERR to /dev/null as not converged errors should not occur
+        # Do not redirect STDERR to /dev/null as not converged errors should not occur
         # here
         spec_run_info = ""
 

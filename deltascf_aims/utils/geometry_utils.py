@@ -1,13 +1,17 @@
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import yaml
 from ase import Atoms
 from ase.build import molecule
 from ase.data.pubchem import pubchem_atoms_search
 
+if TYPE_CHECKING:
+    from deltascf_aims.core import Start
+
 
 def add_molecule_identifier(
-    start, atom_specifier: list[int], basis: bool = False
+    start: "Start", atom_specifier: list[int], basis: bool = False
 ) -> None:
     """
     Add a string to the geometry.in to parse when plotting to identify it.
@@ -212,6 +216,3 @@ def get_element_symbols(geom: Path, spec_at_constr: list[int]) -> list[str]:
             element_symbols.append(element)
 
     return element_symbols
-
-
-def reorder_atoms(): ...
