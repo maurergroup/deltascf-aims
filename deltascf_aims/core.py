@@ -296,9 +296,8 @@ class Start:
                 "# and that the full absolute path is provided"
             )
             bin_line = click.edit(marker)
-            bin_line = Path(bin_line) if bin_line is not None else None
             if bin_line is not None:
-                if bin_line.is_file():
+                if Path(bin_line.split()[0]).is_file():
                     with current_path.joinpath("aims_bin_loc.txt").open("w") as f:
                         f.write(str(bin_line))
 
