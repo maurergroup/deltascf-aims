@@ -40,10 +40,7 @@ def add_additional_basis(  # noqa: PLR0912
     with (Path(__file__).parent / "add_basis_functions.yml").open() as f:
         ad_basis = yaml.safe_load(f)
 
-    if [*target_atom][-1][0] == "1":
-        root_target_atom = "".join([*target_atom][:-1])
-    else:
-        root_target_atom = target_atom
+    root_target_atom = target_atom[:-1] if target_atom[-1] == "1" else target_atom
 
     try:
         el_ad_basis = ad_basis[root_target_atom]
@@ -60,7 +57,7 @@ def add_additional_basis(  # noqa: PLR0912
     # set can be added.
     basis_def_start = 0
     for i, line in enumerate(content):
-        if "species" in line and target_atom in line:
+        if "species" in line and target_atom == line.split()[1]:
             basis_def_start = i
             break
 
@@ -83,7 +80,7 @@ def add_additional_basis(  # noqa: PLR0912
     insert_point = 0
     for i, line in enumerate(content[basis_def_start:]):
         if separator in line:
-            if "species" in line and target_atom in line:
+            if "species" in line and target_atom == line.split()[1]:
                 break
 
             if div_counter == 3:
