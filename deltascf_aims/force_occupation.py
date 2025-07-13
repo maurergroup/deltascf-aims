@@ -401,7 +401,7 @@ class Projector(ForceOccupation):
 
             # Enforce that the use of ks_method serial
             if occ_type == "force_occupation_projector" or (
-                occ_type == "force_occupation_projector" and pbc
+                occ_type == "deltascf_projector" and pbc
             ):
                 opts["KS_method"] = "serial"
 
@@ -480,7 +480,7 @@ class Projector(ForceOccupation):
 
             # Enforce that the use of ks_method serial
             if occ_type == "force_occupation_projector" or (
-                occ_type == "force_occupation_projector" and pbc
+                occ_type == "deltascf_projector" and pbc
             ):
                 opts["KS_method"] = "serial"
 

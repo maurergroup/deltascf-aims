@@ -711,21 +711,21 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
         proj.setup_init_1(
             self.ks_range,
             self.ground_control,
-            self.pbc is not None,
+            checks_utils.check_lattice_vecs(self.start.geometry_input),
         )
         proj.setup_init_2(
             self.ks_range,
             self.start.occupation,
             self.occ_type,
             self.spin,
-            self.start.found_k_grid,
+            checks_utils.check_lattice_vecs(self.start.geometry_input),
         )
         proj.setup_hole(
             self.ks_range,
             self.start.occupation,
             self.occ_type,
             self.spin,
-            self.start.found_k_grid,
+            checks_utils.check_lattice_vecs(self.start.geometry_input),
         )
 
     def _cp_restart_files(self, atom: int, begin: str, end: str) -> None:
