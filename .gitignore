@@ -129,4 +129,4 @@ dmypy.json
 .pyre/
 
 # Others 
-deltascf_aims/aims_bin_loc.txt
+**aims_bin_loc.txt
