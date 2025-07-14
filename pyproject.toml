@@ -1,37 +1,116 @@
-[tool.poetry]
+[project]
 name = "deltascf-aims"
-version = "1.0.4"
-description = "Application to test calculation of core holes in FHI-aims"
-authors = ["Dylan Morgan <dylan.morgan@warwick.ac.uk>"]
-license = "GPL 3"
+version = "1.1.0"
+description = "Application to calculate core holes in FHI-aims"
 readme = "README.md"
-repository = "https://github.com/maurergroup/deltascf-aims"
-packages = [
-    { include = "deltascf_aims" }
+authors = [{ name = "Dylan Morgan", email = "dylan.morgan@warwick.ac.uk" }]
+requires-python = ">=3.10,<3.13"
+dependencies = [
+  "pyyaml>=6.0.2",
+  "click>=8.1.7",
+  "matplotlib>=3.9.2",
+  "ase==3.22.1",
+  "numpy>=2",
 ]
 
-[tool.poetry.dependencies]
-python = ">=3.10,<3.13"
-pyyaml = "^6.0.2"
-click = "^8.1.7"
-matplotlib = "^3.9.2"
-ase = "3.22.1"
-numpy = "^2"
+[project.urls]
+Repository = "https://github.com/maurergroup/deltascf-aims"
 
-[tool.poetry.group.dev]
-optional = true
-
-[tool.poetry.group.dev.dependencies]
-ruff = ">=0.7.4,<0.12.0"
-ptpython = "^3.0.29"
-pyright = "^1.1.389"
-
-[tool.poetry.scripts]
-deltascf = 'deltascf_aims.cli:initialise'
+[project.scripts]
+deltascf = "deltascf_aims.cli:initialise"
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
-# [tool.ruff]
-# TODO
+[dependency-groups]
+dev = ["ruff>=0.7.4", "ptpython>=3.0.29", "ipykernel>=6.29.5"]
+
+[tool.ruff]
+line-length = 88
+
+[tool.ruff.analyze]
+detect-string-imports = true
+
+[tool.ruff.format]
+# Enable reformatting of code snippets in docstrings.
+docstring-code-format = true
+
+[tool.ruff.lint]
+# select = ['E4', 'E7', 'E9', 'F']  # Default
+select = [
+  'E1',
+  'E4',
+  'E5',
+  'E7',
+  'E9',
+  'F',
+  'ERA',
+  'ANN',
+  'S',
+  'BLE',
+  'F',
+  'B',
+  'A',
+  'C4',
+  'T10',
+  'EM',
+  'EXE',
+  'ICN',
+  'LOG',
+  'G',
+  'I',
+  'INP',
+  'PIE',
+  'PYI',
+  'PT',
+  'RET',
+  'SIM',
+  'ARG',
+  'PTH',
+  'NPY',
+  'N',
+  'PERF',
+  'DOC',
+  'D',
+  'PL',
+  'UP',
+  'RUF',
+  'TRY',
+]
+ignore = [
+  'ANN204',
+  'ANN401',
+  'D100',
+  'D102',
+  'D104',
+  'D105',
+  'D206',
+  'D300',
+  'E111',
+  'E114',
+  'E117',
+  'EM101',
+  'ERA001',
+  'N803',
+  'N806',
+  'PLR2004',
+  'PTH123',
+  'TRY003',
+]
+
+# [tool.ruff.lint.per-file-ignores]
+
+[tool.ruff.lint.pycodestyle]
+# Limit docstrings to have the same number of characters as the code
+max-doc-length = 88
+# Do not trigger line-too-long warnings for comments starting with task notes (eg. TODO)
+ignore-overlong-task-comments = true
+
+[tool.ruff.lint.pydocstyle]
+# Use numpy-style docstrings.
+convention = "numpy"
+
+[tool.ruff.lint.pylint]
+# Maximum number of arguments allowed for a function or method definition
+max-args = 10

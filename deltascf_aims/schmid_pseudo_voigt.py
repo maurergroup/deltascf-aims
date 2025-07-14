@@ -7,24 +7,21 @@ from deltascf_aims.utils.hints import BetweenInclusive, GreaterThan
 
 
 def _schmid_pseudo_voigt(
-    domain,
-    A,
+    domain: npt.NDArray[np.float64],
+    A: float,
     m: Annotated[float, BetweenInclusive(0, 1)],
-    E,
+    E: float,
     omega: Annotated[float, GreaterThan(0)],
-    asymmetry=False,
-    a=0.2,
-    b=0,
+    asymmetry: bool = False,
+    a: float = 0.2,
+    b: float = 0,
 ) -> npt.NDArray[np.float64]:
     """
     Apply broadening scheme for XPS spectra.
 
-    Reference for the broadening scheme can be found in this paper
-    https://analyticalsciencejournals.onlinelibrary.wiley.com/doi/10.1002/sia.5521
-
     Parameters
     ----------
-    domain : np.array
+    domain : npt.NDArray[np.float64]
         Numpy linspace of x range and bin width
     A : float
         Intensity
@@ -45,8 +42,17 @@ def _schmid_pseudo_voigt(
     -------
     V : npt.NDArray[np.float64]
         Broadened spectrum point
-    """
 
+    References
+    ----------
+    .. [1] Schmid, M.; Steinrück, H.-P.; Gottfried, J. M. A New Asymmetric Pseudo-Voigt
+    Function for More Efficient Fitting of XPS Lines. Surface and Interface Analysis
+    2014, 46 (8), 505-511. https://doi.org/10.1002/sia.5521.
+
+    .. [2] Schmid, M.; Steinrück, H.-P.; Gottfried, J. M. A New Asymmetric Pseudo-Voigt
+    Function for More Efficient Fitting of XPS Lines. Surface and Interface Analysis
+    2015, 47 (11), 1080-1080. https://doi.org/10.1002/sia.5847.
+    """
     if asymmetry:
         omega_as = 2 * omega / (1 + np.exp(-a * domain - b))
 
@@ -60,9 +66,7 @@ def _schmid_pseudo_voigt(
                 / (2 * omega_as / (1 + np.exp(-a * ((domain - E) - b)))) ** 2
             )
             * (domain - E) ** 2
-        ) + A * m * (
-            1 / (2 * np.pi)
-        ) * (
+        ) + A * m * (1 / (2 * np.pi)) * (
             (2 * omega_as / (1 + np.exp(-a * ((domain - E) - b))))
             / (
                 (((2 * omega_as) / (1 + np.exp(-a * ((domain - E) - b)))) / 2) ** 2
@@ -79,7 +83,15 @@ def _schmid_pseudo_voigt(
 
 
 def broaden(
-    start, stop, A, m, dirac_peaks, omega, asymmetry, a, b
+    start: int,
+    stop: int,
+    A: float,
+    m: float,
+    dirac_peaks: list[float],
+    omega: float,
+    asymmetry: bool,
+    a: float,
+    b: float,
 ) -> npt.NDArray[np.float64]:
     """Broaden the Dirac delta peaks.
 
@@ -93,7 +105,7 @@ def broaden(
         Intensity
     m : float
         Gaussian-Lorentzian mixing
-    dirac_peaks : np.array
+    dirac_peaks : list[float]
         Array of Dirac peaks
     omega : float
         Full width at half maximum
@@ -109,7 +121,6 @@ def broaden(
     data : npt.NDArray[np.float64]
         Broadened spectrum
     """
-
     domain = np.linspace(start, stop, 100000)
     data = np.zeros([len(domain)])
     for i in dirac_peaks:
