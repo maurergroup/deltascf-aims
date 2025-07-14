@@ -1,6 +1,6 @@
 [project]
 name = "deltascf-aims"
-version = "1.0.4"
+version = "1.1.0"
 description = "Application to calculate core holes in FHI-aims"
 readme = "README.md"
 authors = [{ name = "Dylan Morgan", email = "dylan.morgan@warwick.ac.uk" }]
@@ -24,11 +24,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [dependency-groups]
-dev = [
-    "ruff>=0.7.4",
-    "ptpython>=3.0.29",
-    "ipykernel>=6.29.5",
-]
+dev = ["ruff>=0.7.4", "ptpython>=3.0.29", "ipykernel>=6.29.5"]
 
 [tool.ruff]
 line-length = 88
