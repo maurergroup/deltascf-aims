@@ -101,9 +101,9 @@ class Start:
     def __init__(  # noqa: PLR0913
         self,
         hpc: bool,
-        spec_mol: str,
-        geometry_input: Path,
-        control_input: Path,
+        spec_mol: str | None,
+        geometry_input: Path | None,
+        control_input: Path | None,
         binary: bool,
         run_location: Path,
         constr_atom: str,
@@ -152,13 +152,13 @@ class Start:
     #     return wrapper_check_help_arg
 
     def check_for_geometry_input(self) -> None:
-        """Check that the geometry file parameter has been given.
+        """
+        Check that the geometry file parameter has been given.
 
         Raises
         ------
         click.MissingParameter
             The param_hint option has not been provided
-
         """
         if not self.geometry_input and not self.spec_mol:
             raise click.MissingParameter(
@@ -601,7 +601,7 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
         k-grid for a periodic calculation
     spin : Literal[1, 2]
         spin channel of the constraint
-    ks_range : tuple[int, int]
+    ks_range : tuple[int, int] | None
         range of Kohn-Sham states to constrain
     control_opts : tuple[str, ...]
         additional control options to be added to the control.in file
@@ -612,9 +612,9 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
         start: Start,
         run_type: Literal["ground", "init_1", "init_2", "hole"],
         occ_type: Literal["deltascf_projector", "force_occupation_projector"],
-        pbc: tuple[int, int, int],
+        pbc: tuple[int, int, int] | None,
         spin: Literal[1, 2],
-        ks_range: tuple[int, int],
+        ks_range: tuple[int, int] | None,
         control_opts: tuple[str, ...],
     ):
         # Get methods from GroundCalc

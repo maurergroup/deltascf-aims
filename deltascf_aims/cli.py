@@ -138,9 +138,9 @@ if TYPE_CHECKING:
 def initialise(  # noqa: PLR0913
     ctx: click.Context,
     hpc: bool,
-    spec_mol: str,
-    geometry_input: Path,
-    control_input: Path,
+    spec_mol: str | None,
+    geometry_input: Path | None,
+    control_input: Path | None,
     binary: bool,
     run_location: Path,
     constr_atom: str,

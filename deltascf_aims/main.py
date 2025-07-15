@@ -11,6 +11,7 @@ def start(**kwargs: Any) -> None:
 
     start.check_for_geometry_input()
     start.check_for_pbcs()
+    start.check_constr_keywords()
     start.check_ase_usage()
     start.atoms = start.create_structure()
 
@@ -31,10 +32,6 @@ def projector(**kwargs: Any) -> None:
     """Automate an FHI-aims core-level constraint calculation run using projector."""
     # Get start object
     start = kwargs["start"]
-
-    # Do this here rather than start to avoid it being called for process which must
-    # take constr_atoms not spec_at_constr
-    start.check_constr_keywords()
 
     proj = Projector(**kwargs)
 
@@ -80,10 +77,6 @@ def basis(**kwargs: Any) -> None:
     """Automate an FHI-aims core-level constraint calculation run using basis."""
     # Get start object
     start = kwargs["start"]
-
-    # Do this here rather than start to avoid it being called for process which must
-    # take constr_atoms not spec_at_constr
-    start.check_constr_keywords()
 
     basis = Basis(**kwargs)
 
