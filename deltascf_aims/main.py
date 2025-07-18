@@ -38,24 +38,24 @@ def projector(**kwargs: Any) -> None:
     if (start.found_l_vecs or start.found_k_grid) and proj.pbc is None:
         proj.check_periodic()
 
-    if start.use_extra_basis:
+    if start.use_extra_basis and start.control_input is not None:
         proj.add_extra_basis_fns(start.constr_atom, start.control_input)
 
     match proj.run_type:
         case "ground":
             proj.setup_ground(
-                start.geometry_input, start.control_input, proj.control_opts, start
+                start.geometry_input, start.control_input, proj.control_opts
             )
 
             proj.run_ground(
                 proj.control_opts,
                 start.use_extra_basis,
+                start.constr_atom,
                 start.print_output,
                 start.run_cmd,
                 start.nprocs,
                 start.binary,
                 start.atoms.calc,
-                start.constr_atom,
             )
 
         case "init_1":

@@ -53,7 +53,7 @@ def create_calc(
     return Aims(
         xc="pbe",
         spin="collinear",
-        default_initial_moment=1,
+        default_initial_moment=0.01,
         aims_command=f"{aims_cmd} {procs} {binary}",
         species_dir=f"{species}/defaults_2020/{int_grid}/",
     )
@@ -244,45 +244,6 @@ class GroundCalc:
         self.ase = ase
         self.hpc = hpc
 
-    def setup_ground(
-        self,
-        geometry_in: Path | None,
-        control_in: Path,
-        control_opts: dict[str, str],
-        start: "Start",
-    ) -> None:
-        """
-        Set up the ground calculation files and directories.
-
-        Parameters
-        ----------
-        geometry_in : Path |None
-            path to the geometry.in file
-        control_in : str
-            path to the control.in file
-        control_opts : dict[str, str]
-            additional options to be added to the control.in file
-        start : Start
-            instance of Start class
-        """
-        # Create the ground directory if it doesn't already exist
-        (self.run_loc / "ground").mkdir(exist_ok=True)
-
-        # Write the geometry file if the system is specified through CLI
-        if geometry_in is None:
-            write(self.run_loc / "geometry.in", self.atoms, format="aims")
-
-        # Copy the geometry.in and control.in files to the ground directory
-        if control_in is not None:
-            shutil.copy2(control_in.name, self.run_loc / "ground")
-
-            # Add any additional options to the control file
-            if len(control_opts) > 0:
-                add_control_opts(start, "", "", "ground", control_opts)
-
-        if geometry_in is not None:
-            shutil.copy2(geometry_in.name, self.run_loc / "ground")
-
     @staticmethod
     def add_extra_basis_fns(constr_atom: str, control_in: Path) -> None:
         """
@@ -308,6 +269,42 @@ class GroundCalc:
         with control_in.open("w") as control:
             # Write the new content to the control.in file
             control.writelines(new_content)
+
+    def setup_ground(
+        self,
+        geometry_in: Path | None,
+        control_in: Path,
+        control_opts: dict[str, str],
+    ) -> None:
+        """
+        Set up the ground calculation files and directories.
+
+        Parameters
+        ----------
+        geometry_in : Path |None
+            path to the geometry.in file
+        control_in : str
+            path to the control.in file
+        control_opts : dict[str, str]
+            additional options to be added to the control.in file
+        """
+        # Create the ground directory if it doesn't already exist
+        (self.run_loc / "ground").mkdir(exist_ok=True)
+
+        if not self.ase:
+            if geometry_in is None:
+                # Write geometry.in using ASE in the ground dir
+                write(self.run_loc / "ground/geometry.in", self.atoms, format="aims")
+            else:
+                # Copy the geometry.in file to the ground directory
+                shutil.copy(geometry_in, self.run_loc / "ground")
+
+            # If not ASE, control.in has been given so copy to the ground dir
+            shutil.copy(control_in, self.run_loc / "ground")
+
+            # Add any additional options to the control file
+            if len(control_opts) > 0:
+                add_control_opts(self.run_loc, "ground", control_opts)
 
     def _with_ase(
         self,
@@ -352,6 +349,8 @@ class GroundCalc:
                 add_extra_basis,
                 constr_atom,
             )
+            # Move control.in to ground directory
+            shutil.move(self.run_loc / "control.in", self.run_loc / "ground")
 
         else:
             print("running calculation...")

@@ -1,7 +1,7 @@
 import shutil
-import warnings
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
+from warnings import warn
 
 import click
 import numpy as np
@@ -133,6 +133,7 @@ class Start:
         self.nprocs = nprocs
 
         self.ase = True
+        self._atoms = Atoms()
 
     # TODO figure out how to get this to work
     # def _check_help_arg(func):
@@ -214,15 +215,16 @@ class Start:
         click.MissingParameter
             The param_hint option has not been provided
         """
-        self.atoms = Atoms()
-
         # Find the structure if not given
         if self.spec_mol is None and self.geometry_input is None:
             try:
-                self.atoms = read(self.run_loc / "ground" / "geometry.in", index=-1)  # pyright: ignore[reportAttributeAccessIssue]
-                print(
+                self._atoms = cast(
+                    Atoms, read(self.run_loc / "ground" / "geometry.in", index=-1)
+                )
+                warn(
                     "molecule argument not provided, defaulting to using existing "
-                    "geometry.in file from the ground state calculation"
+                    "geometry.in file from the ground state calculation",
+                    stacklevel=2,
                 )
 
             except FileNotFoundError as err:
@@ -234,11 +236,11 @@ class Start:
         # Build the structure if given
         elif self.ase:
             if self.spec_mol is not None:
-                self.atoms = geometry_utils.build_geometry(self.spec_mol)
+                self._atoms = geometry_utils.build_geometry(self.spec_mol)
             if self.geometry_input is not None:
-                self.atoms = read(self.geometry_input.name, index=-1)  # pyright: ignore[reportAttributeAccessIssue]
+                self._atoms = cast(Atoms, read(self.geometry_input.name, index=-1))
 
-        return self.atoms  # pyright: ignore[reportReturnType]
+        return self._atoms
 
     # @_check_help_arg
     def check_for_bin(self) -> tuple[Path, Path]:
@@ -388,7 +390,7 @@ class Start:
         )
 
         if self.print_output:
-            warnings.warn(
+            warn(
                 "-p/--print_output is not supported with the ASE backend", stacklevel=2
             )
 
@@ -689,6 +691,22 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
             for i_atom in self.atom_specifier:
                 self.check_restart_files(self.start.constr_atom, prev_calc, i_atom)
 
+        # Check that the constrained KS range is divisible by the number of constrained
+        # atoms
+        if (
+            self.ks_range is not None
+            and len(range(self.ks_range[0], self.ks_range[1] + 1))
+            % len(self.atom_specifier)
+            != 0
+        ):
+            raise click.BadParameter(
+                message="The number of constrained atoms is not divisible by the "
+                "constrained KS state range requested, therefore it is not possible to "
+                "determine how to match the constrained Kohn-Sham states with the "
+                "atoms in the system.",
+                param_hint="-k, --ks_range",
+            )
+
         # Check that the constrained atoms have been given
         if current_calc != "hole":
             checks_utils.check_params(self.start)
@@ -711,21 +729,21 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
         proj.setup_init_1(
             self.ks_range,
             self.ground_control,
-            checks_utils.check_lattice_vecs(self.start.geometry_input),
+            checks_utils.check_lattice_vecs(self.ground_geom),
         )
         proj.setup_init_2(
             self.ks_range,
             self.start.occupation,
             self.occ_type,
             self.spin,
-            checks_utils.check_lattice_vecs(self.start.geometry_input),
+            checks_utils.check_lattice_vecs(self.ground_geom),
         )
         proj.setup_hole(
             self.ks_range,
             self.start.occupation,
             self.occ_type,
             self.spin,
-            checks_utils.check_lattice_vecs(self.start.geometry_input),
+            checks_utils.check_lattice_vecs(self.ground_geom),
         )
 
     def _cp_restart_files(self, atom: int, begin: str, end: str) -> None:
@@ -756,9 +774,10 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
 
     def check_periodic(self) -> None:
         """Check if the lattice vectors and k_grid have been provided."""
-        print(
+        warn(
             "-p/--pbc argument not given, attempting to use"
-            " k_grid from control file or previous calculation"
+            " k_grid from control file or previous calculation",
+            stacklevel=2,
         )
 
         # Try to parse the k-grid if other calculations have been run

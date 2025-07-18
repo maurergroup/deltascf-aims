@@ -170,6 +170,94 @@ class ForceOccupation:
 
         return self.valence
 
+    def _find_basis_set_start(self, content: list[str], constr_species_idx: int) -> int:
+        """
+        Find the start index of a basis set.
+
+        Parameters
+        ----------
+        content : list[str]
+            List of lines in the control file
+        constr_species_idx : int
+            Index of the species line in the control file
+
+        Returns
+        -------
+        int
+            Index of the start of the basis set for the constrained atom
+
+        Raises
+        ------
+        ValueError
+            If the start of the basis set cannot be found.
+        """
+        species_start = None
+
+        for i, r_line in enumerate(reversed(content[:constr_species_idx])):
+            if "#" * 80 in r_line:
+                species_start = constr_species_idx - i
+                break
+
+        if species_start is None:
+            msg = (
+                f"Could not find the start of the basis set for {self.constr_atom} "
+                "in the control file."
+            )
+            raise ValueError(msg)
+
+        return species_start
+
+    def add_second_ch_basis(self, content: list[str]) -> list[str]:
+        """
+        Insert a second basis set for the constrained atom with a partial charge.
+
+        Parameters
+        ----------
+        TODO
+        """
+        # Copy the basis set for the constrained atom already in the control file
+        constr_species_idx = None
+        next_species_idx = None
+
+        for i, line in enumerate(content):
+            spl = line.split()
+            if len(spl) > 1 and spl[0] == "species" and spl[1] == self.constr_atom:
+                constr_species_idx = i
+                continue
+
+            if constr_species_idx is not None and len(spl) > 1 and spl[0] == "species":
+                # Get the start index of the next basis set so we know where the constr
+                # basis set ends
+                next_species_idx = self._find_basis_set_start(content, i)
+                break
+
+        if constr_species_idx is None:
+            msg = f"Constrained atom {self.constr_atom} not found in control file."
+            raise ValueError(msg)
+
+        if next_species_idx is None:
+            # If no other species are found, set the end of the constrained species
+            # basis set to the end of the file
+            next_species_idx = len(content)
+
+        # Find the start idx of the constr basis set
+        species_start = self._find_basis_set_start(content, constr_species_idx)
+
+        # Append 1 to the species name
+        constr_basis = content[species_start:next_species_idx]
+        for i, line in enumerate(constr_basis):
+            spl = line.split()
+            if len(spl) > 1 and spl[0] == "species" and spl[1] == self.constr_atom:
+                # Add a 1 to the end of the species name
+                constr_basis[i] = line.replace(
+                    f"{self.constr_atom}\n", f"{self.constr_atom}1\n"
+                )
+                break
+
+        # Splice the constr basis set underneath the original
+        content[next_species_idx:next_species_idx] = constr_basis
+        return content
+
     def modify_basis_set_charge(
         self, content: list[str], target_atom: str, at_num: int, partial_charge: float
     ) -> tuple[int, int, str, list[str]]:
@@ -329,9 +417,14 @@ class Projector(ForceOccupation):
         # Create a new intermediate file and write basis sets to it
         shutil.copyfile(control, self.new_control)
 
+        # Check how many KS states to assign per atom
+        ks_states = [*list(range(*ks_range)), ks_range[-1]]
+        ks_states_per_atom = len(ks_states) / len(self.atom_specifier)
+        prev_constr_atom_idx = 0
+        constr_atom_count = 0
+
         # Loop over each KS state to constrain
-        for i in [*list(range(*ks_range)), ks_range[-1]]:
-            # TODO: fix this for individual atom constraints
+        for i in ks_states:
             i1_control = self.run_loc / f"{self.constr_atom}{i}/init_1/control.in"
             i1_geometry = self.run_loc / f"{self.constr_atom}{i}/init_1/geometry.in"
 
@@ -344,9 +437,30 @@ class Projector(ForceOccupation):
             # Create new geometry file for init_1 calc
             shutil.copyfile(self.run_loc / "ground/geometry.in", i1_geometry)
 
+            # Change geometry.in so core-hole atoms use basis set with additional charge
+            geom_content = i1_geometry.read_text().splitlines()
+
+            # TODO Finish this
+            # n_constr_atoms_passed = 0
+            # for j, line in enumerate(geom_content):
+            #     spl = line.split()
+
+            #     if len(spl) > 1 and spl[0] == "atom" and spl[-1] == self.constr_atom:
+            #         n_constr_atoms_passed += 1
+
+            #         if n_constr_atoms_passed > prev_constr_atom_idx:
+            #             break
+
+            # if constr_atom_count % ks_states_per_atom == 0:
+            #     constr_atom_count += 1
+
+            # geom_content[j] = line + "1"
+
             # Change control file
             control_content = control_utils.change_control_keywords(i1_control, opts)
+            control_content = self.add_second_ch_basis(control_content)
 
+            # Add partial charge to the control file
             (
                 self.n_index,
                 self.v_index,
@@ -354,7 +468,7 @@ class Projector(ForceOccupation):
                 control_content,
             ) = self.modify_basis_set_charge(
                 control_content,
-                self.constr_atom,
+                self.constr_atom + "1",
                 self.elements.index(self.constr_atom) + 1,
                 float(opts["charge"]),
             )
@@ -422,11 +536,12 @@ class Projector(ForceOccupation):
 
             # Change control file
             control_content = control_utils.change_control_keywords(i2_control, opts)
+            control_content = self.add_second_ch_basis(control_content)
 
-            # Add partial charge to the control file
+            # Add full + partial charge to the control file
             _, _, _, control_content = self.modify_basis_set_charge(
                 control_content,
-                self.constr_atom,
+                self.constr_atom + "1",
                 self.elements.index(self.constr_atom) + 1,
                 float(opts["charge"]) - 1,
             )
@@ -509,6 +624,7 @@ class Projector(ForceOccupation):
 
             # Change control file
             control_content = control_utils.change_control_keywords(h_control, opts)
+            control_content = self.add_second_ch_basis(control_content)
 
             # Write the data to the file
             with h_control.open("w") as write_control:
