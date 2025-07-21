@@ -234,11 +234,15 @@ class Start:
                 ) from err
 
         # Build the structure if given
-        elif self.ase:
+        else:
             if self.spec_mol is not None:
                 self._atoms = geometry_utils.build_geometry(self.spec_mol)
             if self.geometry_input is not None:
                 self._atoms = cast(Atoms, read(self.geometry_input.name, index=-1))
+
+        # If the geometry.in file does not exist, create it
+        if not (self.run_loc / "geometry.in").is_file():
+            self._atoms.write(self.run_loc / "geometry.in")
 
         return self._atoms
 

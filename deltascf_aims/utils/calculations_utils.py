@@ -349,16 +349,16 @@ class GroundCalc:
                 add_extra_basis,
                 constr_atom,
             )
-            # Move control.in to ground directory
-            shutil.move(self.run_loc / "control.in", self.run_loc / "ground")
+            # Copy control.in to ground directory
+            shutil.copy(self.run_loc / "control.in", self.run_loc / "ground")
 
         else:
             print("running calculation...")
             self.atoms.get_potential_energy()
 
             # Move files to ground directory
-            shutil.copy2(self.run_loc / "geometry.in", self.run_loc / "ground")
-            shutil.copy2(self.run_loc / "control.in", self.run_loc / "ground")
+            shutil.copy(self.run_loc / "geometry.in", self.run_loc / "ground")
+            shutil.copy(self.run_loc / "control.in", self.run_loc / "ground")
             shutil.move(self.run_loc / "aims.out", self.run_loc / "ground")
             shutil.move(self.run_loc / "parameters.ase", self.run_loc / "ground")
 
