@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import yaml
 from ase import Atoms
@@ -34,7 +34,7 @@ def add_molecule_identifier(
 
     # Check that the molecule identifier is not already in the file
     for line in lines:
-        if start.spec_mol in line:
+        if cast(str, start.spec_mol) in line:
             return
 
     lines.insert(4, f"# {start.spec_mol}\n")

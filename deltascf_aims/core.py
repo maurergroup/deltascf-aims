@@ -643,7 +643,7 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
         )
         self.pbc = pbc
         self.spin: Literal[1, 2] = spin
-        self.ks_range = ks_range
+        self.ks_range = cast(tuple, ks_range)
 
         self.ground_geom = self.start.run_loc / "ground/geometry.in"
         self.ground_control = self.start.run_loc / "ground/control.in"
@@ -731,19 +731,19 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
             Instance of Projector
         """
         proj.setup_init_1(
-            self.ks_range,
+            cast(tuple, self.ks_range),
             self.ground_control,
             checks_utils.check_lattice_vecs(self.ground_geom),
         )
         proj.setup_init_2(
-            self.ks_range,
+            cast(tuple, self.ks_range),
             self.start.occupation,
             self.occ_type,
             self.spin,
             checks_utils.check_lattice_vecs(self.ground_geom),
         )
         proj.setup_hole(
-            self.ks_range,
+            cast(tuple, self.ks_range),
             self.start.occupation,
             self.occ_type,
             self.spin,
@@ -788,10 +788,9 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
         try:
             pbc_list = []
             for control in self.start.run_loc.rglob("control.in"):
-                with control.open() as control_lines:
-                    for line in control_lines:
-                        if "k_grid" in line:
-                            pbc_list.extend([line.split()[1:]])
+                for line in control.read_text():
+                    if "k_grid" in line:
+                        pbc_list.extend([line.split()[1:]])
 
             # If different k_grids have been used for different calculations,
             # then enforce the user to provide the k_grid
@@ -854,17 +853,17 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
             self.ground_geom, self.start.constr_atom
         )
 
-        self._calc_checks("init_2")
+        self._calc_checks("init_2", check_args=True)
 
         # Add any additional options to the control file
         for i in range(len(self.atom_specifier)):
             if len(self.control_opts) > 0:
                 control_utils.add_control_opts(
-                    self.start,
-                    self.start.constr_atom,
-                    self.atom_specifier[i],
+                    self.run_loc,
                     "init_2",
                     self.control_opts,
+                    self.start.constr_atom,
+                    self.atom_specifier[i],
                 )
 
             # Copy the restart files to init_2 from init_1
@@ -908,8 +907,9 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
 
             # Setup files required for the initialisation and hole calculations
             self._call_setups(proj)
+
         else:
-            self._calc_checks("hole")
+            self._calc_checks("hole", check_args=True)
 
         # Add a tag to the geometry file to identify the molecule name
         if self.start.spec_mol is not None:
@@ -919,11 +919,11 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
         for i in [*list(range(*self.ks_range)), self.ks_range[-1]]:
             if len(self.control_opts) > 0:
                 control_utils.add_control_opts(
-                    self.start,
-                    self.start.constr_atom,
-                    i,
+                    self.run_loc,
                     "hole",
                     self.control_opts,
+                    self.start.constr_atom,
+                    i,
                 )
 
             # Copy the restart files to hole from init_2
