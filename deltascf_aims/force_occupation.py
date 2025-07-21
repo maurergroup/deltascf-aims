@@ -85,6 +85,10 @@ class ForceOccupation:
     def atom_specifier(self) -> list[int]:
         return self._atom_specifier
 
+    @atom_specifier.setter
+    def atom_specifier(self, value: list[int]) -> None:
+        self._atom_specifier = value
+
     def calculate_highest_E_orbital(self, orb_list: list[str]) -> str:  # noqa: N802
         """
         Determine the highest energy orbital according to the Madelung rule.
@@ -191,10 +195,14 @@ class ForceOccupation:
         ValueError
             If the start of the basis set cannot be found.
         """
+        n_hash_lines = 0
         species_start = None
 
         for i, r_line in enumerate(reversed(content[:constr_species_idx])):
             if "#" * 80 in r_line:
+                n_hash_lines += 1
+
+            if n_hash_lines == 2:
                 species_start = constr_species_idx - i
                 break
 
@@ -244,7 +252,7 @@ class ForceOccupation:
         species_start = self._find_basis_set_start(content, constr_species_idx)
 
         # Append 1 to the species name
-        constr_basis = content[species_start:next_species_idx]
+        constr_basis = content[species_start - 1 : next_species_idx]
         for i, line in enumerate(constr_basis):
             spl = line.split()
             if len(spl) > 1 and spl[0] == "species" and spl[1] == self.constr_atom:
@@ -420,16 +428,23 @@ class Projector(ForceOccupation):
         # Check how many KS states to assign per atom
         ks_states = [*list(range(*ks_range)), ks_range[-1]]
         ks_states_per_atom = len(ks_states) / len(self.atom_specifier)
-        prev_constr_atom_idx = 0
-        constr_atom_count = 0
 
-        # Loop over each KS state to constrain
-        for i in ks_states:
-            i1_control = self.run_loc / f"{self.constr_atom}{i}/init_1/control.in"
-            i1_geometry = self.run_loc / f"{self.constr_atom}{i}/init_1/geometry.in"
+        expanded_atom_specifier = []
+        for atom in self.atom_specifier:
+            expanded_atom_specifier.extend([atom] * int(ks_states_per_atom))
+
+        self.atom_specifier = expanded_atom_specifier
+
+        for atom, ks_state in zip(self.atom_specifier, ks_states, strict=False):
+            i1_control = (
+                self.run_loc / f"{self.constr_atom}{ks_state}/init_1/control.in"
+            )
+            i1_geometry = (
+                self.run_loc / f"{self.constr_atom}{ks_state}/init_1/geometry.in"
+            )
 
             # Create new directory and control file for init_1 calc
-            (self.run_loc / f"{self.constr_atom}{i}" / "init_1").mkdir(
+            (self.run_loc / f"{self.constr_atom}{ks_state}" / "init_1").mkdir(
                 parents=True, exist_ok=True
             )
             shutil.copyfile(self.new_control, i1_control)
@@ -437,24 +452,23 @@ class Projector(ForceOccupation):
             # Create new geometry file for init_1 calc
             shutil.copyfile(self.run_loc / "ground/geometry.in", i1_geometry)
 
-            # Change geometry.in so core-hole atoms use basis set with additional charge
+            # Find the correct atom idx to constrain
             geom_content = i1_geometry.read_text().splitlines()
 
-            # TODO Finish this
-            # n_constr_atoms_passed = 0
-            # for j, line in enumerate(geom_content):
-            #     spl = line.split()
+            for j, line in enumerate(geom_content):
+                spl = line.split()
+                if (
+                    len(spl) > 1
+                    and spl[0] == "atom"
+                    and spl[-1] == self.constr_atom
+                    and j == atom - 1
+                ):
+                    # Add 1 to the end of the atom line
+                    geom_content[j] = line + "1"
+                    break
 
-            #     if len(spl) > 1 and spl[0] == "atom" and spl[-1] == self.constr_atom:
-            #         n_constr_atoms_passed += 1
-
-            #         if n_constr_atoms_passed > prev_constr_atom_idx:
-            #             break
-
-            # if constr_atom_count % ks_states_per_atom == 0:
-            #     constr_atom_count += 1
-
-            # geom_content[j] = line + "1"
+            # Write the modified geometry file
+            i1_geometry.write_text("\n".join(geom_content))
 
             # Change control file
             control_content = control_utils.change_control_keywords(i1_control, opts)
@@ -618,13 +632,13 @@ class Projector(ForceOccupation):
             with h_control.open() as read_control:
                 control_content = read_control.readlines()
 
-            # Set nuclear and valence orbitals back to integer values
-            control_content[self.n_index] = self.nucleus
-            control_content[self.v_index] = self.valence
-
             # Change control file
             control_content = control_utils.change_control_keywords(h_control, opts)
             control_content = self.add_second_ch_basis(control_content)
+
+            # Set nuclear and valence orbitals back to integer values
+            control_content[self.n_index] = self.nucleus
+            control_content[self.v_index] = self.valence
 
             # Write the data to the file
             with h_control.open("w") as write_control:
