@@ -1,22 +1,21 @@
-import os
-from typing import List, Tuple
+from pathlib import Path
 
 
-def read_ground_energy(calc_path) -> float:
+def read_ground_energy(calc_path: Path) -> float:
     """
     Get the ground state energy.
 
     Parameters
     ----------
-        calc_path : str
-            path to the calculation directory
+    calc_path : pathlib.Path
+        path to the calculation directory
 
     Returns
     -------
-        grenrgys : float
-            ground state energy
+    float
+        ground state energy
     """
-    with open(f"{calc_path}ground/aims.out", encoding="utf-8") as ground:
+    with (calc_path / "ground" / "aims.out").open() as ground:
         lines = ground.readlines()
 
     grenrgys = None
@@ -36,19 +35,19 @@ def read_ground_energy(calc_path) -> float:
     return grenrgys
 
 
-def _contains_number(string) -> bool:
+def _contains_number(string: str) -> bool:
     """
     Check if a number is in a string.
 
     Parameters
     ----------
-        string : str
-            string to check
+    string : str
+        String to check
 
     Returns
     -------
-        found_string : bool
-            True if a number is found, False otherwise
+    bool
+        Whether the string contains a number
     """
     found_string = False
 
@@ -59,70 +58,72 @@ def _contains_number(string) -> bool:
     return found_string
 
 
-def read_excited_energy(calc_path, element) -> Tuple[List[float], str]:
+def read_excited_energy(calc_path: Path, element: str) -> tuple[list[float], str]:
     """
     Get the excited state energies.
 
     Parameters
     ----------
-        calc_path : str
-            path to the calculation directory
-        element : str
-            atom to get the excited state energies for
+    calc_path : pathlib.Path
+        Path to the calculation directory
+    element : str
+        Atom to get the excited state energies for
 
     Returns
     -------
-        excienrgys : list[float]
-            excited state energies
+    tuple[list[float], str]
+        excited state energies
     """
-    dir_list = os.listdir(calc_path)
+    dir_list = [d for d in calc_path.iterdir() if d.is_dir()]
     energy = "s.c.f. calculation      :"
     excienrgys = []
 
     # Read each core hole dir
     for directory in dir_list:
-        if element in directory and _contains_number(directory):
+        if element in directory.name and _contains_number(directory.name):
             # Try reading output file from basis, then projector file structure
-            if os.path.exists(f"{calc_path}{directory}/aims.out"):
-                with open(
-                    f"{calc_path}{directory}/aims.out", errors="ignore"
-                ) as out:
+            try:
+                with directory.joinpath("aims.out").open() as out:
                     lines = out.readlines()
-            elif os.path.exists(f"{calc_path}{directory}/hole/aims.out"):
-                with open(
-                    f"{calc_path}{directory}/hole/aims.out", errors="ignore"
-                ) as out:
-                    lines = out.readlines()
-            else:
-                lines = []
+            except FileNotFoundError:
+                try:
+                    with directory.joinpath("hole", "aims.out").open() as out:
+                        lines = out.readlines()
+                except FileNotFoundError:
+                    lines = []
 
-            for line in lines:
-                # Get the energy
-                if energy in line:
-                    excienrgys.append(float(line.split()[-2]))
+            excienrgys.extend(
+                [float(line.split()[-2]) for line in lines if energy in line]
+            )
 
     print("Core hole calculated energies (eV):", *excienrgys, sep="\n")
 
     return excienrgys, element
 
 
-def calc_delta_scf(element, grenrgys, excienrgys) -> List[float]:
+def calc_delta_scf(
+    element: str, grenrgys: float, excienrgys: list[float]
+) -> list[float]:
     """
     Calculate delta scf BEs and write to a file.
 
     Parameters
     ----------
-        element : str
-            atom to get the excited state energies for
-        grenrgys : float
-            ground state energy
-        excienrgys : List[float]
-            excited state energies
+    element : str
+        Atom to get the excited state energies for
+    grenrgys : float
+        Ground state energy
+    excienrgys : list[float]
+        Excited state energies
+
+    Returns
+    -------
+    list[float]
+        Delta-SCF binding energies
     """
     xps = []
 
-    for i in excienrgys:
-        xps.append(i - grenrgys)
+    xps.extend([i - grenrgys for i in excienrgys])
 
     print("\nDelta-SCF energies (eV):")
 

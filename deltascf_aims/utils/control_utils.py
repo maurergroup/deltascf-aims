@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 from warnings import warn
 
 import yaml
@@ -8,7 +8,7 @@ from ase import Atoms
 from deltascf_aims.utils.checks_utils import check_species_in_control
 
 if TYPE_CHECKING:
-    from deltascf_aims.core import Start
+    pass
 
 
 def add_additional_basis(  # noqa: PLR0912
@@ -19,9 +19,9 @@ def add_additional_basis(  # noqa: PLR0912
 
     Parameters
     ----------
-    elements : List[str]
+    elements : list[str]
         list of all supported elements
-    content : List[str]
+    content : list[str]
         list of lines in the control file
     target_atom : str
         element symbol of target atom
@@ -45,9 +45,10 @@ def add_additional_basis(  # noqa: PLR0912
     try:
         el_ad_basis = ad_basis[root_target_atom]
     except KeyError:
-        print(
-            f"Warning: the additional basis set for {target_atom} is not yet supported."
-            " The calculation will continue without the additional core-hole basis set."
+        warn(
+            f"The additional basis set for {target_atom} is not yet supported. The"
+            " calculation will continue without the additional core-hole basis set.",
+            stacklevel=2,
         )
         el_ad_basis = ""
 
@@ -108,34 +109,41 @@ def add_additional_basis(  # noqa: PLR0912
 
 
 def add_control_opts(
-    start: "Start",
-    constr_atom: str,
-    i_atom: int | str,
-    calc: str,
-    control_opts: dict,
+    run_loc: Path,
+    calc: Literal["ground", "init_1", "init_2", "hole"],
+    control_opts: dict[str, str],
+    constr_atom: str | None = None,
+    i_atom: int | None = None,
 ) -> None:
     """
     Add additional control options to the control file.
 
     Parameters
     ----------
-    start
-        Instance of Start class
-    constr_atoms : str
-        Constrained atom
-    i_atom : int | str
-        Atom index to add the control options to
-    calc : str
+    run_loc : pathlib.Path
+        Path to the calculation directory
+    calc : Literal['ground', 'init_1', 'init_2', 'hole']
         Name of the calculation to add the control options to
-    control_opts : dict
+    control_opts : dict[str, str]
         Control options
-    """
-    # Convert non-string array-type structures to strings
-    for key, opt in control_opts.items():
-        if not isinstance(opt, str):  # Must be list, tuple, or set
-            control_opts[key] = " ".join(str(i) for i in opt)
+    constr_atoms : str | None, default = None
+        Constrained atom
+        i_atom : int | None, default = None
+            Atom index to add the control options to
 
-    control_in = start.run_loc.joinpath(f"{constr_atom}{i_atom}", calc, "control.in")
+    Raises
+    ------
+    ValueError
+        If either constr_atom or i_atom is None, but not both.
+    """
+    if constr_atom is None and i_atom is None:
+        control_in = run_loc.joinpath(calc, "control.in")
+    elif constr_atom is not None and i_atom is not None:
+        control_in = run_loc.joinpath(f"{constr_atom}{i_atom}", calc, "control.in")
+    else:
+        raise ValueError(
+            "Either both constr_atom and i_atom must be None, or both must be set."
+        )
 
     parsed_control_opts = get_control_keywords(control_in)
     mod_control_opts = mod_keywords(control_opts, parsed_control_opts)
@@ -222,8 +230,7 @@ def change_control_keywords(control: Path, opts: dict[str, str]) -> list[str]:
         list of lines in the control file
     """
     # Find and replace keywords in control file
-    with open(control) as read_control:
-        content = read_control.readlines()
+    content = control.read_text().splitlines(keepends=True)
 
     divider_1 = "#" + 79 * "="
     divider_2 = 80 * "#"
@@ -390,6 +397,7 @@ def write_control(
                 # Write the new content to the control.in file
                 c.writelines(new_content)
 
+        # Append basis set to control.in if not already present
         if not check_species_in_control(lines, el):
             basis_sets = list(
                 (defaults / "defaults_2020" / int_grid).glob(f"*{el}_default")
@@ -399,8 +407,3 @@ def write_control(
                 basis_set = basis_sets[0]
                 with basis_set.open() as src, (run_loc / "control.in").open("a") as dst:
                     dst.write(src.read())
-
-    # Copy it to the ground directory
-    ground_dir = run_loc / "ground"
-    ground_dir.mkdir(exist_ok=True)
-    (run_loc / "control.in").replace(ground_dir / "control.in")

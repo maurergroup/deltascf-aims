@@ -1,7 +1,7 @@
 import shutil
-import warnings
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
+from warnings import warn
 
 import click
 import numpy as np
@@ -101,9 +101,9 @@ class Start:
     def __init__(  # noqa: PLR0913
         self,
         hpc: bool,
-        spec_mol: str,
-        geometry_input: Path,
-        control_input: Path,
+        spec_mol: str | None,
+        geometry_input: Path | None,
+        control_input: Path | None,
         binary: bool,
         run_location: Path,
         constr_atom: str,
@@ -133,6 +133,7 @@ class Start:
         self.nprocs = nprocs
 
         self.ase = True
+        self._atoms = Atoms()
 
     # TODO figure out how to get this to work
     # def _check_help_arg(func):
@@ -152,13 +153,13 @@ class Start:
     #     return wrapper_check_help_arg
 
     def check_for_geometry_input(self) -> None:
-        """Check that the geometry file parameter has been given.
+        """
+        Check that the geometry file parameter has been given.
 
         Raises
         ------
         click.MissingParameter
             The param_hint option has not been provided
-
         """
         if not self.geometry_input and not self.spec_mol:
             raise click.MissingParameter(
@@ -214,15 +215,16 @@ class Start:
         click.MissingParameter
             The param_hint option has not been provided
         """
-        self.atoms = Atoms()
-
         # Find the structure if not given
         if self.spec_mol is None and self.geometry_input is None:
             try:
-                self.atoms = read(self.run_loc / "ground" / "geometry.in", index=-1)  # pyright: ignore[reportAttributeAccessIssue]
-                print(
+                self._atoms = cast(
+                    Atoms, read(self.run_loc / "ground" / "geometry.in", index=-1)
+                )
+                warn(
                     "molecule argument not provided, defaulting to using existing "
-                    "geometry.in file from the ground state calculation"
+                    "geometry.in file from the ground state calculation",
+                    stacklevel=2,
                 )
 
             except FileNotFoundError as err:
@@ -232,13 +234,17 @@ class Start:
                 ) from err
 
         # Build the structure if given
-        elif self.ase:
+        else:
             if self.spec_mol is not None:
-                self.atoms = geometry_utils.build_geometry(self.spec_mol)
+                self._atoms = geometry_utils.build_geometry(self.spec_mol)
             if self.geometry_input is not None:
-                self.atoms = read(self.geometry_input.name, index=-1)  # pyright: ignore[reportAttributeAccessIssue]
+                self._atoms = cast(Atoms, read(self.geometry_input.name, index=-1))
 
-        return self.atoms  # pyright: ignore[reportReturnType]
+        # If the geometry.in file does not exist, create it
+        if not (self.run_loc / "geometry.in").is_file():
+            self._atoms.write(self.run_loc / "geometry.in")
+
+        return self._atoms
 
     # @_check_help_arg
     def check_for_bin(self) -> tuple[Path, Path]:
@@ -388,7 +394,7 @@ class Start:
         )
 
         if self.print_output:
-            warnings.warn(
+            warn(
                 "-p/--print_output is not supported with the ASE backend", stacklevel=2
             )
 
@@ -601,7 +607,7 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
         k-grid for a periodic calculation
     spin : Literal[1, 2]
         spin channel of the constraint
-    ks_range : tuple[int, int]
+    ks_range : tuple[int, int] | None
         range of Kohn-Sham states to constrain
     control_opts : tuple[str, ...]
         additional control options to be added to the control.in file
@@ -612,9 +618,9 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
         start: Start,
         run_type: Literal["ground", "init_1", "init_2", "hole"],
         occ_type: Literal["deltascf_projector", "force_occupation_projector"],
-        pbc: tuple[int, int, int],
+        pbc: tuple[int, int, int] | None,
         spin: Literal[1, 2],
-        ks_range: tuple[int, int],
+        ks_range: tuple[int, int] | None,
         control_opts: tuple[str, ...],
     ):
         # Get methods from GroundCalc
@@ -637,7 +643,7 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
         )
         self.pbc = pbc
         self.spin: Literal[1, 2] = spin
-        self.ks_range = ks_range
+        self.ks_range = cast(tuple, ks_range)
 
         self.ground_geom = self.start.run_loc / "ground/geometry.in"
         self.ground_control = self.start.run_loc / "ground/control.in"
@@ -689,6 +695,22 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
             for i_atom in self.atom_specifier:
                 self.check_restart_files(self.start.constr_atom, prev_calc, i_atom)
 
+        # Check that the constrained KS range is divisible by the number of constrained
+        # atoms
+        if (
+            self.ks_range is not None
+            and len(range(self.ks_range[0], self.ks_range[1] + 1))
+            % len(self.atom_specifier)
+            != 0
+        ):
+            raise click.BadParameter(
+                message="The number of constrained atoms is not divisible by the "
+                "constrained KS state range requested, therefore it is not possible to "
+                "determine how to match the constrained Kohn-Sham states with the "
+                "atoms in the system.",
+                param_hint="-k, --ks_range",
+            )
+
         # Check that the constrained atoms have been given
         if current_calc != "hole":
             checks_utils.check_params(self.start)
@@ -709,23 +731,23 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
             Instance of Projector
         """
         proj.setup_init_1(
-            self.ks_range,
+            cast(tuple, self.ks_range),
             self.ground_control,
-            checks_utils.check_lattice_vecs(self.start.geometry_input),
+            checks_utils.check_lattice_vecs(self.ground_geom),
         )
         proj.setup_init_2(
-            self.ks_range,
+            cast(tuple, self.ks_range),
             self.start.occupation,
             self.occ_type,
             self.spin,
-            checks_utils.check_lattice_vecs(self.start.geometry_input),
+            checks_utils.check_lattice_vecs(self.ground_geom),
         )
         proj.setup_hole(
-            self.ks_range,
+            cast(tuple, self.ks_range),
             self.start.occupation,
             self.occ_type,
             self.spin,
-            checks_utils.check_lattice_vecs(self.start.geometry_input),
+            checks_utils.check_lattice_vecs(self.ground_geom),
         )
 
     def _cp_restart_files(self, atom: int, begin: str, end: str) -> None:
@@ -756,19 +778,19 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
 
     def check_periodic(self) -> None:
         """Check if the lattice vectors and k_grid have been provided."""
-        print(
+        warn(
             "-p/--pbc argument not given, attempting to use"
-            " k_grid from control file or previous calculation"
+            " k_grid from control file or previous calculation",
+            stacklevel=2,
         )
 
         # Try to parse the k-grid if other calculations have been run
         try:
             pbc_list = []
             for control in self.start.run_loc.rglob("control.in"):
-                with control.open() as control_lines:
-                    for line in control_lines:
-                        if "k_grid" in line:
-                            pbc_list.extend([line.split()[1:]])
+                for line in control.read_text():
+                    if "k_grid" in line:
+                        pbc_list.extend([line.split()[1:]])
 
             # If different k_grids have been used for different calculations,
             # then enforce the user to provide the k_grid
@@ -831,17 +853,17 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
             self.ground_geom, self.start.constr_atom
         )
 
-        self._calc_checks("init_2")
+        self._calc_checks("init_2", check_args=True)
 
         # Add any additional options to the control file
         for i in range(len(self.atom_specifier)):
             if len(self.control_opts) > 0:
                 control_utils.add_control_opts(
-                    self.start,
-                    self.start.constr_atom,
-                    self.atom_specifier[i],
+                    self.run_loc,
                     "init_2",
                     self.control_opts,
+                    self.start.constr_atom,
+                    self.atom_specifier[i],
                 )
 
             # Copy the restart files to init_2 from init_1
@@ -885,8 +907,9 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
 
             # Setup files required for the initialisation and hole calculations
             self._call_setups(proj)
+
         else:
-            self._calc_checks("hole")
+            self._calc_checks("hole", check_args=True)
 
         # Add a tag to the geometry file to identify the molecule name
         if self.start.spec_mol is not None:
@@ -896,11 +919,11 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
         for i in [*list(range(*self.ks_range)), self.ks_range[-1]]:
             if len(self.control_opts) > 0:
                 control_utils.add_control_opts(
-                    self.start,
-                    self.start.constr_atom,
-                    i,
+                    self.run_loc,
                     "hole",
                     self.control_opts,
+                    self.start.constr_atom,
+                    i,
                 )
 
             # Copy the restart files to hole from init_2

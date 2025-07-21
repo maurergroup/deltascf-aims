@@ -11,6 +11,7 @@ def start(**kwargs: Any) -> None:
 
     start.check_for_geometry_input()
     start.check_for_pbcs()
+    start.check_constr_keywords()
     start.check_ase_usage()
     start.atoms = start.create_structure()
 
@@ -32,33 +33,29 @@ def projector(**kwargs: Any) -> None:
     # Get start object
     start = kwargs["start"]
 
-    # Do this here rather than start to avoid it being called for process which must
-    # take constr_atoms not spec_at_constr
-    start.check_constr_keywords()
-
     proj = Projector(**kwargs)
 
     if (start.found_l_vecs or start.found_k_grid) and proj.pbc is None:
         proj.check_periodic()
 
-    if start.use_extra_basis:
+    if start.use_extra_basis and start.control_input is not None:
         proj.add_extra_basis_fns(start.constr_atom, start.control_input)
 
     match proj.run_type:
         case "ground":
             proj.setup_ground(
-                start.geometry_input, start.control_input, proj.control_opts, start
+                start.geometry_input, start.control_input, proj.control_opts
             )
 
             proj.run_ground(
                 proj.control_opts,
                 start.use_extra_basis,
+                start.constr_atom,
                 start.print_output,
                 start.run_cmd,
                 start.nprocs,
                 start.binary,
                 start.atoms.calc,
-                start.constr_atom,
             )
 
         case "init_1":
@@ -80,10 +77,6 @@ def basis(**kwargs: Any) -> None:
     """Automate an FHI-aims core-level constraint calculation run using basis."""
     # Get start object
     start = kwargs["start"]
-
-    # Do this here rather than start to avoid it being called for process which must
-    # take constr_atoms not spec_at_constr
-    start.check_constr_keywords()
 
     basis = Basis(**kwargs)
 
