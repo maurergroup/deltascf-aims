@@ -453,22 +453,28 @@ class Projector(ForceOccupation):
             shutil.copyfile(self.run_loc / "ground/geometry.in", i1_geometry)
 
             # Find the correct atom idx to constrain
-            geom_content = i1_geometry.read_text().splitlines()
+            with i1_geometry.open() as geom:
+                geom_content = geom.readlines()
+
+            found_atom = False
+            atom_idx = 0
 
             for j, line in enumerate(geom_content):
                 spl = line.split()
-                if (
-                    len(spl) > 1
-                    and spl[0] == "atom"
-                    and spl[-1] == self.constr_atom
-                    and j == atom - 1
-                ):
-                    # Add 1 to the end of the atom line
-                    geom_content[j] = line + "1"
-                    break
+                if len(spl) > 1 and spl[0] == "atom":
+                    atom_idx += 1
+                    if spl[-1] == self.constr_atom and atom_idx == atom:
+                        # Add 1 to the end of the atom line
+                        geom_content[j] = f"{line[:-1]}1\n"
+                        found_atom = True
+                        break
 
-            # Write the modified geometry file
-            i1_geometry.write_text("\n".join(geom_content))
+            if not found_atom:
+                msg = (
+                    f"Atom {self.constr_atom} with index {atom} not found in "
+                    "geometry.in file."
+                )
+                raise ValueError(msg)
 
             # Change control file
             control_content = control_utils.change_control_keywords(i1_control, opts)
@@ -487,8 +493,12 @@ class Projector(ForceOccupation):
                 float(opts["charge"]),
             )
 
+            # Write the modified input files
             with i1_control.open("w") as write_control:
                 write_control.writelines(control_content)
+
+            with i1_geometry.open("w") as write_geometry:
+                write_geometry.writelines(geom_content)
 
         print("Wrote init_1 files")
 
