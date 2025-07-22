@@ -428,6 +428,10 @@ class Projector(ForceOccupation):
         # Check how many KS states to assign per atom
         ks_states = [*list(range(*ks_range)), ks_range[-1]]
         ks_states_per_atom = len(ks_states) / len(self.atom_specifier)
+        print(f"Specified Kohn-Sham Eigenstates:\n{' '.join(map(str, ks_states))}\n")
+        print(
+            f"Constrained Kohn-Sham Eigenstates per atom:\n{int(ks_states_per_atom)}\n"
+        )
 
         expanded_atom_specifier = []
         for atom in self.atom_specifier:

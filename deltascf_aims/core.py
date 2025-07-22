@@ -704,10 +704,10 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
             != 0
         ):
             raise click.BadParameter(
-                message="The number of constrained atoms is not divisible by the "
-                "constrained KS state range requested, therefore it is not possible to "
-                "determine how to match the constrained Kohn-Sham states with the "
-                "atoms in the system.",
+                message="The number of requested constrained Kohn-Sham eigenstates is "
+                "not an integer multiple of the number of atoms in the system, "
+                "therefore it is not possible to determine how to match the "
+                "constrained Kohn-Sham states with the atoms in the system.",
                 param_hint="-k, --ks_range",
             )
 

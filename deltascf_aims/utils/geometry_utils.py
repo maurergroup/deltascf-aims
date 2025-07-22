@@ -173,7 +173,7 @@ def get_atoms(
                 if "atom" in identifier and element == constr_atom:
                     atom_specifier.append(atom_counter)
 
-    print("Specified atom indices:", atom_specifier)
+    print(f"\nSpecified atom indices:\n{' '.join(map(str, atom_specifier))}\n")
 
     return atom_specifier
 
