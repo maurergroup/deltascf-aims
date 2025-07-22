@@ -23,7 +23,7 @@ from deltascf_aims.utils import (
 
 class Start:
     """
-    Perform initial checks and setup for running calcultions.
+    Perform initial checks and setup for running calculations.
 
     ...
 
@@ -670,7 +670,7 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
         current_calc : Literal["init_1", "init_2", "hole"]
             Type of excited calculation that will be run
         check_restart : bool, default=True
-            Whether to check for the existance of restart files or not
+            Whether to check for the existence of restart files or not
         check_args : bool, default=False
             Whether to check if the required CLI arguments were given or not
         """
