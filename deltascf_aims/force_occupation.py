@@ -622,6 +622,7 @@ class Projector(ForceOccupation):
                 # Always specifiy first KS state to constrain as it will always have
                 # the lowest energy due to the additional charge on the constrained
                 # atom
+                occ_type: f"{ks_range[0]} {spin} {occ} {ks_range[0]} {ks_range[1]}",
                 "restart": "restart_file",
                 "output": "mulliken",
             }
