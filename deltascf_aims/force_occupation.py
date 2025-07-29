@@ -428,9 +428,9 @@ class Projector(ForceOccupation):
         # Check how many KS states to assign per atom
         ks_states = [*list(range(*ks_range)), ks_range[-1]]
         ks_states_per_atom = len(ks_states) / len(self.atom_specifier)
-        print(f"Specified Kohn-Sham Eigenstates:\n{' '.join(map(str, ks_states))}\n")
+        print(f"Specified Kohn-Sham eigenstates:\n{' '.join(map(str, ks_states))}\n")
         print(
-            f"Constrained Kohn-Sham Eigenstates per atom:\n{int(ks_states_per_atom)}\n"
+            f"Constrained Kohn-Sham eigenstates per atom:\n{int(ks_states_per_atom)}\n"
         )
 
         expanded_atom_specifier = []
@@ -536,7 +536,10 @@ class Projector(ForceOccupation):
                 "spin": "collinear",
                 "charge": 1.1,
                 "sc_iter_limit": 1,
-                occ_type: f"{i} {spin} {occ} {ks_range[0]} {ks_range[1]}",
+                # Always specifiy first KS state to constrain as it will always have
+                # the lowest energy due to the additional charge on the constrained
+                # atom
+                occ_type: f"{ks_range[0]} {spin} {occ} {ks_range[0]} {ks_range[1]}",
                 "restart": "restart_file",
                 "restart_save_iterations": 1,
             }
@@ -616,7 +619,9 @@ class Projector(ForceOccupation):
                 "charge": 1.0,
                 "sc_iter_limit": 500,
                 "sc_init_iter": 75,
-                occ_type: f"{i} {spin} {occ} {ks_range[0]} {ks_range[1]}",
+                # Always specifiy first KS state to constrain as it will always have
+                # the lowest energy due to the additional charge on the constrained
+                # atom
                 "restart": "restart_file",
                 "output": "mulliken",
             }
