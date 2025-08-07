@@ -4,7 +4,7 @@ import shutil
 import subprocess
 from pathlib import Path
 from sys import platform
-from typing import TYPE_CHECKING, Literal
+from typing import IO, TYPE_CHECKING, Literal, cast
 from warnings import warn
 
 import yaml
@@ -224,7 +224,9 @@ class GroundCalc:
         Setup the ground calculation files and directories
     add_extra_basis_fns(constr_atom)
         Add additional basis functions to the basis set
-    run_ground(control_opts, add_extra_basis, l_vecs, print_output, nprocs, binary, calc)
+    run_ground(
+        control_opts, add_extra_basis, l_vecs, print_output, nprocs, binary, calc
+    )
         Run the ground state calculation
     """
 
@@ -386,21 +388,21 @@ class GroundCalc:
 
         if print_output:  # Show live output of calculation
             with (ground_dir / "aims.out").open("w") as outfile:
-                process = subprocess.Popen(
+                process = subprocess.Popen(  # noqa: S603
                     cmd,
                     cwd=ground_dir,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     text=True,
                 )
-                for line in process.stdout:
+                for line in cast(IO, process.stdout):
                     print(line, end="")
                     outfile.write(line)
 
                 process.wait()
         else:
             with (ground_dir / "aims.out").open("w") as outfile:
-                subprocess.run(
+                subprocess.run(  # noqa: S603
                     cmd,
                     cwd=ground_dir,
                     stdout=outfile,
@@ -637,14 +639,14 @@ class ExcitedCalc:
                 ]
                 # Open aims.out for writing and tee output to both stdout and file
                 with (work_dir / "aims.out").open("w") as outfile:
-                    process = subprocess.Popen(
+                    process = subprocess.Popen(  # noqa: S603
                         cmd,
                         cwd=work_dir,
                         stdout=subprocess.PIPE,
                         stderr=subprocess.STDOUT,
                         text=True,
                     )
-                    for line in process.stdout:
+                    for line in cast(IO, process.stdout):
                         print(line, end="")
                         outfile.write(line)
                     process.wait()
@@ -669,7 +671,7 @@ class ExcitedCalc:
                         str(self.start.binary),
                     ]
                     with (work_dir / "aims.out").open("w") as outfile:
-                        subprocess.run(
+                        subprocess.run(  # noqa: S603
                             cmd,
                             cwd=work_dir,
                             stdout=outfile,

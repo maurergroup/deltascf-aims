@@ -86,7 +86,7 @@ def basis(**kwargs: Any) -> None:
     match basis.run_type:
         case "ground":
             basis.setup_ground(
-                start.geometry_input, start.control_input, basis.control_opts, start
+                start.geometry_input, start.control_input, basis.control_opts
             )
 
             basis.run_ground(
