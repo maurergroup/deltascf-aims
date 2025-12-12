@@ -439,16 +439,12 @@ class Projector(ForceOccupation):
 
         self.atom_specifier = expanded_atom_specifier
 
-        for atom, ks_state in zip(self.atom_specifier, ks_states, strict=False):
-            i1_control = (
-                self.run_loc / f"{self.constr_atom}{ks_state}/init_1/control.in"
-            )
-            i1_geometry = (
-                self.run_loc / f"{self.constr_atom}{ks_state}/init_1/geometry.in"
-            )
+        for atom in self.atom_specifier:
+            i1_control = self.run_loc / f"{self.constr_atom}{atom}/init_1/control.in"
+            i1_geometry = self.run_loc / f"{self.constr_atom}{atom}/init_1/geometry.in"
 
             # Create new directory and control file for init_1 calc
-            (self.run_loc / f"{self.constr_atom}{ks_state}" / "init_1").mkdir(
+            (self.run_loc / f"{self.constr_atom}{atom}" / "init_1").mkdir(
                 parents=True, exist_ok=True
             )
             shutil.copyfile(self.new_control, i1_control)
@@ -531,7 +527,7 @@ class Projector(ForceOccupation):
             If the calculation is periodic.
         """
         # Loop over each KS state to constrain
-        for i in [*list(range(*ks_range)), ks_range[-1]]:
+        for atom in self.atom_specifier:
             opts = {
                 "spin": "collinear",
                 "charge": 1.1,
@@ -553,15 +549,15 @@ class Projector(ForceOccupation):
             # Add or change user-specified keywords to the control file
             opts = control_utils.mod_keywords(self.add_constr_opts, opts)
 
-            i2_control = f"{self.run_loc}/{self.constr_atom}{i}/init_2/control.in"
+            i2_control = f"{self.run_loc}/{self.constr_atom}{atom}/init_2/control.in"
 
             # Create new directory for init_2 calc
-            init_2_dir = self.run_loc / f"{self.constr_atom}{i}/init_2"
+            init_2_dir = self.run_loc / f"{self.constr_atom}{atom}/init_2"
             init_2_dir.mkdir(parents=True, exist_ok=True)
             i2_control = init_2_dir / "control.in"
             shutil.copyfile(self.new_control, i2_control)
             shutil.copyfile(
-                self.run_loc / f"{self.constr_atom}{i}/init_1/geometry.in",
+                self.run_loc / f"{self.constr_atom}{atom}/init_1/geometry.in",
                 init_2_dir / "geometry.in",
             )
 
@@ -613,7 +609,7 @@ class Projector(ForceOccupation):
         self.valence = "".join(val_spl)
 
         # Loop over each KS state to constrain
-        for i in [*list(range(*ks_range)), ks_range[-1]]:
+        for atom in self.atom_specifier:
             opts = {
                 "spin": "collinear",
                 "charge": 1.0,
@@ -637,15 +633,15 @@ class Projector(ForceOccupation):
             opts = control_utils.mod_keywords(self.add_constr_opts, opts)
 
             # Location of the hole control file
-            h_control = self.run_loc / f"{self.constr_atom}{i}/hole/control.in"
+            h_control = self.run_loc / f"{self.constr_atom}{atom}/hole/control.in"
 
             # Create new directory for hole calc
-            (self.run_loc / f"{self.constr_atom}{i}" / "hole").mkdir(
+            (self.run_loc / f"{self.constr_atom}{atom}" / "hole").mkdir(
                 parents=True, exist_ok=True
             )
             shutil.copyfile(
-                self.run_loc / f"{self.constr_atom}{i}/init_1/geometry.in",
-                self.run_loc / f"{self.constr_atom}{i}/hole/geometry.in",
+                self.run_loc / f"{self.constr_atom}{atom}/init_1/geometry.in",
+                self.run_loc / f"{self.constr_atom}{atom}/hole/geometry.in",
             )
             shutil.copyfile(self.new_control, h_control)
 

@@ -818,7 +818,6 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
         self.atom_specifier = geometry_utils.get_atoms(
             self.ground_geom, self.start.constr_atom
         )
-
         self._calc_checks("init_1", check_restart=False, check_args=True)
 
         # Create the ForceOccupation object
