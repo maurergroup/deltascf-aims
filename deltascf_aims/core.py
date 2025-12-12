@@ -788,7 +788,7 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
         try:
             pbc_list = []
             for control in self.start.run_loc.rglob("control.in"):
-                for line in control.read_text():
+                for line in control.read_text().splitlines():
                     if "k_grid" in line:
                         pbc_list.extend([line.split()[1:]])
 
@@ -811,8 +811,8 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
 
         Returns
         -------
-            spec_run_info : str
-                redirection location for STDERR of calculation
+        spec_run_info : str
+            redirection location for STDERR of calculation
         """
         # Get the atom indices to constrain
         self.atom_specifier = geometry_utils.get_atoms(
@@ -828,7 +828,6 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
             self.ground_geom,
             self.control_opts,
             self.atom_specifier,
-            self.start.use_extra_basis,
         )
 
         # TODO allow this for multiple constrained atoms using n_atoms
@@ -845,8 +844,8 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
 
         Returns
         -------
-            spec_run_info : str
-                Redirection location for STDERR of calculation
+        spec_run_info : str
+            Redirection location for STDERR of calculation
         """
         # Get the atom indices to constrain
         self.atom_specifier = geometry_utils.get_atoms(
