@@ -166,10 +166,6 @@ def set_env_vars() -> None:
         resource.setrlimit(
             resource.RLIMIT_STACK, (resource.RLIM_INFINITY, resource.RLIM_INFINITY)
         )
-    elif platform == "darwin":
-        # Set stack size to hard limit
-        soft, hard = resource.getrlimit(resource.RLIMIT_STACK)
-        resource.setrlimit(resource.RLIMIT_STACK, (hard, hard))
     else:
         warn(
             f"OS '{platform}' not supported, please ensure ulimit is set to unlimited",
