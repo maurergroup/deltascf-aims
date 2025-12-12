@@ -9,7 +9,7 @@ dependencies = [
   "pyyaml>=6.0.2",
   "click>=8.1.7",
   "matplotlib>=3.9.2",
-  "ase==3.22.1",
+  "ase==3.26.0",
   "numpy>=2",
 ]
 
