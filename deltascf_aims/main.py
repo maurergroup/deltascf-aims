@@ -58,19 +58,18 @@ def projector(**kwargs: Any) -> None:
                 start.atoms.calc,
             )
 
+        # TODO: Fix spec_run_info usage
         case "init_1":
             atom_specifier, spec_run_info = proj.setup_excited()
-            proj.run_excited(atom_specifier, proj.start.constr_atom, "init_1")
 
         case "init_2":
             atom_specifier, spec_run_info = proj.pre_init_2()
-            proj.run_excited(atom_specifier, proj.start.constr_atom, "init_2")
 
         case "hole":
             atom_specifier, spec_run_info = proj.pre_hole()
 
-            if not start.hpc:  # Don't run on HPC
-                proj.run_excited(atom_specifier, proj.start.constr_atom, "hole")
+    if not start.hpc and proj.run_type != "ground":  # Don't run on HPC
+        proj.run_excited(atom_specifier, proj.start.constr_atom, proj.run_type)
 
 
 def basis(**kwargs: Any) -> None:

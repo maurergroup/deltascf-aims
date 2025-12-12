@@ -238,7 +238,7 @@ class Start:
             if self.spec_mol is not None:
                 self._atoms = geometry_utils.build_geometry(self.spec_mol)
             if self.geometry_input is not None:
-                self._atoms = cast(Atoms, read(self.geometry_input.name, index=-1))
+                self._atoms = cast(Atoms, read(self.geometry_input, index=-1))
 
         # If the geometry.in file does not exist, create it
         if not (self.run_loc / "geometry.in").is_file():
@@ -788,7 +788,7 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
         try:
             pbc_list = []
             for control in self.start.run_loc.rglob("control.in"):
-                for line in control.read_text():
+                for line in control.read_text().splitlines():
                     if "k_grid" in line:
                         pbc_list.extend([line.split()[1:]])
 
@@ -811,14 +811,13 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
 
         Returns
         -------
-            spec_run_info : str
-                redirection location for STDERR of calculation
+        spec_run_info : str
+            redirection location for STDERR of calculation
         """
         # Get the atom indices to constrain
         self.atom_specifier = geometry_utils.get_atoms(
             self.ground_geom, self.start.constr_atom
         )
-
         self._calc_checks("init_1", check_restart=False, check_args=True)
 
         # Create the ForceOccupation object
@@ -828,7 +827,6 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
             self.ground_geom,
             self.control_opts,
             self.atom_specifier,
-            self.start.use_extra_basis,
         )
 
         # TODO allow this for multiple constrained atoms using n_atoms
@@ -845,8 +843,8 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
 
         Returns
         -------
-            spec_run_info : str
-                Redirection location for STDERR of calculation
+        spec_run_info : str
+            Redirection location for STDERR of calculation
         """
         # Get the atom indices to constrain
         self.atom_specifier = geometry_utils.get_atoms(
