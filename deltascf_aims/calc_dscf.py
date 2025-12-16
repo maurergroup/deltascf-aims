@@ -132,6 +132,6 @@ def calc_delta_scf(
         print(xps[i])
 
     with open(element + "_xps_peaks.txt", "w") as file:
-        file.writelines(xps)
+        file.writelines(f"{el}\n" for el in xps)
 
     return [float(be) for be in xps]
