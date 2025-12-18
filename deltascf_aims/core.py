@@ -914,7 +914,7 @@ class Projector(calculations_utils.GroundCalc, calculations_utils.ExcitedCalc):
             geometry_utils.add_molecule_identifier(self.start, self.atom_specifier)
 
         # Add any additional control options to the hole control file
-        for i in [*list(range(*self.ks_range)), self.ks_range[-1]]:
+        for i in self.atom_specifier:
             if len(self.control_opts) > 0:
                 control_utils.add_control_opts(
                     self.run_loc,

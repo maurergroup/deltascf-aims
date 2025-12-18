@@ -620,7 +620,7 @@ class Projector(ForceOccupation):
                 # atom
                 occ_type: f"{ks_range[0]} {spin} {occ} {ks_range[0]} {ks_range[1]}",
                 "restart": "restart_file",
-                "output": "mulliken",
+                "output": "Mulliken",
             }
 
             # Enforce that the use of ks_method serial
