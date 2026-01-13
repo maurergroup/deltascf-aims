@@ -619,7 +619,7 @@ class Projector(ForceOccupation):
                 # the lowest energy due to the additional charge on the constrained
                 # atom
                 occ_type: f"{ks_range[0]} {spin} {occ} {ks_range[0]} {ks_range[1]}",
-                "restart": "restart_file",
+                "restart_read_only": "restart_file",
                 "output": "Mulliken",
             }
 
