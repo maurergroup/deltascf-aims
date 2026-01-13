@@ -12,7 +12,7 @@ An application to automate the calculation of core-level spectroscopy simulation
 
 ## Installation
 
-> [!NOTE]
+> [!Important]
 > This section is slightly outdated and `uv` has replaced `poetry` and `pipx`. Please contact me if you need instructions of how to install it using the new method in the meantime until I have time to update the README. Also note that some of the flags in [Usage](#usage) have been deprecated and other new flags exist, however the general idea remains the same. I will also update this when I have the time to do so
 
 ### PyPi
