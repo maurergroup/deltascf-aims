@@ -25,6 +25,13 @@ if TYPE_CHECKING:
     "the calculation",
 )
 @click.option(
+    "-g",
+    "--multi_ground",
+    type=bool,
+    is_flag=True,
+    help="Setup a ground state calculation for each core-hole atom",
+)
+@click.option(
     "-m",
     "--molecule",
     "spec_mol",
@@ -138,6 +145,7 @@ if TYPE_CHECKING:
 def initialise(  # noqa: PLR0913
     ctx: click.Context,
     hpc: bool,
+    multi_ground: bool,
     spec_mol: str | None,
     geometry_input: Path | None,
     control_input: Path | None,
@@ -156,19 +164,19 @@ def initialise(  # noqa: PLR0913
     """
     Automation of core-hole constrained occupation methods in FHI-aims.
 
-    There is functionality to use both the older and soon-to-be deprecated
-    forced_occupation_basis and forced_occupation_projector methods, as well as
+    There is functionality to use both the older and deprecated
+    `forced_occupation_basis` and `forced_occupation_projector` methods, as well as
     the newer and faster deltascf_basis and deltascf_projector methods. This was
     originally written as a testing application and has since developed into an
     application for automating the basis and projector methods.
 
     Functionality has been included to run on both a local machine, or a HPC
-    cluster. Installation is automated using Poetry, and structures from the ASE
+    cluster. Installation is automated using UV, and structures from the ASE
     and PubChem databases can be used to generate the geometry.in file, or the
     geometry.in and control.in can be manually created and passed to this program.
     For full documentation, please refer to the README.md.
 
-    Copyright \u00a9 2022-2025, Dylan Morgan dylan.morgan@warwick.ac.uk
+    Copyright \u00a9 2022-2026, Dylan Morgan dylan.morgan@warwick.ac.uk
     """
     # TODO something like this (but check commented decorator above)
     # if "--help" in sys.argv:
