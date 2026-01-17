@@ -32,6 +32,8 @@ class Start:
         hpc : bool
             setup a calculation primarily for use on a HPC cluster WITHOUT running the
             calculation
+        multi_ground : bool
+            whether to run a ground state calculation for each core hole atom
         spec_mol : str
             molecule to be used in the calculation
         geometry_input : click.File()
@@ -101,6 +103,7 @@ class Start:
     def __init__(  # noqa: PLR0913
         self,
         hpc: bool,
+        multi_ground: bool,
         spec_mol: str | None,
         geometry_input: Path | None,
         control_input: Path | None,
@@ -117,6 +120,7 @@ class Start:
         nprocs: int,
     ):
         self.hpc = hpc
+        self.multi_ground = multi_ground
         self.spec_mol = spec_mol
         self.geometry_input = geometry_input
         self.control_input = control_input
@@ -218,9 +222,13 @@ class Start:
         # Find the structure if not given
         if self.spec_mol is None and self.geometry_input is None:
             try:
-                self._atoms = cast(
-                    Atoms, read(self.run_loc / "ground" / "geometry.in", index=-1)
-                )
+                if self.multi_ground:
+                    # TODO
+                    ground_dir = self.run_loc / f"{self.constr_atom}*" / "ground"
+                else:
+                    ground_dir = self.run_loc / "ground"
+
+                self._atoms = cast(Atoms, read(ground_dir / "geometry.in", index=-1))
                 warn(
                     "molecule argument not provided, defaulting to using existing "
                     "geometry.in file from the ground state calculation",
@@ -489,20 +497,37 @@ class Process:
 
     def calc_dscf_energies(self) -> tuple[list[float], str]:
         """
-        Parse absolute energies and calculate deltaSCF energies.
+        Parse absolute energies and calculate DeltaSCF energies.
 
         Returns
         -------
-        xps : list[float]
-            deltaSCF energies
+        tuple[list[float], str]
+            list[float]
+                Delta-SCF binging energies
+            str
+                element the binding energies were calculated for
         """
-        grenrgys = cds.read_ground_energy(self.start.run_loc)
-        excienrgys, element = cds.read_excited_energy(
-            self.start.run_loc, self.start.constr_atom
-        )
-        xps = cds.calc_delta_scf(self.start.constr_atom, grenrgys, excienrgys)
+        # Calculate ground state energies
+        if self.start.multi_ground:
+            ground_energies = [
+                cds.parse_energy(atom / "ground/aims.out")
+                for atom in self.start.run_loc.glob(f"{self.start.constr_atom}*")
+            ]
+        else:
+            ground_energies = cds.parse_energy(self.start.run_loc / "ground/aims.out")
 
-        return xps, element
+        # Calculate excited state energies
+        excited_energies = [
+            cds.parse_energy(atom / "hole/aims.out")
+            for atom in self.start.run_loc.glob(f"{self.start.constr_atom}*")
+        ]
+
+        # Calculate Delta-SCF binding energies from ground and excited
+        xps = cds.calc_delta_scf(
+            self.start.constr_atom, ground_energies, excited_energies
+        )
+
+        return xps, self.start.constr_atom
 
     def move_file_to_run_loc(
         self, element: str, file_type: Literal["peaks", "spectrum"]
