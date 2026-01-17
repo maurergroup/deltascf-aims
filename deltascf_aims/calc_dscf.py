@@ -1,119 +1,69 @@
 from pathlib import Path
 
 
-def read_ground_energy(calc_path: Path) -> float:
+def parse_energy(aims_out: Path) -> float:
     """
-    Get the ground state energy.
+    Get the final energy from an FHI-aims DFT calculation.
 
     Parameters
     ----------
-    calc_path : pathlib.Path
-        path to the calculation directory
+    aims_out : Path
+       Path to DFT aims output file
 
     Returns
     -------
     float
-        ground state energy
+        Total DFT energy
+
+    Raises
+    ------
+    ValueError
+        If the energy could not be found in the output file
     """
-    with (calc_path / "ground" / "aims.out").open() as ground:
-        lines = ground.readlines()
+    # 1000 lines * ~152 bytes/line = 160000
+    # Set to 160000 to be safe
+    tail_size = 160000
+    target = "| Total energy of the DFT / Hartree-Fock s.c.f. calculation"
+    energy = None
 
-    grenrgys = None
+    with aims_out.open("rb") as f:
+        try:
+            f.seek(-tail_size, 2)  # Move to the last tail_size bytes
+        except OSError:
+            f.seek(0)  # File is smaller than tail_size, go to the start
 
-    for line in lines:
-        # Get the energy
-        if "s.c.f. calculation      :" in line:
-            grenrgys = float(line.split()[-2])
+        # Decode and ignore errors at cut point
+        lines = f.read().decode("utf-8", errors="ignore")
 
-    if grenrgys is None:
-        raise ValueError("No ground state energy found.")
-
-    print("Ground state calculated energy (eV):")
-    print(round(grenrgys, 3))
-    print()
-
-    return grenrgys
-
-
-def _contains_number(string: str) -> bool:
-    """
-    Check if a number is in a string.
-
-    Parameters
-    ----------
-    string : str
-        String to check
-
-    Returns
-    -------
-    bool
-        Whether the string contains a number
-    """
-    found_string = False
-
-    for character in string:
-        if character.isdigit():
-            found_string = True
-
-    return found_string
-
-
-def read_excited_energy(calc_path: Path, element: str) -> tuple[list[float], str]:
-    """
-    Get the excited state energies.
-
-    Parameters
-    ----------
-    calc_path : pathlib.Path
-        Path to the calculation directory
-    element : str
-        Atom to get the excited state energies for
-
-    Returns
-    -------
-    tuple[list[float], str]
-        excited state energies
-    """
-    dir_list = [d for d in calc_path.iterdir() if d.is_dir()]
-    energy = "s.c.f. calculation      :"
-    excienrgys = []
-
-    # Read each core hole dir
-    for directory in dir_list:
-        if element in directory.name and _contains_number(directory.name):
-            # Try reading output file from basis, then projector file structure
+    # Iterate in reverse to find the last occurrence of the energy
+    for line in reversed(lines.splitlines()):
+        if target in line:
             try:
-                with directory.joinpath("aims.out").open() as out:
-                    lines = out.readlines()
-            except FileNotFoundError:
-                try:
-                    with directory.joinpath("hole", "aims.out").open() as out:
-                        lines = out.readlines()
-                except FileNotFoundError:
-                    lines = []
+                energy = float(line.split()[-2])
+            except (ValueError, IndexError):
+                continue
+            else:
+                return energy
 
-            excienrgys.extend(
-                [float(line.split()[-2]) for line in lines if energy in line]
-            )
+    if energy is None:
+        raise ValueError("Could not find total energy in the output file.")
 
-    print("Core hole calculated energies (eV):", *excienrgys, sep="\n")
-
-    return excienrgys, element
+    return energy
 
 
 def calc_delta_scf(
-    element: str, grenrgys: float, excienrgys: list[float]
+    element: str, ground: float | list[float], excited: list[float]
 ) -> list[float]:
     """
-    Calculate delta scf BEs and write to a file.
+    Calculate Delta-SCF binding energies.
 
     Parameters
     ----------
     element : str
         Atom to get the excited state energies for
-    grenrgys : float
-        Ground state energy
-    excienrgys : list[float]
+    ground : float | list[float]
+        Ground state energy(s)
+    excited : list[float]
         Excited state energies
 
     Returns
@@ -121,17 +71,16 @@ def calc_delta_scf(
     list[float]
         Delta-SCF binding energies
     """
-    xps = []
+    if isinstance(ground, list):
+        xps = [round(i - j, 2) for i, j in zip(excited, ground, strict=True)]
 
-    xps.extend([i - grenrgys for i in excienrgys])
+    else:
+        xps = [round(i - ground, 2) for i in excited]
 
     print("\nDelta-SCF energies (eV):")
+    print(*xps, sep="\n")
 
-    for i, be in enumerate(xps):
-        xps[i] = str(round(be, 3))
-        print(xps[i])
-
-    with open(element + "_xps_peaks.txt", "w") as file:
+    with Path(f"{element}_xps_peaks.txt").open("w") as file:
         file.writelines(f"{el}\n" for el in xps)
 
-    return [float(be) for be in xps]
+    return xps
